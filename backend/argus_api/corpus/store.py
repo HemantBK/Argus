@@ -265,6 +265,33 @@ class Corpus:
             r for r in self.supersession if r.old_instrument_ref == instrument_ref and r.old_para in chain
         ]
 
+    def rule_moves(self, instrument_ref: str, para: str) -> list[SupersessionRow]:
+        """Where the rule of an old paragraph now sits: successors() for the paragraph and its parents, plus
+        the rows of its sub-paragraphs. A policy that cites a whole paragraph ("para 10") whose rule moved
+        sub-paragraph by sub-paragraph ("10(i)") needs the rows of its children as well."""
+        rows = self.successors(instrument_ref, para)
+        for p in self.paragraphs.values():
+            if p.instrument_ref != instrument_ref or p.para == para:
+                continue
+            parent = p.parent_para
+            while parent is not None and parent != para:
+                up = self.paragraph(instrument_ref, parent)
+                parent = up.parent_para if up is not None else None
+            if parent == para:
+                rows += [r for r in self.successors(instrument_ref, p.para) if r not in rows]
+        return rows
+
+    def paragraphs_under(self, instrument_ref: str, para: str) -> list[str]:
+        """The paragraph ids of an instrument that share `para`'s top-level number ("14(9)" -> "14",
+        "14(1)", ...), sorted: what a reader is shown when a cited paragraph does not exist."""
+        top = re.match(r"[^(.]+", para)
+        stem = top.group(0) if top else para
+        return sorted(
+            q
+            for (ref, q) in self.paragraphs
+            if ref == instrument_ref and re.match(rf"{re.escape(stem)}\b", q)
+        )
+
 
 class FirestoreLike(Protocol):
     def collection(self, collection_id: str) -> Any: ...

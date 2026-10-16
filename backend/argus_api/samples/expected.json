@@ -7,7 +7,7 @@
     "policy_a": {
       "c1": {
         "label": "compliant",
-        "rationale": "Matches the enhanced due diligence and periodic review requirements for LSPs.",
+        "rationale": "Matches para 6(2) on enhanced due diligence before an LSP agreement and para 6(3) on periodic review of the LSP's conduct against the agreement with action on any deviation; nothing required is left out.",
         "citation": {
           "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
           "instrument_ref": "RBI/DOR/2025-26/347",
@@ -85,7 +85,7 @@
       },
       "c7": {
         "label": "compliant",
-        "rationale": "Nodal grievance redressal officers designated and their contact details displayed as required.",
+        "rationale": "Covers para 12 in full: nodal grievance redressal officers designated (12(1)), their contact details displayed on the websites, the app and the KFS (12(2)), complaints can be lodged on the app and website with responsibility kept by the Company (12(3)), and the borrower is told of the RBI CMS portal and the physical complaint route after rejection, dissatisfaction or 30 days without reply (12(4)).",
         "citation": {
           "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
           "instrument_ref": "RBI/DOR/2025-26/347",
@@ -97,7 +97,7 @@
       },
       "c8": {
         "label": "compliant",
-        "rationale": "Digitally signed loan documents flow automatically to the borrower on execution of the contract.",
+        "rationale": "Lists every document para 9(3) requires (KFS, product summary, sanction letter, terms and conditions, account statements, privacy policies on data storage and use), digitally signed on the letterhead in line with the IT Act note, flowing automatically to the registered and verified email or SMS on execution of the contract or transaction.",
         "citation": {
           "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
           "instrument_ref": "RBI/DOR/2025-26/347",

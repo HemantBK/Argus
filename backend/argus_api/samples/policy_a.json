@@ -6,7 +6,7 @@
   "clauses": [
     {
       "id": "c1",
-      "text": "Before entering into an agreement with any Lending Service Provider (LSP) for digital lending, the Company shall conduct enhanced due diligence covering the LSP's technical capabilities, data privacy policies and storage systems, fairness in conduct with borrowers, past record of conduct and ability to comply with applicable regulations. The Company shall review the conduct of each LSP against the agreement at least once a year."
+      "text": "Before entering into an agreement with any Lending Service Provider (LSP) for digital lending, the Company shall conduct enhanced due diligence covering the LSP's technical capabilities, data privacy policies and storage systems, fairness in conduct with borrowers, past record of conduct and ability to comply with applicable regulations. The Company shall review the conduct of each LSP against the agreement at least once a year and shall take appropriate action on any deviation from it."
     },
     {
       "id": "c2",
@@ -30,11 +30,11 @@
     },
     {
       "id": "c7",
-      "text": "The Company and every LSP that has an interface with borrowers shall designate a nodal grievance redressal officer for digital lending complaints. The officers' contact details shall be displayed prominently on the Company's website, the LSP's website, the digital lending app and in the Key Fact Statement."
+      "text": "The Company and every LSP that has an interface with borrowers shall designate a nodal grievance redressal officer for digital lending complaints. The officers' contact details shall be displayed prominently on the Company's website, the LSP's website, the digital lending app and in the Key Fact Statement. Borrowers may lodge complaints on the digital lending app and on the Company's website, and the Company remains responsible for resolving every complaint. If a complaint is rejected wholly or partly, the borrower is not satisfied with the reply, or no reply is received within 30 days, the borrower shall be told that they may complain on the Reserve Bank's Complaint Management System (https://cms.rbi.org.in/) under the Reserve Bank - Integrated Ombudsman Scheme, or send a physical complaint to the Reserve Bank's Centralised Receipt and Processing Centre in Chandigarh."
     },
     {
       "id": "c8",
-      "text": "On execution of each loan contract, the Key Fact Statement, summary of the loan product, sanction letter, terms and conditions and privacy policies, digitally signed on the Company's letterhead, shall be sent automatically to the borrower's registered and verified email or SMS."
+      "text": "On execution of each loan contract or transaction, digitally signed documents on the Company's letterhead, namely the Key Fact Statement, summary of the loan product, sanction letter, terms and conditions, account statements and the privacy policies of the Company and its LSPs on the storage and use of borrowers' data, shall flow automatically to the borrower's registered and verified email or SMS. Digitally signed documents shall comply with the Information Technology Act, 2000."
     }
   ]
 }
