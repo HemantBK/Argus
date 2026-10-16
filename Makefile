@@ -23,7 +23,10 @@ models:
 	cd backend && set -a && . ./.env && set +a && .venv/bin/python -c "from google import genai; import os; \
 	[print(m.name) for m in genai.Client(api_key=os.environ['GEMINI_API_KEY']).models.list() if 'gemini' in m.name]"
 
+seed:
+	cd backend && set -a && . ./.env && set +a && .venv/bin/python -m argus_api.seed_fake_run
+
 smoke:
 	curl -s -X POST localhost:8080/api/smoke; echo
 
-.PHONY: setup test lint up down run models smoke
+.PHONY: setup test lint up down run models seed smoke
