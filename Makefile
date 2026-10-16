@@ -57,4 +57,13 @@ limits:
 save-sample:
 	cd backend && set -a && . ./.env && set +a && .venv/bin/python -m argus_api.save_sample $(RUN)
 
-.PHONY: setup test test-emulator lint up down run models seed smoke corpus load-corpus limits save-sample
+# Automatic rule checks (scripts/check.py): lint, types, tests, pins, secrets, provenance, data, rules.
+check:
+	$(PY) scripts/check.py commit
+
+# Git pre-commit hook: runs `scripts/check.py commit --fast` and stops the commit on any FAIL.
+install-hooks:
+	sh scripts/install-hooks.sh
+
+.PHONY: setup test test-emulator lint up down run models seed smoke corpus load-corpus limits save-sample \
+	check install-hooks

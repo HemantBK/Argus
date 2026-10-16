@@ -1,0 +1,817 @@
+"""scripts/check.py: every commit-stage check passes on a small clean repo and fails on a planted violation.
+
+Each test builds a throwaway git repo in tmp_path, so nothing here touches the real history or the network.
+Secret-looking strings are assembled at run time so this file itself never matches the secret patterns.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import shutil
+import subprocess
+import sys
+from collections.abc import Callable
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[2]
+VENV_BIN = Path(sys.executable).parent
+DATE = "2026-10-16T12:00:00+05:30"
+
+
+def _load_check() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("argus_check", REPO / "scripts" / "check.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["argus_check"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+check = _load_check()
+
+
+@pytest.fixture(autouse=True)
+def _no_outer_git_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    # When pytest itself runs inside a git hook, these would point every git call at the outer repo.
+    for name in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_PREFIX"):
+        monkeypatch.delenv(name, raising=False)
+
+
+# ------------------------------------------------------------------------------------------- tiny repos
+def git(repo: Path, *args: str, date: str = DATE) -> str:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(
+        GIT_AUTHOR_NAME="Tester",
+        GIT_AUTHOR_EMAIL="tester@example.com",
+        GIT_COMMITTER_NAME="Tester",
+        GIT_COMMITTER_EMAIL="tester@example.com",
+        GIT_AUTHOR_DATE=date,
+        GIT_COMMITTER_DATE=date,
+        GIT_CONFIG_GLOBAL=os.devnull,
+        GIT_CONFIG_NOSYSTEM="1",
+    )
+    proc = subprocess.run(["git", *args], cwd=repo, env=env, capture_output=True, text=True, check=True)
+    return proc.stdout
+
+
+CLEAN_FILES: dict[str, str] = {
+    "README.md": "# Tiny\n\nA clean repo for the checker tests.\n",
+    "firestore.rules": """rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Clients never write: allow write is deliberately absent.
+    match /runs/{runId} {
+      allow read: if request.auth != null && resource.data.owner_uid == request.auth.uid;
+    }
+    match /samples/{runId} {
+      allow read: if true;
+    }
+    match /eval_results/{docId} {
+      allow read: if true;
+    }
+  }
+}
+""",
+    "backend/pyproject.toml": """[project]
+name = "tiny"
+version = "0.0.0"
+
+[tool.ruff]
+line-length = 110
+
+[tool.mypy]
+strict = true
+""",
+    "backend/requirements.txt": "fastapi==0.143.2\nhttpx==0.28.1\n",
+    "backend/requirements-dev.txt": "pytest==9.1.1\nhttpx==0.28.1\n",
+    "backend/.env.example": "ARGUS_MODE=local\nOPENROUTER_API_KEY=\nGEMINI_API_KEY=\n",
+    "backend/argus_api/__init__.py": "",
+    "backend/argus_api/app.py": "def add(a: int, b: int) -> int:\n    return a + b\n",
+    "backend/argus_api/seed_fake_run.py": '"""Writes one FAKE run."""\n\nLABEL = "FAKE run"\n',
+    "backend/argus_api/samples/policy_a.json": json.dumps({"synthetic": True, "title": "Sample NBFC A"}),
+    "backend/argus_api/eval/cases/clauses.json": json.dumps(
+        [
+            {
+                "case_id": "c-01",
+                "clause_text": "Interest is charged at 18% p.a. under para 10 of the 2025 Directions.",
+            }
+        ]
+    ),
+    "backend/tests/__init__.py": "",
+    "backend/tests/test_config.py": (
+        "from argus_api.app import add\n\n\ndef test_cloud_mode_is_vertex_only() -> None:\n"
+        "    assert add(1, 1) == 2\n"
+    ),
+    "backend/tests/test_fixture_words.py": '"""Tests may say FAKE and TODO."""\n\nTEXT = "FAKE TODO"\n',
+    "web/package.json": json.dumps(
+        {"name": "tiny-web", "dependencies": {"react": "19.3.0"}, "devDependencies": {"vitest": "5.0.3"}}
+    ),
+    "web/package-lock.json": json.dumps(
+        {
+            "lockfileVersion": 3,
+            "packages": {"": {"dependencies": {"react": "19.3.0"}, "devDependencies": {"vitest": "5.0.3"}}},
+        }
+    ),
+    "web/.env.example": (
+        "VITE_USE_EMULATORS=true\nVITE_FIREBASE_PROJECT_ID=tiny-local\n"
+        "VITE_FIREBASE_API_KEY=fake-api-key-for-emulator\n"
+    ),
+    "web/src/App.tsx": "export const title = 'Tiny';\n",
+    "web/src/App.test.tsx": "// TODO and FAKE are fine in tests\nexport {};\n",
+}
+
+
+def write(repo: Path, files: dict[str, str | None]) -> None:
+    for rel, content in files.items():
+        path = repo / rel
+        if content is None:
+            if path.exists():
+                git(repo, "rm", "-q", "--cached", rel)
+                path.unlink()
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        git(repo, "add", "-f", rel)
+
+
+def make_repo(tmp_path: Path, changes: dict[str, str | None] | None = None) -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir(parents=True)
+    git(repo, "init", "-q", "-b", "main")
+    write(repo, dict(CLEAN_FILES))
+    git(repo, "commit", "-q", "-m", "Start the tiny repo")
+    if changes:
+        write(repo, changes)
+    return repo
+
+
+def ctx_for(repo: Path, **args: Any) -> Any:
+    import argparse
+
+    return check.Ctx(repo, venv_bin=VENV_BIN, args=argparse.Namespace(**args))
+
+
+def run_one(repo: Path, fn: Callable[[Any], Any], **args: Any) -> Any:
+    [result] = check.run_checks(ctx_for(repo, **args), [check.Check("T", (), fn)])
+    return result
+
+
+def key(prefix: str, length: int, alphabet: str = "A") -> str:
+    return prefix + alphabet * length
+
+
+# ------------------------------------------------------------------------------------------- clean repo
+STATIC_CHECKS = [c for c in check.COMMIT_CHECKS if not c.check_id.startswith("C-WEB")]
+
+
+@pytest.mark.parametrize("item", STATIC_CHECKS, ids=lambda c: c.check_id)
+def test_clean_repo_passes(tmp_path: Path, item: Any) -> None:
+    repo = make_repo(tmp_path)
+    result = run_one(repo, item.fn)
+    assert result.status == check.PASS, (result.reason, result.details)
+
+
+# ------------------------------------------------------------------------------------------- violations
+PEM = "-----" + "BEGIN RSA PRIVATE KEY" + "-----\nMIIE\n"
+SERVICE_ACCOUNT = '{"type": "service' + '_account", "project_id": "x"}'
+GOOD_RULES = CLEAN_FILES["firestore.rules"]
+
+VIOLATIONS: list[tuple[str, Callable[[Any], Any], dict[str, str | None]]] = [
+    ("ruff-unused-import", check.check_py_lint, {"backend/argus_api/bad.py": "import os\n"}),
+    ("ruff-format", check.check_py_format, {"backend/argus_api/bad.py": "def f( ) -> int :\n    return 1\n"}),
+    (
+        "mypy-wrong-return",
+        check.check_py_types,
+        {"backend/argus_api/bad.py": "def f() -> int:\n    return 'x'\n"},
+    ),
+    (
+        "pytest-failing",
+        check.check_py_tests,
+        {"backend/tests/test_bad.py": "def test_bad() -> None:\n    assert 0\n"},
+    ),
+    (
+        "pytest-no-tests",
+        check.check_py_tests,
+        {"backend/tests/test_config.py": None, "backend/tests/test_fixture_words.py": None},
+    ),
+    ("req-range", check.check_deps_pinned, {"backend/requirements.txt": "fastapi>=0.100\n"}),
+    ("req-unpinned", check.check_deps_pinned, {"backend/requirements-dev.txt": "pytest\n"}),
+    ("req-conflicting-pins", check.check_deps_pinned, {"backend/requirements-dev.txt": "httpx==0.27.0\n"}),
+    (
+        "npm-caret",
+        check.check_deps_pinned,
+        {
+            "web/package.json": json.dumps(
+                {"name": "t", "dependencies": {"react": "^19.3.0"}, "devDependencies": {"vitest": "5.0.3"}}
+            )
+        },
+    ),
+    (
+        "npm-tilde-dev",
+        check.check_deps_pinned,
+        {
+            "web/package.json": json.dumps(
+                {"name": "t", "dependencies": {"react": "19.3.0"}, "devDependencies": {"vitest": "~5.0.3"}}
+            )
+        },
+    ),
+    ("npm-lock-untracked", check.check_deps_pinned, {"web/package-lock.json": None}),
+    (
+        "npm-lock-out-of-sync",
+        check.check_deps_pinned,
+        {
+            "web/package-lock.json": json.dumps(
+                {"lockfileVersion": 3, "packages": {"": {"dependencies": {"react": "19.2.0"}}}}
+            )
+        },
+    ),
+    ("env-file", check.check_forbidden_files, {"backend/.env": "ARGUS_MODE=local\n"}),
+    ("env-local", check.check_forbidden_files, {"web/.env.local": "VITE_X=1\n"}),
+    ("mypy-cache", check.check_forbidden_files, {"backend/.mypy_cache/x.json": "{}"}),
+    ("pytest-cache", check.check_forbidden_files, {".pytest_cache/v/x": "1"}),
+    ("ruff-cache", check.check_forbidden_files, {"backend/.ruff_cache/x": "1"}),
+    ("node-modules", check.check_forbidden_files, {"web/node_modules/x/index.js": "1"}),
+    ("dist", check.check_forbidden_files, {"web/dist/index.html": "<html></html>"}),
+    ("corpus", check.check_forbidden_files, {"backend/data/corpus/paragraphs.json": "[]"}),
+    ("eval-results", check.check_forbidden_files, {"backend/argus_api/eval/results/r.json": "{}"}),
+    ("pdf", check.check_forbidden_files, {"docs/rbi.PDF": "%PDF-1.4"}),
+    ("rules-md", check.check_forbidden_files, {"RULES.md": "# rules"}),
+    ("status-md", check.check_forbidden_files, {"docs/STATUS.md": "# status"}),
+    ("decisions-md", check.check_forbidden_files, {"DECISIONS.md": "# d"}),
+    ("council", check.check_forbidden_files, {"council/run.md": "notes"}),
+    ("research", check.check_forbidden_files, {"docs/research/notes.md": "notes"}),
+    ("google-key", check.check_secrets_tree, {"web/src/key.ts": f"export const k = '{key('AIza', 35)}';\n"}),
+    ("openrouter-key", check.check_secrets_tree, {"backend/k.txt": key("sk-" + "or-v1-", 40, "a")}),
+    ("openai-project-key", check.check_secrets_tree, {"backend/k.txt": key("sk-" + "proj-", 40, "b")}),
+    ("openai-key", check.check_secrets_tree, {"backend/k.txt": key("sk-", 48, "c")}),
+    ("anthropic-key", check.check_secrets_tree, {"backend/k.txt": key("sk-" + "ant-api03-", 40, "d")}),
+    ("pem-key", check.check_secrets_tree, {"backend/key.pem": PEM}),
+    ("service-account", check.check_secrets_tree, {"backend/sa.json": SERVICE_ACCOUNT}),
+    (
+        "example-real-key",
+        check.check_env_examples,
+        {"backend/.env.example": "GEMINI_API_KEY=abc123realvalue\n"},
+    ),
+    (
+        "example-not-emulator",
+        check.check_env_examples,
+        {"web/.env.example": ("VITE_USE_EMULATORS=false\nVITE_FIREBASE_API_KEY=fake-api-key-for-emulator\n")},
+    ),
+    ("verify-in-readme", check.check_placeholders, {"README.md": "Accuracy is [VERIFY] percent.\n"}),
+    ("todo-in-web", check.check_placeholders, {"web/src/App.tsx": "// TODO wire this up\nexport {};\n"}),
+    ("todo-in-backend", check.check_placeholders, {"backend/argus_api/app.py": "# TODO\nX = 1\n"}),
+    ("lorem-in-web", check.check_placeholders, {"web/src/Copy.tsx": "export const t = 'Lorem ipsum';\n"}),
+    (
+        "sample-without-marker",
+        check.check_synthetic,
+        {"backend/argus_api/samples/policy_a.json": json.dumps({"title": "Sample NBFC A"})},
+    ),
+    (
+        "sample-with-fake",
+        check.check_synthetic,
+        {"backend/argus_api/samples/policy_a.json": json.dumps({"synthetic": True, "title": "FAKE policy"})},
+    ),
+    (
+        "sample-list-without-object-marker",
+        check.check_synthetic,
+        {"backend/argus_api/samples/policy_a.json": json.dumps([{"synthetic": True}])},
+    ),
+    (
+        "email-in-eval-case",
+        check.check_synthetic,
+        {
+            "backend/argus_api/eval/cases/clauses.json": json.dumps(
+                [{"clause_text": "Write to ravi.k@gmail.com"}]
+            )
+        },
+    ),
+    (
+        "mobile-in-sample",
+        check.check_synthetic,
+        {
+            "backend/argus_api/samples/policy_a.json": json.dumps(
+                {"synthetic": True, "clauses": [{"text": "Grievance officer: +91 98450 12345"}]}
+            )
+        },
+    ),
+    (
+        "pan-in-eval-case",
+        check.check_synthetic,
+        {
+            "backend/argus_api/eval/cases/attacks.json": json.dumps(
+                [{"clause_text": "Borrower PAN ABCPK1234L"}]
+            )
+        },
+    ),
+    (
+        "aadhaar-in-eval-case",
+        check.check_synthetic,
+        {
+            "backend/argus_api/eval/cases/attacks.json": json.dumps(
+                [{"clause_text": "Aadhaar 2345 6789 0123"}]
+            )
+        },
+    ),
+    ("fake-in-app-code", check.check_synthetic, {"backend/argus_api/app.py": "LABEL = 'FAKE'\n"}),
+    ("boto3-import", check.check_google_only, {"backend/argus_api/store.py": "import boto3\n"}),
+    (
+        "azure-import",
+        check.check_google_only,
+        {"backend/argus_api/store.py": "from azure.storage import blob\n"},
+    ),
+    (
+        "aws-package",
+        check.check_google_only,
+        {"backend/requirements.txt": "fastapi==0.143.2\nboto3==1.40.0\n"},
+    ),
+    (
+        "vertex-test-fails",
+        check.check_google_only,
+        {
+            "backend/tests/test_config.py": (
+                "def test_cloud_mode_is_vertex_only() -> None:\n    assert False\n"
+            )
+        },
+    ),
+    (
+        "vertex-test-missing",
+        check.check_google_only,
+        {"backend/tests/test_config.py": ("def test_something_else() -> None:\n    assert True\n")},
+    ),
+    (
+        "allow-write",
+        check.check_firestore_rules,
+        {
+            "firestore.rules": GOOD_RULES.replace(
+                "allow read: if true;\n    }\n    match /eval_results",
+                "allow read, write: if true;\n    }\n    match /eval_results",
+            )
+        },
+    ),
+    (
+        "allow-create-update",
+        check.check_firestore_rules,
+        {
+            "firestore.rules": GOOD_RULES.replace(
+                "allow read: if request.auth", "allow create, update: if request.auth"
+            )
+        },
+    ),
+    (
+        "allow-delete",
+        check.check_firestore_rules,
+        {
+            "firestore.rules": GOOD_RULES.replace(
+                "allow read: if true;\n    }\n  }",
+                "allow read: if true;\n      allow delete: if true;\n    }\n  }",
+            )
+        },
+    ),
+    (
+        "no-samples-rule",
+        check.check_firestore_rules,
+        {"firestore.rules": GOOD_RULES.replace("match /samples/{runId}", "match /other/{runId}")},
+    ),
+    ("rules-missing", check.check_firestore_rules, {"firestore.rules": None}),
+]
+
+
+@pytest.mark.parametrize(("name", "fn", "changes"), VIOLATIONS, ids=[v[0] for v in VIOLATIONS])
+def test_planted_violation_fails(
+    tmp_path: Path, name: str, fn: Callable[[Any], Any], changes: dict[str, str | None]
+) -> None:
+    repo = make_repo(tmp_path, changes)
+    result = run_one(repo, fn)
+    assert result.status == check.FAIL, (name, result.reason, result.details)
+
+
+def test_every_static_commit_check_has_a_planted_violation() -> None:
+    planted = {fn for _, fn, _ in VIOLATIONS}
+    planted |= {check.check_secrets_history, check.check_provenance}  # tested below with real commits
+    missing = [c.check_id for c in STATIC_CHECKS if c.fn not in planted]
+    assert missing == []
+
+
+def test_secrets_are_redacted_in_the_report(tmp_path: Path) -> None:
+    secret = key("AIza", 35, "Q")
+    repo = make_repo(tmp_path, {"web/src/key.ts": f"const k = '{secret}';\n"})
+    result = run_one(repo, check.check_secrets_tree)
+    assert result.status == check.FAIL
+    assert secret not in " ".join(result.details) + result.reason
+    assert all(secret not in run.output for run in result.runs)
+
+
+def test_firestore_rules_comments_are_ignored(tmp_path: Path) -> None:
+    rules = GOOD_RULES.replace("// Clients never write", "/* allow write: if true; */ // allow delete: if x")
+    repo = make_repo(tmp_path, {"firestore.rules": rules})
+    assert run_one(repo, check.check_firestore_rules).status == check.PASS
+
+
+def test_placeholders_allowed_in_tests_and_seed_files(tmp_path: Path) -> None:
+    repo = make_repo(
+        tmp_path,
+        {
+            "web/src/review/view.test.ts": "// TODO lorem [VERIFY]\n",
+            "web/src/data/fixtures.test-util.ts": "// TODO\n",
+            "backend/argus_api/seed_demo_data.py": "# TODO\n",
+            "backend/tests/test_more.py": "# [VERIFY]\n",
+        },
+    )
+    assert run_one(repo, check.check_placeholders).status == check.PASS
+
+
+def test_missing_readme_is_a_warning_not_a_pass(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, {"README.md": None})
+    assert run_one(repo, check.check_placeholders).status == check.WARN
+
+
+def test_eval_cases_need_no_marker_but_no_personal_data(tmp_path: Path) -> None:
+    """Eval cases are test fixtures, not sample policies: B-09 asks for no personal data,
+    not a per-item marker. Paragraph numbers, years, amounts and rates are not identifiers."""
+    cases = [
+        {
+            "case_id": "a-07",
+            "clause_text": (
+                "Loans up to Rs 10,00,000 follow para 14(9) of DoR.FIN.REC.123/2025-26 dated 2025-07-15."
+            ),
+            "gold_citation": "RBI/2025-26/45 para 10.2",
+        }
+    ]
+    repo = make_repo(tmp_path, {"backend/argus_api/eval/cases/attacks.json": json.dumps(cases)})
+    assert run_one(repo, check.check_synthetic).status == check.PASS
+
+
+def test_fake_in_documentation_is_a_warning(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, {"web/README.md": "npm run seed-demo  # FAKE demo data\n"})
+    assert run_one(repo, check.check_synthetic).status == check.WARN
+
+
+def test_staged_but_uncommitted_violation_is_caught(tmp_path: Path) -> None:
+    """The pre-commit hook runs before the commit exists: the checks read the index."""
+    repo = make_repo(tmp_path)
+    write(repo, {"backend/.env": "GEMINI_API_KEY=x\n"})  # staged only
+    assert run_one(repo, check.check_forbidden_files).status == check.FAIL
+
+
+# ------------------------------------------------------------------------------------------- history
+def test_secret_removed_from_tree_still_fails_history(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, {"backend/leak.txt": key("sk-" + "ant-api03-", 40, "z")})
+    git(repo, "commit", "-q", "-m", "Add a file")
+    write(repo, {"backend/leak.txt": None})
+    git(repo, "commit", "-q", "-m", "Remove the file")
+    assert run_one(repo, check.check_secrets_tree).status == check.PASS
+    result = run_one(repo, check.check_secrets_history)
+    assert result.status == check.FAIL
+    assert "backend/leak.txt" in result.details[0]
+    assert all(not run.store_raw for run in result.runs if run.command.startswith("git log"))
+
+
+def test_secret_in_a_commit_message_fails_history(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, {"backend/argus_api/x.py": "X = 1\n"})
+    git(repo, "commit", "-q", "-m", "Use key " + key("AIza", 35, "m"))
+    assert run_one(repo, check.check_secrets_history).status == check.FAIL
+
+
+def test_commit_before_the_launch_fails_provenance(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, {"backend/argus_api/x.py": "X = 1\n"})
+    git(repo, "commit", "-q", "-m", "Old work", date="2026-10-15T23:00:00+05:30")
+    assert run_one(repo, check.check_provenance).status == check.FAIL
+
+
+def test_provenance_dates_are_read_in_ist(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, {"backend/argus_api/x.py": "X = 1\n"})
+    git(repo, "commit", "-q", "-m", "Late night in UTC", date="2026-10-15T20:00:00+00:00")  # 01:30 IST Oct 16
+    assert run_one(repo, check.check_provenance).status == check.PASS
+
+
+def test_co_authored_by_line_fails_provenance(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, {"backend/argus_api/x.py": "X = 1\n"})
+    git(repo, "commit", "-q", "-m", "Add x\n\nCo-authored-by: Someone <s@example.com>")
+    result = run_one(repo, check.check_provenance)
+    assert result.status == check.FAIL
+    assert "Co-Authored-By" in result.details[0]
+
+
+def test_no_commits_is_blocked_not_pass(tmp_path: Path) -> None:
+    repo = tmp_path / "empty"
+    repo.mkdir()
+    git(repo, "init", "-q")
+    assert run_one(repo, check.check_provenance).status == check.BLOCKED
+
+
+# ------------------------------------------------------------------------------------------- web checks
+NODE = shutil.which("node") or (os.environ.get("ARGUS_NODE_DIR", "") + "/node")
+REAL_NODE_MODULES = REPO / "web" / "node_modules"
+needs_node = pytest.mark.skipif(
+    not Path(NODE).is_file() or not (REAL_NODE_MODULES / ".bin" / "tsc").exists(),
+    reason="node or web/node_modules not available",
+)
+WEB_FILES = {
+    "web/tsconfig.json": json.dumps(
+        {
+            "compilerOptions": {
+                "strict": True,
+                "noEmit": True,
+                "module": "ESNext",
+                "moduleResolution": "bundler",
+                "target": "ES2022",
+                "skipLibCheck": True,
+                "types": [],
+            },
+            "include": ["src"],
+        }
+    ),
+    "web/eslint.config.js": (
+        'import js from "@eslint/js";\nimport tseslint from "typescript-eslint";\n'
+        'export default tseslint.config({ files: ["**/*.ts"], extends: [js.configs.recommended, '
+        "...tseslint.configs.recommended] });\n"
+    ),
+    "web/src/math.ts": "export function add(a: number, b: number): number {\n  return a + b;\n}\n",
+    "web/src/math.test.ts": (
+        'import { expect, test } from "vitest";\nimport { add } from "./math";\n\n'
+        'test("adds", () => {\n  expect(add(1, 2)).toBe(3);\n});\n'
+    ),
+    "web/src/App.tsx": None,
+    "web/src/App.test.tsx": None,
+}
+
+
+def make_web_repo(tmp_path: Path, changes: dict[str, str | None] | None = None) -> Path:
+    repo = make_repo(tmp_path, {**WEB_FILES, **(changes or {})})
+    (repo / "web" / "package.json").write_text(json.dumps({"name": "tiny-web", "type": "module"}))
+    (repo / "web" / "node_modules").symlink_to(REAL_NODE_MODULES)
+    return repo
+
+
+def web_ctx(repo: Path) -> Any:
+    ctx = ctx_for(repo)
+    ctx.node_dir = Path(NODE).parent
+    return ctx
+
+
+WEB_CASES: list[tuple[str, Callable[[Any], Any], dict[str, str | None]]] = [
+    ("tsc-type-error", check.check_web_types, {"web/src/bad.ts": "export const n: number = 'x';\n"}),
+    ("eslint-unused", check.check_web_lint, {"web/src/bad.ts": "const unused = 1;\nexport {};\n"}),
+    (
+        "vitest-failing",
+        check.check_web_tests,
+        {
+            "web/src/bad.test.ts": (
+                'import { expect, test } from "vitest";\n\ntest("bad", () => {\n  expect(1).toBe(2);\n});\n'
+            )
+        },
+    ),
+]
+
+
+@needs_node
+@pytest.mark.parametrize(("name", "fn", "changes"), WEB_CASES, ids=[c[0] for c in WEB_CASES])
+def test_web_check_passes_clean_and_fails_planted(
+    tmp_path: Path, name: str, fn: Callable[[Any], Any], changes: dict[str, str | None]
+) -> None:
+    clean = make_web_repo(tmp_path / "clean")
+    [ok] = check.run_checks(web_ctx(clean), [check.Check("T", (), fn)])
+    assert ok.status == check.PASS, (name, ok.reason, ok.details)
+    bad = make_web_repo(tmp_path / "bad", changes)
+    [failed] = check.run_checks(web_ctx(bad), [check.Check("T", (), fn)])
+    assert failed.status == check.FAIL, (name, failed.reason, failed.details)
+
+
+def test_web_checks_blocked_without_node_modules(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    for item in (check.check_web_types, check.check_web_lint, check.check_web_tests):
+        assert run_one(repo, item).status == check.BLOCKED
+
+
+# ------------------------------------------------------------------------------------------- the CLI
+def run_cli(repo: Path, *extra: str) -> tuple[int, dict[str, Any]]:
+    out = repo.parent / "out.json"
+    code = check.main(
+        ["commit", "--fast", "--repo", str(repo), "--venv", str(VENV_BIN), "--json", str(out), *extra]
+    )
+    return code, json.loads(out.read_text())
+
+
+def test_cli_exit_codes_follow_fail_and_strict(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    repo = make_repo(tmp_path)
+    code, data = run_cli(repo)
+    by_id = {r["id"]: r["status"] for r in data["results"]}
+    assert code == 0 and data["summary"]["FAIL"] == 0
+    assert by_id["C-WEB-TYPES"] == check.BLOCKED  # no node_modules in the tiny repo: blocked, never PASS
+    assert "C-PY-TESTS" not in by_id and data["skipped"] == ["C-PY-TESTS", "C-WEB-TESTS"]
+    strict_code, _ = run_cli(repo, "--strict")
+    assert strict_code == 1
+    printed = capsys.readouterr().out
+    assert "C-PROVENANCE" in printed and "result: NOT COMPLETE" in printed
+
+    write(repo, {"backend/.env": "X=1\n"})
+    code, data = run_cli(repo)
+    assert code == 1
+    assert {r["id"]: r["status"] for r in data["results"]}["C-FORBIDDEN-FILES"] == check.FAIL
+
+
+def test_evidence_records_every_command(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    evidence = tmp_path / "evidence"
+    check.main(
+        ["commit", "--fast", "--repo", str(repo), "--venv", str(VENV_BIN), "--evidence-dir", str(evidence)]
+    )
+    rows = [json.loads(line) for line in (evidence / "evidence.jsonl").read_text().splitlines()]
+    head = git(repo, "rev-parse", "HEAD").strip()
+    assert {r["check_id"] for r in rows} == {c.check_id for c in check.COMMIT_CHECKS if not c.slow}
+    for row in rows:
+        assert row["git_sha"] == head and row["utc"].endswith("Z")
+        assert row["commands"], row["check_id"]
+        for cmd in row["commands"]:
+            assert len(cmd["output_sha256"]) == 64 and "exit_code" in cmd
+            if cmd["raw_file"]:
+                assert (evidence / cmd["raw_file"]).is_file()
+
+
+def test_missing_tools_are_blocked(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    ctx = check.Ctx(repo, venv_bin=tmp_path / "no-venv")
+    results = check.run_checks(ctx, [c for c in STATIC_CHECKS if c.check_id in {"C-PY-LINT", "C-PY-TYPES"}])
+    assert [r.status for r in results] == [check.BLOCKED, check.BLOCKED]
+
+
+# ------------------------------------------------------------------------------------------- coverage
+def test_every_rule_is_checked_or_human() -> None:
+    expected = {f"E-0{i}" for i in range(1, 7)} | {f"T-0{i}" for i in range(1, 7)}
+    expected |= {f"B-0{i}" for i in range(1, 10)} | {f"S-0{i}" for i in range(1, 9)}
+    cov = check.coverage()
+    assert set(check.RULES) == expected
+    assert [rule for rule in expected if not cov[rule]] == []
+
+
+def test_rules_coverage_flags_a_rule_the_script_does_not_know(tmp_path: Path) -> None:
+    rules_md = tmp_path / "RULES.md"
+    rows = "\n".join(f"| {rule} | x | y | z |" for rule in [*check.RULES, "S-09"])
+    rules_md.write_text(rows + "\n")
+    assert check.main(["rules-coverage", "--rules-file", str(rules_md)]) == 1
+    rules_md.write_text("\n".join(f"| {rule} | x | y | z |" for rule in check.RULES) + "\n")
+    assert check.main(["rules-coverage", "--rules-file", str(rules_md)]) == 0
+
+
+# ---------------------------------------------------------------------------------- submission (offline)
+def test_slide1_fields_are_read_between_labels() -> None:
+    text = (
+        "Team Details Team name: Argus Team leader name: Hemant Kumar BK Problem Statement: Lenders cite "
+        "withdrawn RBI rules in their policies and nobody notices until an audit."
+    )
+    values = check.slide1_fields(text)
+    assert values["team name"] == "Argus"
+    assert values["team leader"] == "Hemant Kumar BK"
+    assert values["problem statement"].startswith("Lenders cite")
+    assert (
+        check.slide1_fields("Team Details Team name: Team leader name: Problem Statement:")["team name"] == ""
+    )
+
+
+def test_submission_without_inputs_is_blocked(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    for item in check.SUBMISSION_CHECKS:
+        if item.check_id == "S-README":
+            continue
+        assert run_one(repo, item.fn, submission=None).status == check.BLOCKED, item.check_id
+    sub = tmp_path / "submission.json"
+    sub.write_text(json.dumps({"deck_pdf": "missing.pdf", "video_url": "https://example.com/v.mp4"}))
+    assert run_one(repo, check.check_deck, submission=str(sub)).status == check.BLOCKED
+    assert run_one(repo, check.check_video_public, submission=str(sub)).status == check.FAIL
+
+
+def test_description_must_name_all_four(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    desc = tmp_path / "description.md"
+    sub = tmp_path / "submission.json"
+    sub.write_text(json.dumps({"description_file": "description.md"}))
+    desc.write_text("Argus uses Gemini on Cloud Run and stores runs in Firestore.")
+    assert run_one(repo, check.check_description, submission=str(sub)).status == check.FAIL
+    desc.write_text("Argus uses Gemini on Cloud Run, Firestore for runs, Firebase Hosting and Auth.")
+    assert run_one(repo, check.check_description, submission=str(sub)).status == check.PASS
+    desc.write_text("Gemini, Cloud Run, Firestore, Firebase. Accuracy: not measured yet.")
+    assert run_one(repo, check.check_description, submission=str(sub)).status == check.FAIL
+
+
+def make_pdf(pages: list[list[str]]) -> bytes:
+    """A minimal text PDF, so the deck checks run offline without a template export."""
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>", "", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    kids = []
+    for lines in pages:
+        content = "BT /F1 12 Tf 50 750 Td 14 TL " + " ".join(f"({line}) Tj T*" for line in lines) + " ET"
+        objs.append(f"<< /Length {len(content)} >>\nstream\n{content}\nendstream")
+        objs.append(
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            f"/Resources << /Font << /F1 3 0 R >> >> /Contents {len(objs)} 0 R >>"
+        )
+        kids.append(len(objs))
+    objs[1] = f"<< /Type /Pages /Kids [{' '.join(f'{k} 0 R' for k in kids)}] /Count {len(kids)} >>"
+    out, offsets = "%PDF-1.4\n", []
+    for i, obj in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n{obj}\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n" + "".join(
+        f"{o:010d} 00000 n \n" for o in offsets
+    )
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"
+    return out.encode("latin-1")
+
+
+FILLED_SLIDE1 = [
+    "Team Details",
+    "Team name: Argus",
+    "Team leader name: Hemant Kumar BK",
+    "Problem Statement: Lenders cite withdrawn RBI rules in policies and nobody notices",
+]
+TEMPLATE_SLIDE1 = ["Team Details", "Team name:", "Team leader name:", "Problem Statement:"]
+
+
+@pytest.mark.parametrize(
+    ("pages", "expected"),
+    [
+        ([FILLED_SLIDE1, ["Architecture"]], (check.PASS, check.PASS)),
+        ([TEMPLATE_SLIDE1, ["Note: Kindly refrain from sending edit requests."]], (check.FAIL, check.FAIL)),
+        ([FILLED_SLIDE1[:2] + FILLED_SLIDE1[3:]], (check.PASS, check.FAIL)),  # no team leader
+    ],
+    ids=["filled", "template", "no-leader"],
+)
+def test_deck_checks(tmp_path: Path, pages: list[list[str]], expected: tuple[str, str]) -> None:
+    repo = make_repo(tmp_path)
+    (tmp_path / "deck.pdf").write_bytes(make_pdf(pages))
+    sub = tmp_path / "submission.json"
+    sub.write_text(
+        json.dumps({"deck_pdf": "deck.pdf", "team_name": "Argus", "team_leader": "Hemant Kumar BK"})
+    )
+    deck = run_one(repo, check.check_deck, submission=str(sub))
+    slide1 = run_one(repo, check.check_deck_slide1, submission=str(sub))
+    assert (deck.status, slide1.status) == expected, (deck.reason, slide1.details)
+
+
+# ---------------------------------------------------------------------------------- deploy (offline)
+def describe_json(env: dict[str, str], min_i: str = "1", max_i: str = "3", timeout: int = 300) -> str:
+    return json.dumps(
+        {
+            "metadata": {"name": "argus-api", "annotations": {}},
+            "spec": {
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "autoscaling.knative.dev/minScale": min_i,
+                            "autoscaling.knative.dev/maxScale": max_i,
+                        }
+                    },
+                    "spec": {
+                        "timeoutSeconds": timeout,
+                        "containers": [{"env": [{"name": k, "value": v} for k, v in env.items()]}],
+                    },
+                }
+            },
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("env", "scale", "expected"),
+    [
+        ({"ARGUS_MODE": "cloud"}, ("1", "3", 300), check.PASS),
+        ({"ARGUS_MODE": "local"}, ("1", "3", 300), check.FAIL),
+        ({"ARGUS_MODE": "cloud", "OPENROUTER_API_KEY": "x"}, ("1", "3", 300), check.FAIL),
+        ({"ARGUS_MODE": "cloud", "ARGUS_AGENT_MODEL": "x"}, ("1", "3", 300), check.FAIL),
+        ({"ARGUS_MODE": "cloud"}, ("0", "3", 300), check.FAIL),
+        ({"ARGUS_MODE": "cloud"}, ("1", "10", 300), check.FAIL),
+        ({"ARGUS_MODE": "cloud"}, ("1", "3", 60), check.FAIL),
+    ],
+    ids=["good", "local-mode", "openrouter-key", "model-override", "min-0", "max-10", "timeout-60"],
+)
+def test_run_config_reads_the_service_description(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    env: dict[str, str],
+    scale: tuple[str, str, int],
+    expected: str,
+) -> None:
+    def fake_gcloud(ctx: Any, *args: str) -> Any:
+        return check.CmdRun("gcloud " + " ".join(args), ".", 0, describe_json(env, *scale), "t", 0.0)
+
+    monkeypatch.setattr(check, "_gcloud", fake_gcloud)
+    result = run_one(
+        tmp_path,
+        check.check_deploy_run_config,
+        project="p",
+        service_url="https://x.run.app",
+        service="argus-api",
+        region="asia-south1",
+    )
+    assert result.status == expected, (result.reason, result.details)
+
+
+def test_deploy_without_project_is_blocked(tmp_path: Path) -> None:
+    for item in check.DEPLOY_CHECKS:
+        assert run_one(tmp_path, item.fn, project=None, service_url=None).status == check.BLOCKED
