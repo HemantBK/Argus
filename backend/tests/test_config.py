@@ -1,6 +1,18 @@
 import pytest
 
-from argus_api.config import AUTH_EMULATOR_ENV, LOCAL_PROVIDER_KEYS, ConfigError, Settings
+from argus_api.config import (
+    AGENT_MODEL_ENV,
+    AGENT_THINKING,
+    AUTH_EMULATOR_ENV,
+    LOCAL_PROVIDER_KEYS,
+    MONITOR_MODEL_ENV,
+    MONITOR_THINKING,
+    ORIGINS_ENV,
+    PINNED_MODELS,
+    ConfigError,
+    Settings,
+    parse_origins,
+)
 
 LOCAL_OPENROUTER = {
     "ARGUS_MODE": "local",
@@ -9,8 +21,6 @@ LOCAL_OPENROUTER = {
     AUTH_EMULATOR_ENV: "localhost:9099",
     "GOOGLE_CLOUD_PROJECT": "argus-local",
     "OPENROUTER_API_KEY": "or-test-key",
-    "ARGUS_AGENT_MODEL": "agent-model",
-    "ARGUS_MONITOR_MODEL": "monitor-model",
 }
 LOCAL_AISTUDIO = {
     **{k: v for k, v in LOCAL_OPENROUTER.items() if k != "OPENROUTER_API_KEY"},
@@ -21,10 +31,9 @@ CLOUD = {
     "ARGUS_MODE": "cloud",
     "GOOGLE_CLOUD_PROJECT": "argus-prod",
     "GOOGLE_CLOUD_LOCATION": "asia-south1",
-    "ARGUS_AGENT_MODEL": "agent-model",
-    "ARGUS_MONITOR_MODEL": "monitor-model",
+    ORIGINS_ENV: "https://argus-test.web.app,https://argus-test.firebaseapp.com",
 }
-ALL_NAMES = set(LOCAL_OPENROUTER) | set(LOCAL_AISTUDIO) | set(CLOUD)
+ALL_NAMES = set(LOCAL_OPENROUTER) | set(LOCAL_AISTUDIO) | set(CLOUD) | {AGENT_MODEL_ENV, MONITOR_MODEL_ENV}
 
 
 def _set(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> None:
@@ -70,3 +79,42 @@ def test_unknown_mode_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     _set(monkeypatch, {**LOCAL_OPENROUTER, "ARGUS_MODE": "staging"})
     with pytest.raises(ConfigError, match="staging"):
         Settings.from_env()
+
+
+def test_cloud_origins_are_parsed_and_validated(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set(monkeypatch, CLOUD)
+    assert Settings.from_env().allowed_origins == parse_origins(CLOUD[ORIGINS_ENV])
+    assert len(Settings.from_env().allowed_origins) == CLOUD[ORIGINS_ENV].count(",") + 1
+    for bad in ("*", "https://x.web.app/", "argus.web.app", "ftp://x.web.app", "https://*.web.app"):
+        _set(monkeypatch, {**CLOUD, ORIGINS_ENV: bad})
+        with pytest.raises(ConfigError, match=ORIGINS_ENV):
+            Settings.from_env()
+
+
+def test_local_origins_are_optional(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set(monkeypatch, LOCAL_OPENROUTER)
+    assert Settings.from_env().allowed_origins == ()
+
+
+@pytest.mark.parametrize(
+    "env", [LOCAL_OPENROUTER, LOCAL_AISTUDIO, CLOUD], ids=["openrouter", "aistudio", "cloud"]
+)
+def test_model_ids_come_from_the_pinned_table(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> None:
+    _set(monkeypatch, env)
+    s = Settings.from_env()
+    assert (s.agent_model, s.monitor_model) == PINNED_MODELS[s.provider]
+    assert (s.agent_thinking, s.monitor_thinking) == (AGENT_THINKING, MONITOR_THINKING)
+
+
+@pytest.mark.parametrize("name", [AGENT_MODEL_ENV, MONITOR_MODEL_ENV])
+def test_cloud_mode_refuses_model_overrides(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    _set(monkeypatch, {**CLOUD, name: "some-other-model"})
+    with pytest.raises(ConfigError, match=name):
+        Settings.from_env()
+
+
+def test_local_mode_may_override_a_model_for_an_experiment(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set(monkeypatch, {**LOCAL_OPENROUTER, AGENT_MODEL_ENV: "google/other-model"})
+    s = Settings.from_env()
+    assert s.agent_model == "google/other-model"
+    assert s.monitor_model == PINNED_MODELS["openrouter"][1]

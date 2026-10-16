@@ -12,3 +12,4 @@ data/raw/
 *.pdf
 # RBI text is rebuilt by backend/argus_api/corpus/build_corpus.py, never committed
 backend/data/corpus/
+!.env.example

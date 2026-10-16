@@ -38,4 +38,23 @@ seed:
 smoke:
 	curl -s -X POST -H "Authorization: Bearer $(TOKEN)" localhost:8080/api/smoke; echo
 
-.PHONY: setup test test-emulator lint up down run models seed smoke
+# RBI library: fetch rbi.org.in pages and parse them into backend/data/corpus (OFFLINE=1 re-parses the cache).
+corpus:
+	cd backend && .venv/bin/python -m argus_api.corpus.build_corpus $(if $(OFFLINE),--offline)
+
+# Write backend/data/corpus to Firestore (rbi_instruments, rbi_paragraphs, supersession).
+load-corpus:
+	cd backend && set -a && . ./.env && set +a && .venv/bin/python -m argus_api.admin load-corpus
+
+# Kill switch and run caps in config/limits (no arguments: print):
+#   make limits CAP=40 HOURLY_CAP=10 USER_CAP=3 ENABLED=true
+limits:
+	cd backend && set -a && . ./.env && set +a && .venv/bin/python -m argus_api.admin limits \
+		$(if $(CAP),--cap $(CAP)) $(if $(HOURLY_CAP),--hourly-cap $(HOURLY_CAP)) \
+		$(if $(USER_CAP),--user-cap $(USER_CAP)) $(if $(ENABLED),--enabled $(ENABLED))
+
+# Copy a finished live run to the public samples/ collection: make save-sample RUN=<run_id>
+save-sample:
+	cd backend && set -a && . ./.env && set +a && .venv/bin/python -m argus_api.save_sample $(RUN)
+
+.PHONY: setup test test-emulator lint up down run models seed smoke corpus load-corpus limits save-sample

@@ -20,12 +20,15 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from argus_api import main
+from argus_api import main, runs
 from argus_api.auth import uid_from_token
 from argus_api.config import AUTH_EMULATOR_ENV
+from argus_api.docstore import FirestoreStore
 from argus_api.llm import Completion
+from argus_api.schema import Limits
 
 PROJECT = "argus-local"
+CAP = 1000
 
 
 def _env(name: str) -> str:
@@ -169,9 +172,23 @@ def api(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     for cached in (main.settings, main.db, main._token_verifier):
         cached.cache_clear()
     monkeypatch.setattr(main, "llm", lambda: _FakeLLM())
-    yield TestClient(main.app)
-    for cached in (main.settings, main.db, main._token_verifier):
-        cached.cache_clear()
+    # The smoke check is admitted like a run, so config/limits must allow it; the shared emulator state is
+    # restored afterwards.
+    store = FirestoreStore(main.db())
+    saved_limits = store.get(runs.LIMITS_PATH)
+    store.set(
+        runs.LIMITS_PATH,
+        Limits(daily_run_cap=CAP, hourly_run_cap=CAP, per_user_daily_run_cap=CAP, enabled=True).model_dump(),
+    )
+    try:
+        yield TestClient(main.app)
+    finally:
+        if saved_limits is not None:
+            store.set(runs.LIMITS_PATH, saved_limits)
+        else:
+            main.db().document(runs.LIMITS_PATH).delete()
+        for cached in (main.settings, main.db, main._token_verifier):
+            cached.cache_clear()
 
 
 def test_api_records_the_verified_uid_as_owner(api: TestClient) -> None:
@@ -181,6 +198,7 @@ def test_api_records_the_verified_uid_as_owner(api: TestClient) -> None:
     assert r.json()["owner_uid"] == uid
     stored = httpx.get(f"{DOCS}/smoke/{r.json()['run_id']}", headers=ADMIN).json()
     assert stored["fields"]["owner_uid"]["stringValue"] == uid
+    assert stored["fields"]["status"]["stringValue"] == "done"
 
 
 def _unsigned_token(audience: str) -> str:

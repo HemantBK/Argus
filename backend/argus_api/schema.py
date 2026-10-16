@@ -1,19 +1,25 @@
-"""Data contract between the API, Firestore and the web app (schema v0).
+"""Data contract between the API, Firestore and the web app (schema v0.1).
 
-Firestore layout:
+Firestore layout (written only by the API, see runs.py; documents are model_dump(mode="json"), so every
+datetime is an ISO 8601 string):
   runs/{run_id}                    Run
-  runs/{run_id}/steps/{seq}        Step       (live trace, ordered by seq)
-  runs/{run_id}/findings/{clause}  Finding    (one per policy clause)
-  runs/{run_id}/audit/{seq}        AuditEvent (append-only)
-  samples/{run_id}                 copy of a saved run, publicly readable
+  runs/{run_id}/steps/{seq}        Step       (live trace; doc id is seq zero-padded to 4 digits, "0001")
+  runs/{run_id}/findings/{clause}  Finding    (one per policy clause, failed clauses included)
+  runs/{run_id}/audit/{seq}        AuditEvent (append-only; doc id zero-padded like steps)
+  samples/{run_id}                 copy of a saved run (same subcollections), publicly readable
+  config/limits                    Limits     (kill switch and daily run cap; server-side only)
+
+v0.1 (D-34) added the optional fields Run.clauses, Citation.withdrawn_by / withdrawn_on,
+AuditEvent.clause_id / model and Signoff.edited_rationale; also Finding.error and RunSummary.failed, so a
+clause whose review failed is an explicit state rather than a missing document.
 """
 
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
-SCHEMA_VERSION = "v0"
+SCHEMA_VERSION = "v0.1"
 
 
 class RunStatus(StrEnum):
@@ -66,7 +72,9 @@ LABEL_DEFINITIONS: dict[FindingLabel, str] = {
     ),
     FindingLabel.GAP: (
         "The clause deals with the topic but leaves out something the paragraph in force requires, and "
-        "nothing it says goes against the rule: the policy is silent where the rule demands an element."
+        "nothing it says goes against the rule: the policy is silent where the rule demands an element. An "
+        "exception or permission the rule allows is not a required element: a clause stricter than the rule "
+        "is not a gap."
     ),
     FindingLabel.CONFLICT: (
         "The clause permits, requires or describes a practice the paragraph in force forbids, or sets a "
@@ -103,6 +111,10 @@ class Citation(BaseModel):
     snapshot_date: str  # date the snapshot was taken, ISO
     content_hash: str  # sha256 of the paragraph text in the snapshot
     in_force: bool
+    withdrawn_by: str | None = (
+        None  # instrument_ref of the instrument that withdrew it, when the corpus has it
+    )
+    withdrawn_on: str | None = None  # ISO date the instrument stopped being in force (corpus valid_to)
 
 
 class Check(BaseModel):
@@ -133,6 +145,7 @@ class Signoff(BaseModel):
     by: str
     at: datetime
     note: str = ""
+    edited_rationale: str | None = None  # the officer's rationale, for decision "edit"; the agent's is kept
 
 
 class Finding(BaseModel):
@@ -144,6 +157,9 @@ class Finding(BaseModel):
     replaced_citation: Citation | None = None  # what the policy cited, when outdated
     monitor_status: MonitorStatus
     signoff: Signoff | None = None
+    # Set when the review of this clause failed (provider error, timeout, run budget): the label is then
+    # insufficient_evidence, the citation None, and the clause goes to a person.
+    error: str | None = None
 
 
 class AuditEvent(BaseModel):
@@ -152,6 +168,8 @@ class AuditEvent(BaseModel):
     actor: str  # "agent" | "monitor" | "verifier" | "officer:<uid>"
     event: str
     detail: str = ""
+    clause_id: str | None = None
+    model: str | None = None  # the model behind an AI event (E2)
 
 
 class RunSummary(BaseModel):
@@ -163,6 +181,29 @@ class RunSummary(BaseModel):
     insufficient_evidence: int = 0
     monitor_revisions: int = 0
     monitor_stops: int = 0
+    failed: int = 0  # clauses whose review failed; the label counts above cover only reviewed clauses
+
+
+class RunClause(BaseModel):
+    clause_id: str
+    title: str
+    text: str
+
+
+class Limits(BaseModel):
+    """config/limits, read before every model-spending request (a run, or the smoke check).
+
+    enabled false: nothing starts (503). Otherwise a request is refused (429) when today's (IST) count is at
+    daily_run_cap, this hour's at hourly_run_cap (so one visitor cannot drain the day in minutes), or the
+    signed-in user's own count today at per_user_daily_run_cap.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    daily_run_cap: StrictInt = Field(ge=0)
+    hourly_run_cap: StrictInt = Field(ge=0)
+    per_user_daily_run_cap: StrictInt = Field(ge=0)
+    enabled: StrictBool
 
 
 class Run(BaseModel):
@@ -179,6 +220,7 @@ class Run(BaseModel):
     agent_model: str
     monitor_model: str
     corpus_as_on: str
+    clauses: list[RunClause] = Field(default_factory=list)
     summary: RunSummary = Field(default_factory=RunSummary)
     latency_ms: int | None = None
     cost_usd_estimate: float | None = None

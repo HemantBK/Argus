@@ -19,6 +19,7 @@ from argus_api.schema import (
     MonitorAction,
     MonitorStatus,
     Run,
+    RunClause,
     RunStatus,
     RunSummary,
     Step,
@@ -27,10 +28,12 @@ from argus_api.schema import (
 )
 
 RUN_ID = "fake-run-0001"
+CLAUSES = {"c1": "FAKE clause citing a withdrawn instrument.", "c2": "FAKE compliant clause."}
 
 
 def _citation(para: str, in_force: bool) -> Citation:
     quote = f"FAKE quoted RBI text for para {para}."
+    withdrawn = {} if in_force else {"withdrawn_by": "FAKE/WITHDRAWING-REF", "withdrawn_on": "2025-11-28"}
     return Citation(
         instrument="FAKE instrument",
         instrument_ref="FAKE/REF",
@@ -40,6 +43,7 @@ def _citation(para: str, in_force: bool) -> Citation:
         snapshot_date="2026-10-16",
         content_hash=hashlib.sha256(quote.encode()).hexdigest(),
         in_force=in_force,
+        **withdrawn,
     )
 
 
@@ -57,6 +61,10 @@ def build() -> tuple[Run, list[Step], list[Finding], list[AuditEvent]]:
         agent_model="fake-agent-model",
         monitor_model="fake-monitor-model",
         corpus_as_on="2026-10-16",
+        clauses=[
+            RunClause(clause_id="c1", title="FAKE clause citing a withdrawn instrument", text=CLAUSES["c1"]),
+            RunClause(clause_id="c2", title="FAKE compliant clause", text=CLAUSES["c2"]),
+        ],
         summary=RunSummary(clauses=2, outdated_reference=1, compliant=1, monitor_revisions=1),
         latency_ms=12000,
     )
@@ -81,7 +89,7 @@ def build() -> tuple[Run, list[Step], list[Finding], list[AuditEvent]]:
     findings = [
         Finding(
             clause_id="c1",
-            clause_text="FAKE clause citing a withdrawn instrument.",
+            clause_text=CLAUSES["c1"],
             label=FindingLabel.OUTDATED_REFERENCE,
             rationale="FAKE rationale",
             citation=_citation("10(4)", in_force=True),
@@ -90,14 +98,25 @@ def build() -> tuple[Run, list[Step], list[Finding], list[AuditEvent]]:
         ),
         Finding(
             clause_id="c2",
-            clause_text="FAKE compliant clause.",
+            clause_text=CLAUSES["c2"],
             label=FindingLabel.COMPLIANT,
             rationale="FAKE rationale",
             citation=_citation("11", in_force=True),
             monitor_status=MonitorStatus.PASSED,
         ),
     ]
-    audit = [AuditEvent(seq=1, at=t0, actor="agent", event="FAKE run started")]
+    audit = [
+        AuditEvent(seq=1, at=t0, actor="officer:fake-owner", event="run_started", detail="FAKE run started"),
+        AuditEvent(
+            seq=2,
+            at=t0 + timedelta(seconds=3),
+            actor="monitor",
+            event="step_monitor",
+            detail="FAKE: cited paragraph does not exist; revise",
+            clause_id="c1",
+            model="fake-monitor-model",
+        ),
+    ]
     return run, steps, findings, audit
 
 
