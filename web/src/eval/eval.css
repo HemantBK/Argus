@@ -1,0 +1,78 @@
+/* Evaluation page (UI_SPEC 3.4): one table, not a dashboard. Nothing below 14px. */
+.eval-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: calc(var(--space) * 2) 0 calc(var(--space) * 4);
+}
+.eval-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.eval-table caption {
+  text-align: left;
+  padding: var(--space) calc(var(--space) * 1.5);
+  color: var(--text-muted);
+  font-size: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.eval-table th,
+.eval-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--space) calc(var(--space) * 1.5);
+  border-bottom: 1px solid var(--border);
+}
+.eval-table thead th {
+  background: var(--surface);
+}
+.eval-table tbody th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.eval-table tbody tr:last-child th,
+.eval-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.eval-value {
+  display: block;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.eval-n {
+  display: block;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.eval-not-measured {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.eval-failures,
+.eval-corpus {
+  margin-bottom: calc(var(--space) * 4);
+}
+.eval-corpus {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: calc(var(--space) * 2) calc(var(--space) * 2.5);
+  max-width: 720px;
+}
+.eval-corpus dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space) calc(var(--space) * 2);
+  margin: 0;
+}
+.eval-corpus dt {
+  font-weight: 600;
+}
+.eval-corpus dd {
+  margin: 0;
+}
+.eval-corpus ul {
+  margin: 0;
+  padding-left: calc(var(--space) * 2.5);
+}

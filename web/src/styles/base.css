@@ -1,0 +1,171 @@
+/* Base typography and focus (UI_SPEC 4.3, 4.4, 7). Light theme only. No text below 14px anywhere. */
+@import "./tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 calc(var(--space) * 2);
+  line-height: 1.25;
+  font-weight: 650;
+}
+h1 { font-size: 28px; }
+h2 { font-size: 18px; }
+h3 { font-size: 16px; }
+
+p {
+  margin: 0 0 calc(var(--space) * 2);
+}
+
+small,
+.text-small {
+  font-size: 14px; /* the floor: never smaller */
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+code,
+kbd,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+a:hover {
+  color: var(--accent-hover);
+}
+
+button {
+  font: inherit;
+  min-height: 36px;
+  min-width: 24px;
+  padding: 0 calc(var(--space) * 2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #FFFFFF;
+}
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* Visible focus on every interactive element (WCAG 2.4.7 / 2.4.11). */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Error state: fail loudly, in plain view. */
+/* "Synthetic" label: on sample cards and in the top bar of every screen. */
+.tag-synthetic {
+  flex: none;
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid var(--text-muted);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 0 var(--space);
+  line-height: 22px;
+}
+
+.error-banner {
+  border: 1px solid var(--status-gap);
+  background: var(--status-gap-bg);
+  color: var(--status-gap);
+  border-radius: var(--radius);
+  padding: calc(var(--space) * 1.5) calc(var(--space) * 2);
+  margin: calc(var(--space) * 2) 0;
+}
+.error-detail {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: var(--space) 0 0;
+  color: var(--text);
+}
+
+/* Purposeful motion only, under 200ms; none at all when the user asks for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Foundation shell (replaced by the screen layouts). */
+.shell-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: calc(var(--space) * 2);
+  padding: calc(var(--space) * 1.5) calc(var(--space) * 3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.shell-brand {
+  font-weight: 700;
+  font-size: 18px;
+}
+.shell-main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: calc(var(--space) * 4) calc(var(--space) * 3);
+}

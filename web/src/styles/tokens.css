@@ -1,0 +1,20 @@
+/* UI_SPEC 4.2 design tokens: the only colours, fonts, radius and spacing unit in the app.
+   Status colours are for finding state only; everything else is neutral or the one accent.
+   Contrast of every status colour on its tint and on --bg is asserted in src/styles/contrast.test.ts. */
+:root {
+  /* neutrals */
+  --bg: #FFFFFF;  --surface: #F7F8FA;  --border: #E3E6EB;
+  --text: #111827; --text-muted: #4B5563;
+  /* one accent for actions */
+  --accent: #1D4ED8;  --accent-hover: #1E40AF;
+  /* status (use only for finding state) */
+  --status-ok: #15803D; --status-gap: #B91C1C;
+  --status-outdated: #B45309; --status-review: #475569;
+  /* status backgrounds (tints) */
+  --status-ok-bg: #ECFDF3; --status-gap-bg: #FEF2F2;
+  --status-outdated-bg: #FFFBEB; --status-review-bg: #F1F5F9;
+  /* type */
+  --font-ui: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --radius: 8px; --space: 8px;
+}

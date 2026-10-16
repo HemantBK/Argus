@@ -1,0 +1,97 @@
+/* Start screen (UI_SPEC 3.1). Tokens only; nothing below 14px. */
+.start {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: calc(var(--space) * 6) calc(var(--space) * 3) calc(var(--space) * 4);
+}
+
+.start-hero {
+  margin-bottom: calc(var(--space) * 6);
+}
+.start-hero h1 {
+  font-size: 32px;
+  max-width: 24ch;
+}
+.start-sub {
+  font-size: 18px;
+  color: var(--text-muted);
+  max-width: 70ch;
+  margin-bottom: calc(var(--space) * 4);
+}
+button.start-cta {
+  min-height: 56px;
+  padding: 0 calc(var(--space) * 4);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.start-samples h2 {
+  margin-bottom: calc(var(--space) * 2);
+}
+.sample-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: calc(var(--space) * 2);
+}
+.sample-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: calc(var(--space) * 2) calc(var(--space) * 2.5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  min-height: 160px; /* reserve space so cards do not jump when data arrives */
+}
+.sample-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space);
+}
+.sample-card-head h3 {
+  margin: 0;
+}
+.sample-card-meta {
+  margin: 0;
+}
+.saved-run-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) / 2);
+}
+.saved-run-list a {
+  display: inline-block;
+  min-height: 24px;
+}
+.sample-card-run {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+.start-footer {
+  margin-top: calc(var(--space) * 6);
+  padding-top: calc(var(--space) * 2);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* Skeletons (UI_SPEC 6, slow network): shapes, not blank space. */
+.skeleton-card {
+  gap: calc(var(--space) * 1.5);
+}
+.saved-run-older summary {
+  cursor: pointer;
+  min-height: 24px;
+  color: var(--text-muted);
+}
+.saved-run-older .saved-run-list {
+  margin-top: calc(var(--space) / 2);
+}

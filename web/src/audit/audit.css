@@ -1,0 +1,61 @@
+/* Audit log table (UI_SPEC 3.3). Dense but legible; nothing below 14px. */
+.audit-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: calc(var(--space) * 2);
+}
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.audit-table th,
+.audit-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--space) calc(var(--space) * 1.5);
+  border-bottom: 1px solid var(--border);
+}
+.audit-table thead th {
+  background: var(--surface);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+.audit-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.audit-time {
+  white-space: nowrap;
+}
+.audit-detail {
+  max-width: 60ch;
+  overflow-wrap: anywhere;
+}
+.audit-clause-title {
+  color: var(--text-muted);
+}
+/* Officer rows stand out by a left rule and a label, never colour alone (the actor column names them). */
+.audit-actor-officer td:first-child {
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+.audit-edit {
+  margin: var(--space) 0 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: calc(var(--space) / 2) var(--space);
+}
+.audit-edit dt {
+  font-weight: 600;
+}
+.audit-edit dd {
+  margin: 0;
+}
+.audit-skeleton td {
+  padding-top: calc(var(--space) * 1.5);
+  padding-bottom: calc(var(--space) * 1.5);
+}
+.audit-table td:nth-child(2) {
+  white-space: nowrap;
+}

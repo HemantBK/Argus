@@ -1,0 +1,147 @@
+/* App shell: top bar, run banners, not-found page. Tokens only; nothing below 14px. */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space) calc(var(--space) * 3);
+  padding: var(--space) calc(var(--space) * 3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  min-height: 56px;
+}
+.topbar-brand {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text);
+  text-decoration: none;
+}
+.topbar-run {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.topbar-run-title {
+  font-weight: 600;
+}
+.topbar-nav ul {
+  list-style: none;
+  display: flex;
+  gap: calc(var(--space) / 2);
+  margin: 0;
+  padding: 0;
+}
+.topbar-tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 calc(var(--space) * 1.5);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+}
+.topbar-tab:hover {
+  background: var(--bg);
+  color: var(--accent-hover);
+}
+.topbar-tab[aria-current="page"] {
+  background: var(--bg);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+.topbar-tab-disabled,
+.topbar-tab-disabled:hover {
+  color: var(--text-muted);
+  background: none;
+  cursor: not-allowed;
+}
+.topbar-legal {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+/* Wide screens: one line, so the Review screen keeps its height for the panes. The run name (repeated in full in
+   the summary bar below) gives way with an ellipsis; the tabs and the legal label never do. */
+@media (min-width: 1280px) {
+  .topbar {
+    flex-wrap: nowrap;
+  }
+  .topbar-run {
+    flex: 1 1 auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar-brand,
+  .topbar-nav,
+  .topbar-legal {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
+.shell-banners {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 calc(var(--space) * 3);
+}
+.shell-banners:empty {
+  display: none;
+}
+.run-banner {
+  border: 1px solid var(--status-gap);
+  background: var(--status-gap-bg);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: calc(var(--space) * 1.5) calc(var(--space) * 2);
+  margin: calc(var(--space) * 2) 0 0;
+}
+.run-banner strong {
+  color: var(--status-gap);
+}
+.banner-detail,
+.banner-offer {
+  margin: var(--space) 0 0;
+}
+.run-notice {
+  margin: calc(var(--space) * 2) 0 0;
+  color: var(--text-muted);
+}
+
+.page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: calc(var(--space) * 4) calc(var(--space) * 3);
+}
+.page-intro {
+  color: var(--text-muted);
+  max-width: 80ch;
+}
+
+/* Skeletons (UI_SPEC 6, slow network): shapes, not blank space. */
+.skeleton-line {
+  display: block;
+  height: 14px;
+  width: 40%;
+  border-radius: 4px;
+  background: var(--border);
+}
+.skeleton-line-wide {
+  width: 70%;
+  height: 18px;
+}
+
+/* Skip link: hidden until focused (WCAG 2.4.1). */
+.skip-link:focus {
+  position: fixed !important;
+  top: var(--space);
+  left: var(--space);
+  width: auto;
+  height: auto;
+  margin: 0;
+  clip: auto;
+  z-index: 10;
+  padding: var(--space) calc(var(--space) * 2);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}
