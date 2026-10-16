@@ -1,0 +1,50 @@
+[
+ {
+  "case_id": "fx-b1",
+  "clause_text": "Any fee, charge or reimbursement owed to a Lending Service Provider engaged by Fictional Finance Ltd shall be paid by the Company directly, and no Lending Service Provider shall charge or collect it from borrowers separately.",
+  "draft": {
+   "clause_id": "fx-b1",
+   "label": "compliant",
+   "rationale": "Fees are paid by the company.",
+   "citation_instrument_ref": "RBI/DOR/2025-26/347",
+   "citation_para": "10(9)",
+   "citation_quote": "An NBFC shall ensure that any fees, charges, reimbursements, etc. payable to LSP are paid directly by the NBFC and are not charged to or collected from the borrowers separately by LSP.",
+   "policy_cited_instrument_ref": null,
+   "policy_cited_para": null
+  },
+  "expected_monitor_action": "revise",
+  "expected_failed_check": "paragraph_exists"
+ },
+ {
+  "case_id": "fx-b2",
+  "clause_text": "Any fee, charge or reimbursement owed to a Lending Service Provider engaged by Fictional Finance Ltd shall be paid by the Company directly, and no Lending Service Provider shall charge or collect it from borrowers separately.",
+  "draft": {
+   "clause_id": "fx-b2",
+   "label": "compliant",
+   "rationale": "Fees are paid by the company.",
+   "citation_instrument_ref": "RBI/2025-26/36",
+   "citation_para": "9(iv)",
+   "citation_quote": "RE shall ensure that any fees, charges, reimbursements, etc. payable to LSP are paid directly by the RE",
+   "policy_cited_instrument_ref": null,
+   "policy_cited_para": null
+  },
+  "expected_monitor_action": "revise",
+  "expected_failed_check": "in_force"
+ },
+ {
+  "case_id": "fx-b3",
+  "clause_text": "Any fee, charge or reimbursement owed to a Lending Service Provider engaged by Fictional Finance Ltd shall be paid by the Company directly, and no Lending Service Provider shall charge or collect it from borrowers separately.",
+  "draft": {
+   "clause_id": "fx-b3",
+   "label": "compliant",
+   "rationale": "Fees are paid by the company directly, as 10(4) requires.",
+   "citation_instrument_ref": "RBI/DOR/2025-26/347",
+   "citation_para": "10(4)",
+   "citation_quote": "An NBFC shall ensure that any fees, charges, reimbursements, etc. payable to LSP are paid directly by the NBFC and are not charged to or collected from the borrowers separately by LSP.",
+   "policy_cited_instrument_ref": null,
+   "policy_cited_para": null
+  },
+  "expected_monitor_action": "continue",
+  "expected_failed_check": null
+ }
+]
