@@ -1,6 +1,9 @@
 services:
-  firestore:
-    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
-    command: gcloud emulators firestore start --host-port=0.0.0.0:8081 --project=argus-local
+  # Firebase Local Emulator Suite: Auth on 9099, Firestore on 8081 with firestore.rules enforced for clients.
+  firebase:
+    build:
+      context: .
+      dockerfile: emulators/Dockerfile
     ports:
       - "8081:8081"
+      - "9099:9099"

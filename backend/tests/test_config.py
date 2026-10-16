@@ -1,11 +1,12 @@
 import pytest
 
-from argus_api.config import LOCAL_PROVIDER_KEYS, ConfigError, Settings
+from argus_api.config import AUTH_EMULATOR_ENV, LOCAL_PROVIDER_KEYS, ConfigError, Settings
 
 LOCAL_OPENROUTER = {
     "ARGUS_MODE": "local",
     "ARGUS_LLM_PROVIDER": "openrouter",
     "FIRESTORE_EMULATOR_HOST": "localhost:8081",
+    AUTH_EMULATOR_ENV: "localhost:9099",
     "GOOGLE_CLOUD_PROJECT": "argus-local",
     "OPENROUTER_API_KEY": "or-test-key",
     "ARGUS_AGENT_MODEL": "agent-model",
@@ -56,6 +57,12 @@ def test_cloud_mode_is_vertex_only(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Settings.from_env().provider == "vertex"
     _set(monkeypatch, {**CLOUD, "ARGUS_LLM_PROVIDER": "openrouter"})
     with pytest.raises(ConfigError, match="Vertex"):
+        Settings.from_env()
+
+
+def test_cloud_mode_refuses_the_auth_emulator(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set(monkeypatch, {**CLOUD, AUTH_EMULATOR_ENV: "localhost:9099"})
+    with pytest.raises(ConfigError, match=AUTH_EMULATOR_ENV):
         Settings.from_env()
 
 

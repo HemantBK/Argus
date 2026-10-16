@@ -1,0 +1,4 @@
+# Build context for emulators/Dockerfile (docker-compose.yml): only the Firebase config, never .env or code.
+*
+!firebase.json
+!firestore.rules

@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// Argus Firestore rules. The browser only reads; every write goes through the Cloud Run API, which uses the
+// Admin SDK and is not bound by these rules. Anything not matched below is denied.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsRun(runId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/runs/$(runId)).data.owner_uid == request.auth.uid;
+    }
+
+    // Live runs: readable only by the user who started them (owner_uid is the Firebase Auth uid the API
+    // verified). A list query must filter on owner_uid == the caller's uid to pass.
+    match /runs/{runId} {
+      allow read: if signedIn() && resource.data.owner_uid == request.auth.uid;
+
+      // steps, findings, audit
+      match /{child}/{docId} {
+        allow read: if ownsRun(runId);
+      }
+    }
+
+    // Saved sample runs: public and read-only.
+    match /samples/{runId} {
+      allow read: if true;
+
+      match /{child}/{docId} {
+        allow read: if true;
+      }
+    }
+
+    // Evaluation page: public and read-only.
+    match /eval_results/{docId} {
+      allow read: if true;
+    }
+  }
+}

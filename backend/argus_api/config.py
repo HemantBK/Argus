@@ -1,8 +1,11 @@
 """Runtime configuration. Every value comes from the environment; missing values fail at startup.
 
-ARGUS_MODE=local  Firestore emulator (FIRESTORE_EMULATOR_HOST) and a development LLM provider:
-                  ARGUS_LLM_PROVIDER=aistudio (GEMINI_API_KEY) or openrouter (OPENROUTER_API_KEY).
-ARGUS_MODE=cloud  real Firestore and Gemini on Vertex AI only (competition rules B-01, B-02).
+ARGUS_MODE=local  Firestore and Firebase Auth emulators (FIRESTORE_EMULATOR_HOST,
+                  FIREBASE_AUTH_EMULATOR_HOST) and a development LLM provider: ARGUS_LLM_PROVIDER=aistudio
+                  (GEMINI_API_KEY) or openrouter (OPENROUTER_API_KEY).
+ARGUS_MODE=cloud  real Firestore, real Firebase Auth and Gemini on Vertex AI only (rules B-01, B-02).
+                  The Auth emulator variable must be absent: with it set, firebase-admin accepts unsigned
+                  tokens.
 """
 
 import os
@@ -12,6 +15,8 @@ from typing import Literal
 Mode = Literal["local", "cloud"]
 Provider = Literal["vertex", "aistudio", "openrouter"]
 LOCAL_PROVIDER_KEYS: dict[str, str] = {"aistudio": "GEMINI_API_KEY", "openrouter": "OPENROUTER_API_KEY"}
+# Read by firebase-admin itself; when set, ID tokens are accepted without a signature check.
+AUTH_EMULATOR_ENV = "FIREBASE_AUTH_EMULATOR_HOST"
 
 
 class ConfigError(RuntimeError):
@@ -42,6 +47,10 @@ class Settings:
             provider = os.environ.get("ARGUS_LLM_PROVIDER", "vertex").strip()
             if provider != "vertex":
                 raise ConfigError(f"Cloud mode must use Gemini on Vertex AI, not {provider!r}")
+            if os.environ.get(AUTH_EMULATOR_ENV, "").strip():
+                raise ConfigError(
+                    f"{AUTH_EMULATOR_ENV} is set in cloud mode; the API would accept unsigned ID tokens"
+                )
             return cls(
                 mode="cloud",
                 provider="vertex",
@@ -59,6 +68,7 @@ class Settings:
                 f"Local ARGUS_LLM_PROVIDER must be one of {sorted(LOCAL_PROVIDER_KEYS)}, got {provider!r}"
             )
         _require("FIRESTORE_EMULATOR_HOST")
+        _require(AUTH_EMULATOR_ENV)
         return cls(
             mode="local",
             provider="aistudio" if provider == "aistudio" else "openrouter",
