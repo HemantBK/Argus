@@ -26,6 +26,13 @@ Outcome rules:
   final citation not verifiable        -> needs_review, label insufficient_evidence, citation None (never
                                           invented)
 
+With monitor_enabled=False (the evaluation's agent_no_monitor condition; the app always runs the monitor)
+the loop is the same agent with the same system prompt, tools, tool-call limit, draft prompt and models, and
+only the monitor is removed: no monitor step after reads, no monitor step on the draft, no revision. No step
+carries a verdict. The finding is the draft as written: its label stands, monitor_status is passed, and its
+citation is built from the corpus when the cited paragraph exists (with the draft's quote, unchecked:
+checking it is the guard being measured) and is None when it does not.
+
 Every step is passed to `emit` as it happens, as an AgentStep (a schema.Step with the model, tokens and cost
 estimate of the model call the step made). Summaries are one line of plain English describing what was done;
 no model reasoning text is shown. Failures (LLMError, MonitorError, CorpusError, an unusable draft) are
@@ -207,6 +214,7 @@ class _Review:
         next_seq: Callable[[], int],
         today: date,
         run_id: str | None,
+        monitor_enabled: bool,
     ) -> None:
         self.llm = llm
         self.settings = settings
@@ -216,6 +224,7 @@ class _Review:
         self.next_seq = next_seq
         self.today = today
         self.run_id = run_id
+        self.monitor_enabled = monitor_enabled
         self.stage = StepKind.PLAN
         self.usage: list[_Usage] = []
         self.tool_calls = 0
@@ -278,6 +287,7 @@ class _Review:
             served_model=served_model,
             thinking=self.settings.agent_thinking,
             prompt_version=AGENT_PROMPT_VERSION,
+            monitor_enabled=self.monitor_enabled,
             prompt_sha256=prompt_sha256,
             prompt_chars=prompt_chars,
             output_chars=output_chars,
@@ -370,7 +380,7 @@ class _Review:
 
     def check_read(self, result: ToolResult) -> str | None:
         """The step monitor on one read: emit its verdict as a monitor step; return the reason on REVISE."""
-        if result.reference is None:
+        if result.reference is None or not self.monitor_enabled:
             return None
         ref, para = result.reference
         self.stage = StepKind.MONITOR
@@ -576,6 +586,38 @@ class _Review:
             monitor_status=status,
         )
 
+    def unmonitored_finding(self, draft: DraftFinding) -> Finding:
+        """The draft as written, for a review with the monitor off. The citation carries corpus metadata
+        when the cited paragraph exists; its quote is the draft's own, not checked against the paragraph
+        (that check is part of the monitor). A paragraph that does not exist gives no citation, and the
+        label still stands."""
+        p = self.corpus.paragraph(draft.citation_instrument_ref, draft.citation_para)
+        citation = (
+            Citation(
+                instrument=p.instrument,
+                instrument_ref=p.instrument_ref,
+                para=p.para,
+                url=p.url,
+                quote=normalise(draft.citation_quote),
+                snapshot_date=p.snapshot_date.isoformat(),
+                content_hash=p.content_hash,
+                in_force=p.in_force,
+            )
+            if p is not None
+            else None
+        )
+        return Finding(
+            clause_id=self.clause.id,
+            clause_text=self.clause.text,
+            label=draft.label,
+            rationale=draft.rationale,
+            citation=citation,
+            replaced_citation=(
+                self.replaced_citation(draft) if draft.label == FindingLabel.OUTDATED_REFERENCE else None
+            ),
+            monitor_status=MonitorStatus.PASSED,
+        )
+
     # ---- the whole review --------------------------------------------------------------------------
 
     def run(self) -> tuple[Finding, list[Verdict], bool]:
@@ -596,6 +638,15 @@ class _Review:
             latency_ms=latency,
             usage=usage,
         )
+        if not self.monitor_enabled:
+            self.stage = StepKind.FINAL
+            finding = self.unmonitored_finding(draft)
+            self.emit(
+                StepKind.FINAL,
+                f"Final finding for clause {self.clause.id}: {LABEL_WORDS[finding.label]}, with the monitor "
+                "off.",
+            )
+            return finding, [], False
         results = [self.monitor(draft)]
         revised = False
         if results[-1].verdict.action == MonitorAction.REVISE:
@@ -652,8 +703,12 @@ def review_clause(
     next_seq: Callable[[], int] | None = None,
     today: date | None = None,
     run_id: str | None = None,
+    monitor_enabled: bool = True,
 ) -> ReviewOutcome:
     """Review one clause: research with tools, draft, monitor, at most one revision, final finding.
+
+    `monitor_enabled=False` removes the monitor and nothing else (the evaluation's agent_no_monitor
+    condition): no monitor steps, no revision, the draft is the finding (see the module docstring).
 
     `next_seq` numbers the steps (pass one SeqCounter per run); by default the clause numbers its own from 1.
     `today` defaults to the date in India. Raises ClauseReviewError on any failure, after emitting a final
@@ -669,6 +724,7 @@ def review_clause(
         next_seq if next_seq is not None else SeqCounter(),
         today if today is not None else datetime.now(IST).date(),
         run_id,
+        monitor_enabled,
     )
     try:
         finding, verdicts, revised = review.run()
@@ -684,7 +740,7 @@ def review_clause(
         finding=finding,
         verdicts=verdicts,
         revised=revised,
-        stopped=verdicts[-1].action == MonitorAction.STOP,
+        stopped=monitor_enabled and verdicts[-1].action == MonitorAction.STOP,
         tool_calls=review.tool_calls,
         input_tokens=_total([u.input_tokens for u in review.usage]),
         output_tokens=_total([u.output_tokens for u in review.usage]),

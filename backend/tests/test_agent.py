@@ -611,3 +611,112 @@ def test_shared_counter_numbers_steps_across_clauses(corpus: Corpus) -> None:
             llm, settings(), corpus, clause("policy_b", cid), steps.append, next_seq=seq, today=TODAY
         )
     assert [s.seq for s in steps] == list(range(1, len(steps) + 1))
+
+
+# ---- monitor off (the evaluation's agent_no_monitor condition) --------------------------------------------
+
+
+def review_unmonitored(corpus: Corpus, llm: FakeLLM, c: Clause) -> tuple[ReviewOutcome, list[AgentStep]]:
+    steps: list[AgentStep] = []
+    outcome = review_clause(llm, settings(), corpus, c, steps.append, today=TODAY, monitor_enabled=False)
+    return outcome, steps
+
+
+def test_monitor_off_runs_the_same_agent_with_no_monitor_step(corpus: Corpus) -> None:
+    c = clause("policy_a", "c2")
+    g = gold("policy_a", "c2")
+    old_ref, old_para = g["replaced_citation"]["instrument_ref"], g["replaced_citation"]["para"]
+    new_ref, new_para = g["citation"]["instrument_ref"], g["citation"]["para"]
+
+    def script() -> FakeLLM:
+        return FakeLLM(
+            turns=[
+                priced_turn(read(old_ref, old_para)),
+                turn(tool_calls=[read(new_ref, new_para)]),
+                turn(text="Ready to draft."),
+            ],
+            json_replies=[draft_reply("policy_a", "c2"), judgement()],
+        )
+
+    on = script()
+    review(corpus, on, c)
+    off = script()
+    outcome, steps = review_unmonitored(corpus, off, c)
+
+    # Only the draft call ran: the monitor's judgement is left unused.
+    assert off.remaining() == {"complete": 0, "complete_json": 1, "chat": 0}
+    assert {x.model for x in off.calls} == {AGENT_MODEL}
+    assert_trace_well_formed(steps, "c2")
+    assert kinds(steps) == [
+        StepKind.PLAN,
+        StepKind.READ,
+        StepKind.READ,
+        StepKind.PLAN,
+        StepKind.DRAFT,
+        StepKind.FINAL,
+    ]
+    assert all(s.verdict is None for s in steps)
+    assert outcome.verdicts == [] and not outcome.revised and not outcome.stopped
+    assert outcome.tool_calls == 2
+
+    # Same system prompt, tools, draft schema and models as with the monitor on; no monitor message.
+    on_chats = [x for x in on.calls if x.method == "chat"]
+    off_chats = [x for x in off.calls if x.method == "chat"]
+    assert off_chats[0].messages == on_chats[0].messages
+    assert all(x.tools == on_chats[0].tools for x in off_chats)
+    assert all(m.role != "user" or "step monitor" not in m.content for m in off_chats[-1].messages or [])
+    on_draft = next(x for x in on.calls if x.method == "complete_json" and x.model == AGENT_MODEL)
+    off_draft = next(x for x in off.calls if x.method == "complete_json")
+    assert off_draft.schema == on_draft.schema
+    assert off_draft.prompt is not None and "step_monitor" not in off_draft.prompt
+
+    f = outcome.finding
+    assert f.label == FindingLabel.OUTDATED_REFERENCE
+    assert f.monitor_status == MonitorStatus.PASSED
+    p = corpus.paragraph(new_ref, new_para)
+    assert p is not None and f.citation is not None
+    assert (f.citation.instrument_ref, f.citation.para) == (new_ref, new_para)
+    assert (f.citation.url, f.citation.content_hash, f.citation.in_force) == (p.url, p.content_hash, True)
+    assert f.citation.quote == normalise(g["citation"]["quote"])
+    assert f.replaced_citation is not None
+    assert (f.replaced_citation.instrument_ref, f.replaced_citation.para) == (old_ref, old_para)
+    assert "monitor off" in steps[-1].summary
+
+
+def test_monitor_off_keeps_the_drafted_label_for_a_fake_paragraph(corpus: Corpus) -> None:
+    c = clause("policy_a", "c3")
+    g = gold("policy_a", "c3")
+    fake_para = g["citation"]["para"] + "(99)"
+    assert corpus.paragraph(g["citation"]["instrument_ref"], fake_para) is None
+    llm = FakeLLM(
+        turns=[turn(text="ready")], json_replies=[draft_reply("policy_a", "c3", citation_para=fake_para)]
+    )
+    outcome, steps = review_unmonitored(corpus, llm, c)
+
+    assert llm.remaining() == {"complete": 0, "complete_json": 0, "chat": 0}
+    f = outcome.finding
+    assert f.label == FindingLabel(g["label"])
+    assert f.citation is None
+    assert f.monitor_status == MonitorStatus.PASSED
+    assert f.rationale == g["rationale"]
+    assert StepKind.MONITOR not in kinds(steps) and StepKind.REVISE not in kinds(steps)
+    assert all(s.verdict is None for s in steps)
+
+
+def test_monitor_off_reports_the_drafts_quote_unchecked(corpus: Corpus) -> None:
+    c = clause("policy_a", "c3")
+    g = gold("policy_a", "c3")
+    ref, para = g["citation"]["instrument_ref"], g["citation"]["para"]
+    wrong = "words that are not in the paragraph"
+    p = corpus.paragraph(ref, para)
+    assert p is not None and not corpus.verify_quote(ref, para, wrong).matches
+    llm = FakeLLM(
+        turns=[turn(text="ready")], json_replies=[draft_reply("policy_a", "c3", citation_quote=wrong)]
+    )
+    outcome, _ = review_unmonitored(corpus, llm, c)
+
+    f = outcome.finding
+    assert f.label == FindingLabel(g["label"]) and f.monitor_status == MonitorStatus.PASSED
+    assert f.citation is not None
+    assert (f.citation.instrument_ref, f.citation.para, f.citation.quote) == (ref, para, wrong)
+    assert f.citation.content_hash == p.content_hash

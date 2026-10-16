@@ -21,7 +21,7 @@ from argus_api.eval.runner import (
     run_condition,
 )
 from argus_api.eval.settings import EvalSettings
-from argus_api.llm_fake import FakeLLM
+from argus_api.llm_fake import FakeLLM, turn
 from argus_api.monitor import DraftFinding
 from argus_api.monitor.prompts import MONITOR_RESPONSE_SCHEMA
 from argus_api.schema import (
@@ -98,11 +98,18 @@ def test_agent_no_monitor_fails_loudly_without_the_switch(corpus: Corpus) -> Non
     assert calls == []
 
 
-def test_real_review_clause_is_checked_the_same_way(corpus: Corpus) -> None:
-    if monitor_switch_supported(review_clause):
-        pytest.skip("review_clause has the monitor switch (REQUESTS.md R1 landed)")
-    with pytest.raises(MonitorSwitchMissing):
-        run_condition("agent_no_monitor", llm=FakeLLM(), es=es(), corpus=corpus, cases=cases(), run_id="r")
+def test_real_review_clause_runs_agent_no_monitor_without_a_monitor_call(corpus: Corpus) -> None:
+    assert monitor_switch_supported(review_clause)
+    case = next(c for c in cases() if c.gold_citation is not None)
+    # No monitor judgement is scripted: a monitor call would exhaust the FakeLLM and fail the case.
+    llm = FakeLLM(turns=[turn(text="ready")], json_replies=[plain_reply(case)])
+    (rec,) = run_condition("agent_no_monitor", llm=llm, es=es(), corpus=corpus, cases=[case], run_id="r")
+    assert rec.error is None
+    assert llm.remaining() == {"complete": 0, "complete_json": 0, "chat": 0}
+    assert {c.model for c in llm.calls} == {AGENT_MODEL}
+    assert not rec.monitor_active and rec.monitor_actions == []
+    assert all(s.action is None for s in rec.steps)
+    assert rec.predicted_label == case.gold_label and rec.label_correct
 
 
 def _citation(corpus: Corpus, ref: str, para: str, quote: str) -> Citation:
