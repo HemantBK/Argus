@@ -1,0 +1,171 @@
+{
+ "about": "Hand-written map from paragraphs of replaced RBI instruments to the paragraph of the NBFC Credit Facilities Directions, 2025 (RBI/DOR/2025-26/347, Chapter III) that now carries the rule. Each row was checked by reading both paragraphs on rbi.org.in on 2026-10-16. relation: 'carried_over' = same rule, only the entity name changes (RE to NBFC) or cross-references are updated; 'amended' = the rule itself changed, as stated in the note. Repeal chain: 2022 and 2023 circulars repealed by RBI/2025-26/36 (para 30(i), Annex III); RBI/2025-26/36 withdrawn on 28 Nov 2025 by RBI/2025-26/100 and replaced for NBFCs by RBI/DOR/2025-26/347 (para 112).",
+ "checked_on": "2026-10-16",
+ "rows": [
+  {
+   "old_instrument_ref": "RBI/2025-26/36",
+   "old_para": "5",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "6",
+   "relation": "carried_over",
+   "topic": "Due diligence on LSPs",
+   "source_url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "note": "Sub-paras i-vii become (1)-(7) with 'RE' replaced by 'NBFC'; (6) now names the NBFC Managing Risks in Outsourcing Directions, 2025."
+  },
+  {
+   "old_instrument_ref": "RBI/2025-26/36",
+   "old_para": "6",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "7",
+   "relation": "carried_over",
+   "topic": "LSP arrangements with multiple lenders",
+   "source_url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "note": "Same four requirements on the LSP's digital view of loan offers; 'multiple REs' becomes 'multiple lenders'."
+  },
+  {
+   "old_instrument_ref": "RBI/2025-26/36",
+   "old_para": "8(i)",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "9(1)",
+   "relation": "amended",
+   "topic": "Key Fact Statement",
+   "source_url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "note": "Old text points to the KFS circular DOR.STR.REC.13/13.03.00/2024-25 of 15 Apr 2024; new text points to the NBFC Responsible Business Conduct Directions, 2025."
+  },
+  {
+   "old_instrument_ref": "RBI/2025-26/36",
+   "old_para": "9(ii)",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "10(2)",
+   "relation": "carried_over",
+   "topic": "Repayment directly into the lender's bank account",
+   "source_url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "note": "No pass-through or pool account of any third party, including the LSP; wording identical apart from RE to NBFC."
+  },
+  {
+   "old_instrument_ref": "RBI/2025-26/36",
+   "old_para": "9(iv)",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "10(4)",
+   "relation": "carried_over",
+   "topic": "LSP fees paid by the lender, not the borrower",
+   "source_url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "note": "Wording identical apart from RE to NBFC."
+  },
+  {
+   "old_instrument_ref": "RBI/2025-26/36",
+   "old_para": "10(i)",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "11(1)",
+   "relation": "amended",
+   "topic": "Cooling-off period",
+   "source_url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "note": "Minimum stays one day. Old: period 'determined by the Board of the RE as laid down in their loan policy'; new: 'determined by the NBFC in terms of their credit policy'. Pre-payment now refers to the NBFC Responsible Business Conduct Directions, 2025."
+  },
+  {
+   "old_instrument_ref": "RBI/2025-26/36",
+   "old_para": "12(i)",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "13(1)",
+   "relation": "carried_over",
+   "topic": "Need-based data collection; no access to phone resources",
+   "source_url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "note": "Same consent, audit-trail and one-time-access rules; RE replaced by NBFC."
+  },
+  {
+   "old_instrument_ref": "RBI/2025-26/36",
+   "old_para": "13(iv)",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "14(4)",
+   "relation": "carried_over",
+   "topic": "Data stored only in India; 24-hour return",
+   "source_url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "note": "Wording identical apart from RE to NBFC."
+  },
+  {
+   "old_instrument_ref": "RBI/2025-26/36",
+   "old_para": "17(i)",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "18(1)",
+   "relation": "carried_over",
+   "topic": "Reporting DLAs on the CIMS portal",
+   "source_url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "note": "Same reporting duty; 'CIMS portal of RBI' becomes 'CIMS portal of the Reserve Bank'."
+  },
+  {
+   "old_instrument_ref": "RBI/2025-26/36",
+   "old_para": "23(i)",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "24(1)",
+   "relation": "carried_over",
+   "topic": "DLG cap of five per cent of amount disbursed",
+   "source_url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "note": "Wording identical apart from RE to NBFC."
+  },
+  {
+   "old_instrument_ref": "RBI/2025-26/36",
+   "old_para": "26(i)",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "27(1)",
+   "relation": "carried_over",
+   "topic": "DLG invoked within 120 days overdue",
+   "source_url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "note": "Wording identical apart from RE to NBFC."
+  },
+  {
+   "old_instrument_ref": "RBI/2022-23/111",
+   "old_para": "3",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "10",
+   "relation": "amended",
+   "topic": "Loan disbursal, servicing and repayment",
+   "source_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12382",
+   "note": "Repealed by RBI/2025-26/36 (Annex III), whose para 9 then became para 10 of the NBFC Directions. The 2022 paragraph corresponds to sub-paras (1) and (2); (4) on LSP fees came from 2022 para 4.1; the bar on third-party control of fund flows (3), cash recovery in delinquent loans (5) and the salary-advance proviso are not in the 2022 paragraph."
+  },
+  {
+   "old_instrument_ref": "RBI/2022-23/111",
+   "old_para": "8",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "11(1)",
+   "relation": "amended",
+   "topic": "Cooling-off period",
+   "source_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12382",
+   "note": "2022: not less than three days for loans of tenor seven days or more, one day for shorter loans. Now: not less than one day for all loans, set by the NBFC in its credit policy."
+  },
+  {
+   "old_instrument_ref": "RBI/2023-24/41",
+   "old_para": "6",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "24(1)",
+   "relation": "amended",
+   "topic": "DLG cap",
+   "source_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12514",
+   "note": "Five per cent is unchanged, but the base changes from 'the amount of that loan portfolio' to 'the total amount disbursed out of that loan portfolio at any given time'."
+  },
+  {
+   "old_instrument_ref": "RBI/2023-24/41",
+   "old_para": "9",
+   "new_instrument_ref": "RBI/DOR/2025-26/347",
+   "new_para": "27(1)",
+   "relation": "carried_over",
+   "topic": "DLG invoked within 120 days overdue",
+   "source_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+   "old_url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12514",
+   "note": "120-day limit unchanged; 'unless made good by the borrower' becomes 'unless the loan dues are made good by the borrower'."
+  }
+ ]
+}

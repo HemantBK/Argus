@@ -1,0 +1,142 @@
+[
+ {
+  "key": "nbfc_cf_2025",
+  "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+  "instrument_ref": "RBI/DOR/2025-26/347",
+  "circular_no": "DOR.CRE.REC.No.266/07-01-008/2025-26",
+  "issued_on": "2025-11-28",
+  "updated_as_on": "2026-07-15",
+  "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+  "snapshot_date": "2026-10-16",
+  "page_sha256": "521e029435ec68947904eb06b76fc8fe0e519d66b1f9b7429ad51c2747f9718d",
+  "in_force": true,
+  "valid_from": "2025-11-28",
+  "valid_to": null,
+  "superseded_by": null,
+  "status_evidence": [
+   {
+    "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+    "quote": "With the issue of these Directions, the existing Directions, instructions, and guidelines relating to credit facilities for Non-Banking Financial Companies, stand repealed, as communicated vide notification dated November 28, 2025."
+   }
+  ],
+  "scope": "Para 3 (applicability), Chapter III Digital Lending (paras 6-30), paras 112-113.",
+  "paragraph_count": 136
+ },
+ {
+  "key": "dl_directions_2025",
+  "instrument": "Reserve Bank of India (Digital Lending) Directions, 2025",
+  "instrument_ref": "RBI/2025-26/36",
+  "circular_no": "DOR.STR.REC.19/21.07.001/2025-26",
+  "issued_on": "2025-05-08",
+  "updated_as_on": null,
+  "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+  "snapshot_date": "2026-10-16",
+  "page_sha256": "7271171dd170edee425a95ca2053f4063f5d6f309a8cedd9ce61182c3d685e23",
+  "in_force": false,
+  "valid_from": "2025-05-08",
+  "valid_to": "2025-11-28",
+  "superseded_by": "RBI/DOR/2025-26/347",
+  "status_evidence": [
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUserWithdrawnCircular.aspx",
+    "quote": "Circulars Withdrawn by the Department of Regulation, row 43: DOR.STR.REC.19/21.07.001/2025-26 | Reserve Bank of India (Digital Lending) Directions, 2025 | May 8, 2025"
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUserWithdrawnCircular.aspx",
+    "quote": "@-circulars shall be repealed with effect from January 01, 2026 (this row carries no '@')"
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=13170",
+    "quote": "9445 circulars listed in the Annex, which are either circulars whose instructions have been consolidated or circulars which have become obsolete / redundant, are withdrawn by the Reserve Bank with immediate effect and are hereby repealed."
+   }
+  ],
+  "scope": "Paras 1-30 (all chapters). Annexes are not parsed.",
+  "paragraph_count": 135
+ },
+ {
+  "key": "dl_guidelines_2022",
+  "instrument": "Guidelines on Digital Lending",
+  "instrument_ref": "RBI/2022-23/111",
+  "circular_no": "DOR.CRE.REC.66/21.07.001/2022-23",
+  "issued_on": "2022-09-02",
+  "updated_as_on": null,
+  "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12382",
+  "snapshot_date": "2026-10-16",
+  "page_sha256": "9c16d115f56be202c44b87ea48b159b6f789f91745e2b59f26b07a13f0f8f168",
+  "in_force": false,
+  "valid_from": "2022-09-02",
+  "valid_to": "2025-05-08",
+  "superseded_by": "RBI/2025-26/36",
+  "status_evidence": [
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUserWithdrawnCircular.aspx",
+    "quote": "Circulars Withdrawn by the Department of Regulation, row 217: DOR.CRE.REC.66/21.07.001/2022-23 | Guidelines on Digital Lending | September 2, 2022"
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUserWithdrawnCircular.aspx",
+    "quote": "@-circulars shall be repealed with effect from January 01, 2026 (this row carries no '@')"
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12382",
+    "quote": "The Circular has been repealed. Please refer to Reserve Bank of India (Digital Lending) Directions"
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+    "quote": "With the issuance of these Directions, the instructions/guidelines contained in the circulars mentioned in the Annex - III issued by RBI stand repealed."
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+    "quote": "Annex III row: 2. | RBI/2022-23/111 DOR.CRE.REC .66/21.07.001/2022-23 | 02.09.2022 | Guidelines on Digital Lending"
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+    "quote": "These Directions shall come into force immediately"
+   }
+  ],
+  "scope": "Cover circular paras 1-4 (ids circular-N) and Annex I paras 1-15. Annex II (KFS format) is a PDF and is not parsed.",
+  "paragraph_count": 59
+ },
+ {
+  "key": "dlg_guidelines_2023",
+  "instrument": "Guidelines on Default Loss Guarantee (DLG) in Digital Lending",
+  "instrument_ref": "RBI/2023-24/41",
+  "circular_no": "DOR.CRE.REC.21/21.07.001/2023-24",
+  "issued_on": "2023-06-08",
+  "updated_as_on": null,
+  "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12514",
+  "snapshot_date": "2026-10-16",
+  "page_sha256": "af15b04dcfceb8a75dff84aff5eb7c3123d5d4745e4028394e3aace0964f803c",
+  "in_force": false,
+  "valid_from": "2023-06-08",
+  "valid_to": "2025-05-08",
+  "superseded_by": "RBI/2025-26/36",
+  "status_evidence": [
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUserWithdrawnCircular.aspx",
+    "quote": "Circulars Withdrawn by the Department of Regulation, row 171: DOR.CRE.REC.21/21.07.001/2023-24 | Guidelines on Default Loss Guarantee (DLG) in Digital Lending | June 8, 2023"
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUserWithdrawnCircular.aspx",
+    "quote": "@-circulars shall be repealed with effect from January 01, 2026 (this row carries no '@')"
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12514",
+    "quote": "The Circular has been repealed. Please refer to Reserve Bank of India (Digital Lending) Directions"
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+    "quote": "With the issuance of these Directions, the instructions/guidelines contained in the circulars mentioned in the Annex - III issued by RBI stand repealed."
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+    "quote": "Annex III row: 3. | RBI/2023-24/41 DOR.CRE.REC .21/21.07.001/2023-24 | 08.06.2023 | Guidelines on Default Loss Guarantee (DLG) in Digital Lending"
+   },
+   {
+    "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+    "quote": "These Directions shall come into force immediately"
+   }
+  ],
+  "scope": "Cover circular paras 1-4 (ids circular-N) and Annex paras 1-14.",
+  "paragraph_count": 35
+ }
+]
