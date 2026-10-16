@@ -14,7 +14,10 @@ CONCURRENT = 8
 def _admit_all(cap: int | None) -> list[CreateResult]:
     store = FirestoreStore(firestore.Client(project=os.environ.get("GOOGLE_CLOUD_PROJECT", "argus-local")))
     tag = uuid.uuid4().hex
-    counters = [Counter(f"test_usage/{tag}-day", "runs", cap), Counter(f"test_usage/{tag}-hour", "runs", None)]
+    counters = [
+        Counter(f"test_usage/{tag}-day", "runs", cap),
+        Counter(f"test_usage/{tag}-hour", "runs", None),
+    ]
 
     def admit(i: int) -> CreateResult:
         return store.create_counted(f"test_runs/{tag}-{i}", {"i": i}, counters).result
