@@ -1,0 +1,6 @@
+services:
+  firestore:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: gcloud emulators firestore start --host-port=0.0.0.0:8081 --project=argus-local
+    ports:
+      - "8081:8081"

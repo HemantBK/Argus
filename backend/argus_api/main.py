@@ -22,6 +22,8 @@ def settings() -> Settings:
 @lru_cache(maxsize=1)
 def gemini() -> genai.Client:
     s = settings()
+    if s.mode == "local":
+        return genai.Client(api_key=s.api_key)
     return genai.Client(vertexai=True, project=s.project, location=s.location)
 
 
@@ -47,6 +49,7 @@ def smoke() -> dict[str, Any]:
     run_id = uuid.uuid4().hex
     record = {
         "model": s.agent_model,
+        "mode": s.mode,
         "text": (response.text or "").strip(),
         "latency_ms": latency_ms,
         "created_at": firestore.SERVER_TIMESTAMP,
