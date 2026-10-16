@@ -1,0 +1,14 @@
+# What `gcloud run deploy --source` uploads to Cloud Build. Never secrets, caches or tests;
+# the RBI library snapshot IS uploaded (the image needs it; it is not in git).
+.env
+.env.*
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+tests/
+tests_emulator/
+data/corpus/raw/
+argus_api/eval/results/
+*.pyc
