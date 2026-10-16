@@ -1,0 +1,282 @@
+[
+  {
+    "case_id": "cl-01",
+    "kind": "clause",
+    "clause_text": "Borrowers of Tarangini Finlease Limited shall pay every EMI, part-prepayment and foreclosure amount straight into the Company's own collection bank account. No pass-through or pool account of any third party, including any account held by a Lending Service Provider, shall be used for loan servicing or repayment (RBI (Digital Lending) Directions, 2025, para 9(ii)).",
+    "policy_cited_instrument_ref": "RBI/2025-26/36",
+    "policy_cited_para": "9(ii)",
+    "gold_label": "outdated_reference",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "10(2)",
+      "quote": "without any pass-through account/ pool account of any third party, including the accounts of LSP"
+    },
+    "gold_replaced_citation": {
+      "instrument_ref": "RBI/2025-26/36",
+      "para": "9(ii)"
+    },
+    "rationale": "The substance (repayment directly into the NBFC's bank account, no pass-through or pool account of any third party including the LSP) matches para 10(2) of the NBFC Credit Facilities Directions, but the clause cites para 9(ii) of the withdrawn Digital Lending Directions, 2025, whose rule now sits at para 10(2).",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-02",
+    "kind": "clause",
+    "clause_text": "The Company shall report on the Reserve Bank's Centralised Information Management System (CIMS) portal, in the prescribed format, every digital lending app it deploys or joins, whether its own or one operated by an LSP, and whether exclusively or as a platform participant, as required by para 17(i) of the RBI (Digital Lending) Directions, 2025.",
+    "policy_cited_instrument_ref": "RBI/2025-26/36",
+    "policy_cited_para": "17(i)",
+    "gold_label": "outdated_reference",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "18(1)",
+      "quote": "An NBFC shall report all DLAs deployed / joined by them, whether their own or those of the LSPs, either exclusively or as a platform participant, on the Centralised Information Management System (CIMS) portal of the Reserve Bank"
+    },
+    "gold_replaced_citation": {
+      "instrument_ref": "RBI/2025-26/36",
+      "para": "17(i)"
+    },
+    "rationale": "Reporting every own and LSP DLA on CIMS in the prescribed format is what para 18(1) of the NBFC Credit Facilities Directions requires, so the substance is current; the cited para 17(i) belongs to the withdrawn Digital Lending Directions, 2025 and has been carried over to para 18(1).",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-03",
+    "kind": "clause",
+    "clause_text": "Where Pratyush Credit Private Limited accepts a default loss guarantee from an LSP, the total DLG cover on any outstanding portfolio specified upfront shall not exceed five per cent of the total amount disbursed out of that portfolio at any given time; under an implicit guarantee the DLG provider shall not bear performance risk beyond the equivalent of five per cent of the underlying portfolio (Guidelines on Default Loss Guarantee in Digital Lending, June 2023, para 6).",
+    "policy_cited_instrument_ref": "RBI/2023-24/41",
+    "policy_cited_para": "6",
+    "gold_label": "outdated_reference",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "24(1)",
+      "quote": "shall not exceed five per cent of the total amount disbursed out of that loan portfolio at any given time"
+    },
+    "gold_replaced_citation": {
+      "instrument_ref": "RBI/2023-24/41",
+      "para": "6"
+    },
+    "rationale": "The clause already states the cap as the rule in force words it (five per cent of the total amount disbursed out of the portfolio, and the same ceiling on implicit guarantees), so it agrees with para 24(1); only its citation is stale, pointing at para 6 of the repealed 2023 DLG guidelines, which was replaced by para 24(1).",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-04",
+    "kind": "clause",
+    "clause_text": "Every digital loan shall be disbursed into the borrower's own bank account. The only exceptions are disbursals required exclusively by a statutory or regulatory mandate, flows between lenders in a co-lending transaction, and specific end-use loans paid directly into the end-beneficiary's bank account. In no case shall a disbursal be made to a third-party account, including any account of an LSP (RBI Guidelines on Digital Lending, 2 September 2022, para 3).",
+    "policy_cited_instrument_ref": "RBI/2022-23/111",
+    "policy_cited_para": "3",
+    "gold_label": "outdated_reference",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "10(1)",
+      "quote": "An NBFC shall ensure that in no case, disbursal is made to a third-party account, including the accounts of LSP"
+    },
+    "gold_replaced_citation": {
+      "instrument_ref": "RBI/2022-23/111",
+      "para": "3"
+    },
+    "rationale": "Disbursal only into the borrower's account, with the statutory, co-lending and end-use exceptions and no disbursal to an LSP or other third-party account, matches para 10(1) of the NBFC Credit Facilities Directions; the cited para 3 of the 2022 Guidelines on Digital Lending was repealed and its rule now sits in para 10.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-05",
+    "kind": "clause",
+    "clause_text": "When an overdue digital loan is assigned to a recovery agent, or the assigned agent is changed, the Collections team shall record the agent's name, agency and authorisation letter in the loan file and shall inform the borrower of the agent's particulars.",
+    "policy_cited_instrument_ref": null,
+    "policy_cited_para": null,
+    "gold_label": "gap",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "9(6)",
+      "quote": "shall be communicated to the borrower through email / SMS before the recovery agent contacts the borrower for recovery"
+    },
+    "gold_replaced_citation": null,
+    "rationale": "The clause covers telling the borrower about an assigned or changed recovery agent but is silent on what para 9(6) demands about how and when: the particulars must go by email or SMS before the agent contacts the borrower. Nothing in the clause contradicts the rule, so this is a gap.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-06",
+    "kind": "clause",
+    "clause_text": "The Company's website shall carry, at one prominent place kept up to date, the details of all its digital lending products and DLAs, the LSPs it engages with their DLAs and the activities each is engaged for, the particulars of its customer care and internal grievance redressal mechanism, and its privacy policies.",
+    "policy_cited_instrument_ref": null,
+    "policy_cited_para": null,
+    "gold_label": "gap",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "9(4)(iv)",
+      "quote": "Link to the Reserve Bank’s Complaint Management System (CMS) and Sachet Portal."
+    },
+    "gold_replaced_citation": null,
+    "rationale": "The clause lists four of the five items para 9(4) requires on the NBFC's website but leaves out item (iv), the link to the Reserve Bank's Complaint Management System and the Sachet Portal. It says nothing against the rule, so the omission is a gap.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-07",
+    "kind": "clause",
+    "clause_text": "The Company shall maintain an internal data storage standard approved by its Risk Management Committee, specifying the types of borrower data that may be stored, how long each type may be kept, the restrictions on its use, the data destruction protocol and the standards for handling a security breach. LSPs engaged by the Company shall follow the same standard.",
+    "policy_cited_instrument_ref": null,
+    "policy_cited_para": null,
+    "gold_label": "gap",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "14(2)",
+      "quote": "are put in place and also disclosed by the NBFC and the LSP engaged by the NBFC prominently on their website and DLA at all times"
+    },
+    "gold_replaced_citation": null,
+    "rationale": "The clause puts in place the storage policy elements para 14(2) lists but keeps the standard internal; it omits the requirement that the NBFC and its LSP disclose these guidelines prominently on their website and DLA at all times. It does not forbid disclosure, so this is a gap, not a conflict.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-08",
+    "kind": "clause",
+    "clause_text": "Every default loss guarantee arrangement shall be backed by an explicit and legally enforceable contract between the Company and the DLG provider, which shall set out the extent of DLG cover, the form in which the cover is to be maintained with the Company, and the disclosure requirements that apply to the DLG arrangement.",
+    "policy_cited_instrument_ref": null,
+    "policy_cited_para": null,
+    "gold_label": "gap",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "22(3)",
+      "quote": "Timeline for DLG invocation"
+    },
+    "gold_replaced_citation": null,
+    "rationale": "Para 22 requires the DLG contract to contain four details: extent of cover, form of cover, timeline for DLG invocation and the paragraph 28 disclosure requirements. The clause names the extent, the form and the disclosure requirements but is silent on the timeline for DLG invocation (22(3)). Nothing it says contradicts the rule, so this is a gap.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-09",
+    "kind": "clause",
+    "clause_text": "A borrower may cancel a digital loan within a cooling-off window of twelve hours from disbursal by repaying the principal and the proportionate APR, without any penalty. After twelve hours the loan may only be closed under the standard prepayment terms.",
+    "policy_cited_instrument_ref": null,
+    "policy_cited_para": null,
+    "gold_label": "conflict",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "11(1)",
+      "quote": "The cooling off period shall be determined by the NBFC in terms of their credit policy, subject to the period so determined not being less than one day."
+    },
+    "gold_replaced_citation": null,
+    "rationale": "Para 11(1) lets the NBFC set the cooling-off period but not below one day; the clause sets twelve hours, a figure outside what the rule allows, so following the policy would breach the rule.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-10",
+    "kind": "clause",
+    "clause_text": "To speed up repeat borrowing, the Company's digital lending app and the app of its LSP partner, Meghdoot Lendtech Private Limited, may capture and store the borrower's fingerprint template on their servers so that returning borrowers can sign in and accept new loan offers biometrically.",
+    "policy_cited_instrument_ref": null,
+    "policy_cited_para": null,
+    "gold_label": "conflict",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "14(3)",
+      "quote": "An NBFC shall ensure that no biometric data is stored / collected by the NBFC and LSP, unless allowed under extant statutory guidelines."
+    },
+    "gold_replaced_citation": null,
+    "rationale": "Para 14(3) forbids the NBFC and its LSP from collecting or storing biometric data unless a statute allows it; the clause permits both to capture and store fingerprint templates for convenience, which the rule forbids.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-11",
+    "kind": "clause",
+    "clause_text": "For delinquent loans, field staff of the LSP may collect repayments in cash. The LSP shall deduct its recovery commission of 4 per cent from the cash collected and remit the balance to the Company, which shall credit the borrower's loan account within three working days of collection.",
+    "policy_cited_instrument_ref": null,
+    "policy_cited_para": null,
+    "gold_label": "conflict",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "10(5)",
+      "quote": "any recovery by cash shall be duly reflected in full in the borrower’s account on the same day and the NBFC shall ensure that any fees, charges, etc., payable to LSPs for such recovery are paid directly by the NBFC and are not charged by LSP to the borrower either directly or indirectly from the recovery proceeds"
+    },
+    "gold_replaced_citation": null,
+    "rationale": "Para 10(5) allows cash recovery of delinquent loans but requires the cash to be reflected in full in the borrower's account the same day and the LSP's recovery fee to be paid by the NBFC, never taken from the recovery proceeds. The clause lets the LSP deduct its commission from the cash and allows three working days to credit the account, so it describes a practice the rule forbids.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-12",
+    "kind": "clause",
+    "clause_text": "Where Udaan Marketplace Private Limited, an LSP with agreements with several lenders including the Company, shows loan offers to a borrower, its digital view shall give for each matching offer the lender's name, the loan amount and tenor, the APR, the monthly repayment obligation and any penal charges, presented so that the borrower can compare the offers fairly, together with a link to each lender's KFS (NBFC Credit Facilities Directions, 2025, para 7(3)).",
+    "policy_cited_instrument_ref": "RBI/DOR/2025-26/347",
+    "policy_cited_para": "7(3)",
+    "gold_label": "compliant",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "7(3)",
+      "quote": "The digital view of loan offers from matching lenders shall include the name (s) of the lender (s) extending the loan offer, amount and tenor of loan, APR, monthly repayment obligation and penal charges (if applicable)"
+    },
+    "gold_replaced_citation": null,
+    "rationale": "The clause includes every element para 7(3) requires in the multi-lender digital view (lender name, amount and tenor, APR, monthly repayment obligation, penal charges, fair comparison and a KFS link per lender) and cites the paragraph in force.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-13",
+    "kind": "clause",
+    "clause_text": "All lending done through the Company's own digital lending apps and through the apps of its LSPs shall be reported by the Company to the Credit Information Companies, whatever the nature or tenor of the loan, including short-tenor and small-ticket loans.",
+    "policy_cited_instrument_ref": null,
+    "policy_cited_para": null,
+    "gold_label": "compliant",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "17(1)",
+      "quote": "NBFC shall ensure that any lending done through their DLAs and / or DLAs of LSPs is reported by them to CICs irrespective of its nature / tenor."
+    },
+    "gold_replaced_citation": null,
+    "rationale": "Reporting all lending through own and LSP DLAs to CICs irrespective of nature or tenor is exactly what para 17(1) requires; the clause cites nothing.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-14",
+    "kind": "clause",
+    "clause_text": "The Company shall accept a default loss guarantee only in one or more of these forms: cash deposited with the Company; a fixed deposit with a Scheduled Commercial Bank with a lien marked in favour of the Company; or a bank guarantee in favour of the Company. Corporate guarantees, pledged securities and letters of comfort shall not be accepted as DLG.",
+    "policy_cited_instrument_ref": null,
+    "policy_cited_para": null,
+    "gold_label": "compliant",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "23",
+      "quote": "An NBFC shall accept DLG only in one or more of the following forms"
+    },
+    "gold_replaced_citation": null,
+    "rationale": "The clause limits DLG to the three forms para 23 allows (cash with the NBFC, a lien-marked fixed deposit with a Scheduled Commercial Bank, a bank guarantee in the NBFC's favour); excluding other forms follows from the word 'only'. It cites nothing outdated.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-15",
+    "kind": "clause",
+    "clause_text": "Before sharing any personal information of a borrower with a third party, including analytics firms and co-branding partners, the Company and its LSPs shall obtain the borrower's explicit consent, except where the sharing is required by a statutory or regulatory requirement.",
+    "policy_cited_instrument_ref": null,
+    "policy_cited_para": null,
+    "gold_label": "compliant",
+    "gold_citation": {
+      "instrument_ref": "RBI/DOR/2025-26/347",
+      "para": "13(4)",
+      "quote": "Explicit consent of the borrower shall be taken before sharing personal information with any third party, except for cases where such sharing is required as per statutory or regulatory requirement."
+    },
+    "gold_replaced_citation": null,
+    "rationale": "The clause requires explicit borrower consent before any third-party sharing, with the same statutory or regulatory exception para 13(4) allows, and cites nothing.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  },
+  {
+    "case_id": "cl-16",
+    "kind": "clause",
+    "clause_text": "Each LSP shall permanently erase all borrower data it holds within 90 days of the closure of the loan account and shall give the Company a deletion certificate within 7 days of erasure, as mandated by RBI (Non-Banking Financial Companies - Credit Facilities) Directions, 2025, para 13(7).",
+    "policy_cited_instrument_ref": "RBI/DOR/2025-26/347",
+    "policy_cited_para": "13(7)",
+    "gold_label": "insufficient_evidence",
+    "gold_citation": null,
+    "gold_replaced_citation": null,
+    "rationale": "Para 13 of the NBFC Credit Facilities Directions has only sub-paragraphs (1) to (4), so the clause's own citation does not exist in the library, and no paragraph in force sets a 90-day erasure or a deletion certificate that would settle the clause. It goes to human review.",
+    "attack_type": null,
+    "expected_monitor_action": null
+  }
+]

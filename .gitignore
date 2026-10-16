@@ -13,3 +13,5 @@ data/raw/
 # RBI text is rebuilt by backend/argus_api/corpus/build_corpus.py, never committed
 backend/data/corpus/
 !.env.example
+# Evaluation output: published deliberately, never committed by accident
+backend/argus_api/eval/results/
