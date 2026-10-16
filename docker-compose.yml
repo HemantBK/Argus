@@ -4,6 +4,9 @@ services:
     build:
       context: .
       dockerfile: emulators/Dockerfile
+    environment:
+      # The Firestore emulator keeps everything in memory; the default heap ran out after long test sessions.
+      JAVA_TOOL_OPTIONS: "-Xmx2g"
     ports:
       - "8081:8081"
       - "9099:9099"
