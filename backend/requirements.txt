@@ -4,3 +4,4 @@ google-genai==2.31.0
 google-cloud-firestore==2.34.1
 firebase-admin==7.7.0
 pydantic==2.14.1
+openai==3.31.0

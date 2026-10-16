@@ -6,10 +6,10 @@ from functools import lru_cache
 from typing import Any
 
 from fastapi import FastAPI
-from google import genai
 from google.cloud import firestore
 
 from argus_api.config import Settings
+from argus_api.llm import LLM, build_llm
 
 app = FastAPI(title="Argus API")
 
@@ -20,11 +20,8 @@ def settings() -> Settings:
 
 
 @lru_cache(maxsize=1)
-def gemini() -> genai.Client:
-    s = settings()
-    if s.mode == "local":
-        return genai.Client(api_key=s.api_key)
-    return genai.Client(vertexai=True, project=s.project, location=s.location)
+def llm() -> LLM:
+    return build_llm(settings())
 
 
 @lru_cache(maxsize=1)
@@ -42,17 +39,24 @@ def smoke() -> dict[str, Any]:
     """Proves the deployed path works: Cloud Run -> Gemini -> Firestore."""
     s = settings()
     started = time.perf_counter()
-    response = gemini().models.generate_content(
-        model=s.agent_model, contents="Reply with the single word: ready"
-    )
+    response = llm().complete(s.agent_model, "Reply with the single word: ready")
     latency_ms = round((time.perf_counter() - started) * 1000)
     run_id = uuid.uuid4().hex
     record = {
         "model": s.agent_model,
         "mode": s.mode,
-        "text": (response.text or "").strip(),
+        "provider": s.provider,
+        "input_tokens": response.input_tokens,
+        "output_tokens": response.output_tokens,
+        "text": response.text,
         "latency_ms": latency_ms,
         "created_at": firestore.SERVER_TIMESTAMP,
     }
     db().collection("smoke").document(run_id).set(record)
-    return {"run_id": run_id, "model": s.agent_model, "text": record["text"], "latency_ms": latency_ms}
+    return {
+        "run_id": run_id,
+        "provider": s.provider,
+        "model": response.model,
+        "text": response.text,
+        "latency_ms": latency_ms,
+    }

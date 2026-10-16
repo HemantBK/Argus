@@ -1,7 +1,8 @@
 """Runtime configuration. Every value comes from the environment; missing values fail at startup.
 
-ARGUS_MODE=local  uses a Google AI Studio API key and the Firestore emulator (FIRESTORE_EMULATOR_HOST).
-ARGUS_MODE=cloud  uses Gemini on Vertex AI and real Firestore in GOOGLE_CLOUD_PROJECT.
+ARGUS_MODE=local  Firestore emulator (FIRESTORE_EMULATOR_HOST) and a development LLM provider:
+                  ARGUS_LLM_PROVIDER=aistudio (GEMINI_API_KEY) or openrouter (OPENROUTER_API_KEY).
+ARGUS_MODE=cloud  real Firestore and Gemini on Vertex AI only (competition rules B-01, B-02).
 """
 
 import os
@@ -9,6 +10,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 Mode = Literal["local", "cloud"]
+Provider = Literal["vertex", "aistudio", "openrouter"]
+LOCAL_PROVIDER_KEYS: dict[str, str] = {"aistudio": "GEMINI_API_KEY", "openrouter": "OPENROUTER_API_KEY"}
 
 
 class ConfigError(RuntimeError):
@@ -25,6 +28,7 @@ def _require(name: str) -> str:
 @dataclass(frozen=True)
 class Settings:
     mode: Mode
+    provider: Provider
     project: str
     location: str | None
     api_key: str | None
@@ -34,23 +38,33 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         mode = _require("ARGUS_MODE")
-        if mode not in ("local", "cloud"):
-            raise ConfigError(f"ARGUS_MODE must be 'local' or 'cloud', got {mode!r}")
-        if mode == "local":
-            _require("FIRESTORE_EMULATOR_HOST")
+        if mode == "cloud":
+            provider = os.environ.get("ARGUS_LLM_PROVIDER", "vertex").strip()
+            if provider != "vertex":
+                raise ConfigError(f"Cloud mode must use Gemini on Vertex AI, not {provider!r}")
             return cls(
-                mode="local",
+                mode="cloud",
+                provider="vertex",
                 project=_require("GOOGLE_CLOUD_PROJECT"),
-                location=None,
-                api_key=_require("GEMINI_API_KEY"),
+                location=_require("GOOGLE_CLOUD_LOCATION"),
+                api_key=None,
                 agent_model=_require("ARGUS_AGENT_MODEL"),
                 monitor_model=_require("ARGUS_MONITOR_MODEL"),
             )
+        if mode != "local":
+            raise ConfigError(f"ARGUS_MODE must be 'local' or 'cloud', got {mode!r}")
+        provider = _require("ARGUS_LLM_PROVIDER")
+        if provider not in LOCAL_PROVIDER_KEYS:
+            raise ConfigError(
+                f"Local ARGUS_LLM_PROVIDER must be one of {sorted(LOCAL_PROVIDER_KEYS)}, got {provider!r}"
+            )
+        _require("FIRESTORE_EMULATOR_HOST")
         return cls(
-            mode="cloud",
+            mode="local",
+            provider="aistudio" if provider == "aistudio" else "openrouter",
             project=_require("GOOGLE_CLOUD_PROJECT"),
-            location=_require("GOOGLE_CLOUD_LOCATION"),
-            api_key=None,
+            location=None,
+            api_key=_require(LOCAL_PROVIDER_KEYS[provider]),
             agent_model=_require("ARGUS_AGENT_MODEL"),
             monitor_model=_require("ARGUS_MONITOR_MODEL"),
         )
