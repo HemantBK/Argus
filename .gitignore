@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+.firebase/
+node_modules/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+data/raw/
+*.pdf

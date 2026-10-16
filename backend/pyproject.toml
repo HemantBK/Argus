@@ -1,0 +1,20 @@
+[project]
+name = "argus-api"
+version = "0.1.0"
+description = "Argus: RBI digital-lending policy review with a step monitor"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
