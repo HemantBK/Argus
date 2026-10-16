@@ -1,0 +1,40 @@
+{
+  "policy_id": "policy_a",
+  "title": "Sample NBFC A: Digital Lending Policy",
+  "synthetic": true,
+  "disclaimer": "SYNTHETIC. Sample NBFC A is a fictional company invented for testing Argus. This is not a real policy, contains no personal data, and is not legal advice.",
+  "clauses": [
+    {
+      "id": "c1",
+      "text": "Before entering into an agreement with any Lending Service Provider (LSP) for digital lending, the Company shall conduct enhanced due diligence covering the LSP's technical capabilities, data privacy policies and storage systems, fairness in conduct with borrowers, past record of conduct and ability to comply with applicable regulations. The Company shall review the conduct of each LSP against the agreement at least once a year."
+    },
+    {
+      "id": "c2",
+      "text": "Every borrower may exit a digital loan during a cooling-off period of three days from disbursal by repaying the principal and the proportionate APR, without any penalty, in line with RBI (Digital Lending) Directions, 2025, para 10."
+    },
+    {
+      "id": "c3",
+      "text": "The LSP's sourcing and facilitation fee of 1.5% of the sanctioned amount shall be collected by the LSP directly from the borrower at the time of disbursal and shall not be paid by the Company."
+    },
+    {
+      "id": "c4",
+      "text": "Loans shall always be disbursed directly into the bank account of the borrower. No disbursal shall be made to any third-party account, including any account of an LSP."
+    },
+    {
+      "id": "c5",
+      "text": "To simplify collections, borrowers shall pay their EMIs into a collection account maintained by the LSP, which shall pool repayments and remit them to the Company's bank account on a weekly basis."
+    },
+    {
+      "id": "c6",
+      "text": "All borrower data shall be stored only on servers located within India. Where any data is processed outside India, it shall be deleted from the servers outside India and brought back to India within 24 hours of processing, as required by RBI (Non-Banking Financial Companies - Credit Facilities) Directions, 2025, para 14(9)."
+    },
+    {
+      "id": "c7",
+      "text": "The Company and every LSP that has an interface with borrowers shall designate a nodal grievance redressal officer for digital lending complaints. The officers' contact details shall be displayed prominently on the Company's website, the LSP's website, the digital lending app and in the Key Fact Statement."
+    },
+    {
+      "id": "c8",
+      "text": "On execution of each loan contract, the Key Fact Statement, summary of the loan product, sanction letter, terms and conditions and privacy policies, digitally signed on the Company's letterhead, shall be sent automatically to the borrower's registered and verified email or SMS."
+    }
+  ]
+}

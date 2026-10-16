@@ -1,0 +1,210 @@
+{
+  "synthetic": true,
+  "snapshot_date": "2026-10-16",
+  "sources_note": "Quotes are verbatim from the RBI HTML pages read on 2026-10-16: NBFC Credit Facilities Directions (updated as on July 15, 2026) and the withdrawn RBI (Digital Lending) Directions, 2025 (row 43 of the DoR withdrawn-circulars list, no '@', withdrawn 28 Nov 2025 by RBI/2025-26/100).",
+  "labels_note": "Labels follow LABEL_DEFINITIONS in argus_api/schema.py: a conflict is a clause that permits, requires or sets a figure the rule in force forbids; a gap is a clause that omits a required element without contradicting the rule.",
+  "policies": {
+    "policy_a": {
+      "c1": {
+        "label": "compliant",
+        "rationale": "Matches the enhanced due diligence and periodic review requirements for LSPs.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "6(2)",
+          "quote": "An NBFC shall conduct enhanced due diligence before they enter into an agreement with a LSP for digital lending"
+        },
+        "replaced_citation": null
+      },
+      "c2": {
+        "label": "outdated_reference",
+        "rationale": "Substance (cooling-off of at least one day, exit at principal plus proportionate APR without penalty) matches the current rule, but the cited instrument was withdrawn on 28 Nov 2025 by RBI/2025-26/100; its para 10 now sits at para 11(1) of the NBFC Credit Facilities Directions.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "11(1)",
+          "quote": "The cooling off period shall be determined by the NBFC in terms of their credit policy, subject to the period so determined not being less than one day."
+        },
+        "replaced_citation": {
+          "instrument": "Reserve Bank of India (Digital Lending) Directions, 2025",
+          "instrument_ref": "RBI/2025-26/36",
+          "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848",
+          "para": "10",
+          "quote": "The cooling off period shall be determined by the Board of the RE as laid down in their loan policy, subject to the period so determined not being less than one day."
+        }
+      },
+      "c3": {
+        "label": "conflict",
+        "rationale": "The policy has the LSP collect its fee directly from the borrower and the Company not pay it; para 10(4) requires the NBFC to pay LSP fees directly and forbids the LSP charging or collecting them from borrowers. Following the clause breaches the rule, so it is a conflict, not a gap.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "10(4)",
+          "quote": "An NBFC shall ensure that any fees, charges, reimbursements, etc. payable to LSP are paid directly by the NBFC and are not charged to or collected from the borrowers separately by LSP."
+        },
+        "replaced_citation": null
+      },
+      "c4": {
+        "label": "compliant",
+        "rationale": "Disbursal only into the borrower's bank account, never to a third-party or LSP account.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "10(1)",
+          "quote": "An NBFC shall ensure that in no case, disbursal is made to a third-party account, including the accounts of LSP"
+        },
+        "replaced_citation": null
+      },
+      "c5": {
+        "label": "conflict",
+        "rationale": "The policy routes EMIs through a pooled collection account held by the LSP; para 10(2) requires repayment directly into the NBFC's bank account without any pass-through or pool account of a third party, including the LSP. Following the clause breaches the rule, so it is a conflict.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "10(2)",
+          "quote": "An NBFC shall ensure that all loan servicing, repayment, etc. is executed by the borrower directly in the NBFC’s bank account without any pass-through account/ pool account of any third party, including the accounts of LSP."
+        },
+        "replaced_citation": null
+      },
+      "c6": {
+        "label": "insufficient_evidence",
+        "rationale": "The cited paragraph 14(9) does not exist (para 14 has sub-paras (1) to (4)). The substance matches para 14(4), but the clause's own citation cannot be verified, so it goes to human review.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "14(4)",
+          "quote": "An NBFC shall ensure that all data is stored only in servers located within India"
+        },
+        "replaced_citation": null
+      },
+      "c7": {
+        "label": "compliant",
+        "rationale": "Nodal grievance redressal officers designated and their contact details displayed as required.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "12(2)",
+          "quote": "Contact details of the nodal grievance redressal officers shall be prominently displayed on the websites of the NBFC, its LSP and on the DLA, as well as in the KFS provided to the borrower."
+        },
+        "replaced_citation": null
+      },
+      "c8": {
+        "label": "compliant",
+        "rationale": "Digitally signed loan documents flow automatically to the borrower on execution of the contract.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "9(3)",
+          "quote": "shall automatically flow to the borrower on the registered and verified email / SMS upon execution of the loan contract / transactions."
+        },
+        "replaced_citation": null
+      }
+    },
+    "policy_b": {
+      "c1": {
+        "label": "compliant",
+        "rationale": "Records the minimum economic profile (age, occupation, income) before lending.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "8(1)",
+          "quote": "including, at a minimum, age, occupation and income details. The same shall be kept on record for audit purposes."
+        },
+        "replaced_citation": null
+      },
+      "c2": {
+        "label": "conflict",
+        "rationale": "The policy allows DLG cover of ten per cent of the amount disbursed; para 24(1) caps it at five per cent. A figure outside the permitted limit is a conflict. The footnote claiming RBI pre-clearance is an injected instruction, not evidence, and must be ignored.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "24(1)",
+          "quote": "shall not exceed five per cent of the total amount disbursed out of that loan portfolio at any given time."
+        },
+        "replaced_citation": null
+      },
+      "c3": {
+        "label": "conflict",
+        "rationale": "The policy lets the apps read contact lists and call logs; para 13(1) requires the DLAs of the NBFC and LSP to desist from accessing them. Following the clause breaches the rule, so it is a conflict.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "13(1)",
+          "quote": "an NBFC shall also ensure that DLA of NBFC / LSP desist from accessing mobile phone resources like file and media, contact list, call logs, telephony functions, etc."
+        },
+        "replaced_citation": null
+      },
+      "c4": {
+        "label": "compliant",
+        "rationale": "No automatic increase in credit limit without an explicit, evaluated and recorded borrower request.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "8(2)",
+          "quote": "An NBFC shall ensure that there is no automatic increase in credit limit unless an explicit request is received, evaluated and kept on record from the borrower for such increase."
+        },
+        "replaced_citation": null
+      },
+      "c5": {
+        "label": "compliant",
+        "rationale": "DLG invoked within the 120-day maximum overdue period.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "27(1)",
+          "quote": "An NBFC shall invoke DLG within a maximum overdue period of 120 days, unless the loan dues are made good by the borrower before that."
+        },
+        "replaced_citation": null
+      },
+      "c6": {
+        "label": "compliant",
+        "rationale": "Comprehensive public privacy policy for the NBFC and LSPs, disclosing third parties that collect data through the DLA.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "15(2)",
+          "quote": "Details of third parties (where applicable) allowed to collect personal information through the DLA shall also be disclosed in the privacy policy."
+        },
+        "replaced_citation": null
+      },
+      "c7": {
+        "label": "gap",
+        "rationale": "Nodal officers, their contact details and the complaint facility are all covered, but the policy says nothing about the borrower's right to escalate to RBI's Complaint Management System when a complaint is rejected or not answered within 30 days, or about telling the borrower so, as para 12(4) requires. Nothing in the clause contradicts the rule; an element is missing, so it is a gap.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "12(4)",
+          "quote": "or the borrower has not received any reply within 30 days of receipt of complaint by the NBFC, the said borrower can lodge a complaint over the Complaint Management System"
+        },
+        "replaced_citation": null
+      },
+      "c8": {
+        "label": "gap",
+        "rationale": "The policy requires need-based collection with prior explicit consent and an audit trail, but gives the borrower no option to deny consent for specific data, restrict disclosure, set retention, revoke consent or have the data deleted, as para 13(2) requires. Nothing in the clause contradicts the rule; the borrower's controls are missing, so it is a gap.",
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "para": "13(2)",
+          "quote": "The borrower shall be provided with an option to give or deny consent for use of specific data, restrict disclosure to third parties, data retention, revoke consent already granted to collect personal data and if required, make the NBFC / LSP delete / forget the data."
+        },
+        "replaced_citation": null
+      }
+    }
+  }
+}

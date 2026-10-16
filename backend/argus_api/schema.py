@@ -48,11 +48,38 @@ class CheckName(StrEnum):
 
 
 class FindingLabel(StrEnum):
+    """One label per clause. LABEL_DEFINITIONS is the rule for choosing it, for the agent and the gold set."""
+
     OUTDATED_REFERENCE = "outdated_reference"
     GAP = "gap"
     CONFLICT = "conflict"
     COMPLIANT = "compliant"
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+
+
+# Gap and conflict are both "substantive" findings (PLAN §4) and share one chip in the UI; this is the line
+# between them. A clause that both omits something and contradicts the rule is a conflict.
+LABEL_DEFINITIONS: dict[FindingLabel, str] = {
+    FindingLabel.OUTDATED_REFERENCE: (
+        "The clause's substance agrees with the rule in force, but it cites an instrument or paragraph that "
+        "has been withdrawn or replaced. A stale citation alone is never a gap or a conflict."
+    ),
+    FindingLabel.GAP: (
+        "The clause deals with the topic but leaves out something the paragraph in force requires, and "
+        "nothing it says goes against the rule: the policy is silent where the rule demands an element."
+    ),
+    FindingLabel.CONFLICT: (
+        "The clause permits, requires or describes a practice the paragraph in force forbids, or sets a "
+        "figure or limit outside the one the rule allows: following the policy would breach the rule."
+    ),
+    FindingLabel.COMPLIANT: (
+        "The clause meets the paragraph in force and cites nothing outdated or unverifiable."
+    ),
+    FindingLabel.INSUFFICIENT_EVIDENCE: (
+        "The clause cannot be judged from the library: its own citation does not exist or cannot be "
+        "verified, or the evidence does not settle it. It goes to human review."
+    ),
+}
 
 
 class MonitorStatus(StrEnum):
