@@ -69,6 +69,7 @@ export interface Run {
   corpus_as_on: string;
   cost_usd_estimate?: number | null;
   error?: string | null;
+  expires_at?: string | null;
   finished_at?: string | null;
   latency_ms?: number | null;
   monitor_model: string;
@@ -81,6 +82,7 @@ export interface Run {
   saved?: boolean;
   schema_version?: string;
   seeded?: boolean;
+  source?: "custom" | null;
   started_at: string;
   status: RunStatus;
   summary?: RunSummary;

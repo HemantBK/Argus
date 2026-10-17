@@ -8,6 +8,12 @@
   POST /api/runs {run_id, policy_id}                    review a sample policy; the work is done inside the
                                                         request and the final Run is returned, while the
                                                         browser follows runs/{run_id} through listeners
+  POST /api/runs {run_id, policy_id: "custom",          review one pasted clause (custom.py): 400 with
+                  clause_text, attest: true}            {detail: {code, message[, identifier_type]}} when
+                                                        it fails the checks, never echoing the text; 503
+                                                        when custom runs are switched off; then a run like
+                                                        any other, whose documents expire after
+                                                        runs.CUSTOM_TTL (24 h) and are then deleted
   POST /api/runs/{run_id}/findings/{clause_id}/signoff  the run owner's accept / reject / edit
 
 At startup the settings and the RBI library (data/corpus) are loaded; either missing stops the server. CORS
@@ -33,11 +39,11 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from google.cloud import firestore
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from starlette.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from argus_api import runs
+from argus_api import custom, runs
 from argus_api.auth import TokenVerifier, current_uid_with, firebase_verifier
 from argus_api.config import Settings
 from argus_api.corpus.common import DEFAULT_OUT_DIR
@@ -290,6 +296,9 @@ class StartRunRequest(BaseModel):
 
     run_id: str = Field(pattern=runs.RUN_ID_PATTERN, description="client-generated uuid4().hex")
     policy_id: str
+    # Only with policy_id "custom". Not length-limited here: custom.check_clause answers with its own codes.
+    clause_text: str | None = None
+    attest: StrictBool | None = None
 
 
 class SignoffRequest(BaseModel):
@@ -306,14 +315,21 @@ def _refuse(e: runs.Rejected) -> HTTPException:
 
 @app.post("/api/runs")
 def start_run(body: StartRunRequest, uid: Annotated[str, Depends(current_uid)]) -> dict[str, Any]:
-    """Review a sample policy. The Run doc (status running) exists before any clause is reviewed."""
+    """Review a sample policy, or one pasted clause. The Run doc (status running) exists before any clause is
+    reviewed. The clause text is never logged and never part of an error answer."""
     try:
-        policy = runs.load_policy(body.policy_id)
+        if body.policy_id == runs.CUSTOM_POLICY_ID:
+            policy = custom.custom_policy(custom.check_clause(body.clause_text, body.attest))
+        elif body.clause_text is not None or body.attest is not None:
+            raise runs.Invalid(f"clause_text and attest go only with policy_id {runs.CUSTOM_POLICY_ID!r}.")
+        else:
+            policy = runs.load_policy(body.policy_id)
         run = runner().run_review(body.run_id, uid, policy)
+    except custom.ClauseRejected as e:
+        raise HTTPException(e.status_code, e.detail()) from e
     except runs.Rejected as e:
         raise _refuse(e) from e
-    result: dict[str, Any] = run.model_dump(mode="json")
-    return result
+    return runs.run_json(run)
 
 
 @app.post("/api/runs/{run_id}/findings/{clause_id}/signoff")

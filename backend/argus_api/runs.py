@@ -23,20 +23,27 @@ A failed clause is an explicit state: a Finding with `error` set, label insuffic
 and monitor_status needs_review, so it goes to a person. Anything unexpected (a bug, Firestore down) marks
 the run failed with the error and is re-raised.
 
+A pasted clause (custom.py builds its one-clause Policy with source "custom") runs exactly like a sample
+policy, with three differences: admission also needs config/custom_limits (schema.CustomLimits) switched on
+and counts the run against its custom_daily_cap (usage/{IST date}/sources/custom); every document of the run
+carries expires_at, a Firestore timestamp CUSTOM_TTL after the start, for the TTL policy (admin.py ttl) and
+purge_custom.py; and it can never become a saved sample. Nothing here logs the clause text.
+
 Eval runs call Runner.run_review(..., enforce_cap=False) in Python; the HTTP endpoint always enforces the cap,
 so the bypass cannot be reached from a browser. The kill switch applies to every run.
 """
 
 import json
+import logging
 import re
 import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -48,7 +55,9 @@ from argus_api.corpus.store import Corpus
 from argus_api.docstore import AlreadyExists, Counter, CreateResult, DocumentStore, StoreError, Write
 from argus_api.llm import LLM, call_scope
 from argus_api.schema import (
+    CUSTOM_SOURCE,
     AuditEvent,
+    CustomLimits,
     Finding,
     FindingLabel,
     Limits,
@@ -67,10 +76,25 @@ PARALLEL_CLAUSES = MAX_CLAUSES
 RUN_BUDGET_S = 90.0  # well under the Cloud Run request timeout (300 s); see llm.CHAT_TIMEOUT_S
 SAMPLES_DIR = Path(__file__).resolve().parent / "samples"
 POLICY_IDS = ("policy_a", "policy_b")
+CUSTOM_POLICY_ID = "custom"  # POST /api/runs with a pasted clause (custom.py)
+# A custom run's documents carry expires_at = start + CUSTOM_TTL. Firestore TTL deletes an expired document
+# typically within 24 h after expires_at, so 24 h here keeps deletion within CUSTOM_DELETED_WITHIN of the
+# start (purge_custom.py deletes anything expired at once, whatever TTL has done).
+CUSTOM_TTL = timedelta(hours=24)
+TTL_DELETION_LAG = timedelta(hours=24)  # Firestore's documented "typically within 24 hours" after expiry
+CUSTOM_DELETED_WITHIN = CUSTOM_TTL + TTL_DELETION_LAG  # 48 h: the bound the app's notice states
+CUSTOM_TITLE_CHARS = 60  # a pasted clause's title is its first CUSTOM_TITLE_CHARS characters
+# Run fields only a custom run has; a sample run's document and API response leave them out, as before them.
+CUSTOM_ONLY_FIELDS = ("source", "expires_at")
+EXPIRES_AT = "expires_at"
 RUN_ID_PATTERN = r"^[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}$"  # uuid4().hex
 RUNS = "runs"
 SAMPLES = "samples"
 LIMITS_PATH = "config/limits"
+CUSTOM_LIMITS_PATH = "config/custom_limits"
+RUN_CHILDREN = ("steps", "findings", "audit")  # the subcollections of runs/{run_id}
+
+log = logging.getLogger("argus.runs")
 USAGE_COLLECTION = "usage"
 USAGE_FIELD = "runs"
 SMOKE = "smoke"
@@ -95,6 +119,10 @@ class UnknownPolicy(Rejected):
 
 
 class RunsDisabled(Rejected):
+    status_code = 503
+
+
+class CustomDisabled(Rejected):
     status_code = 503
 
 
@@ -141,6 +169,11 @@ class Policy(BaseModel):
     synthetic: bool
     disclaimer: str
     clauses: list[Clause]
+    source: Literal["sample", "custom"] = "sample"
+
+    @property
+    def custom(self) -> bool:
+        return self.source == CUSTOM_SOURCE
 
 
 def load_policy(policy_id: str) -> Policy:
@@ -163,6 +196,11 @@ def clause_title(text: str) -> str:
     """The clause's first TITLE_WORDS words (the sample policies have no clause headings)."""
     words = text.split()
     return " ".join(words[:TITLE_WORDS]) + ("…" if len(words) > TITLE_WORDS else "")
+
+
+def run_clause_title(policy: Policy, clause: Clause) -> str:
+    """The clause's title in the run: a pasted clause's first characters, else clause_title."""
+    return clause.text[:CUSTOM_TITLE_CHARS] if policy.custom else clause_title(clause.text)
 
 
 def seq_id(seq: int) -> str:
@@ -191,6 +229,10 @@ def usage_path(day: str) -> str:
     return f"{USAGE_COLLECTION}/{day}"
 
 
+def custom_usage_path(day: str) -> str:
+    return f"{usage_path(day)}/sources/{CUSTOM_SOURCE}"
+
+
 def hour_usage_path(day: str, hour: int) -> str:
     return f"{usage_path(day)}/hours/{hour:02d}"
 
@@ -199,24 +241,52 @@ def user_usage_path(day: str, uid: str) -> str:
     return f"{usage_path(day)}/users/{uid}"
 
 
+RUNS_PAUSED = "Argus is paused: new runs are switched off. Open a saved run instead."
+CUSTOM_OFF = "Custom clause review is switched off right now."
+
+
 def admit_counted(
-    store: DocumentStore, path: str, data: dict[str, Any], owner_uid: str, at: datetime, what: str
+    store: DocumentStore,
+    path: str,
+    data: dict[str, Any],
+    owner_uid: str,
+    at: datetime,
+    what: str,
+    *,
+    custom: bool = False,
 ) -> None:
     """The one gate for anything that spends model calls: kill switch, then create `path` and count it
-    against today's, this hour's and the user's caps in one transaction. Raises a Rejected subclass (nothing
-    written) when switched off, when `path` exists or when a cap is full."""
+    against today's, this hour's and the user's caps in one transaction. A custom run also needs the custom
+    switch on and counts against today's custom cap in the same transaction. Raises a Rejected subclass
+    (nothing written) when switched off, when `path` exists or when a cap is full."""
     limits = read_limits(store)
     if not limits.enabled:
-        raise RunsDisabled("Argus is paused: new runs are switched off. Open a saved run instead.")
+        raise RunsDisabled(RUNS_PAUSED)
+    custom_limits = read_custom_limits(store) if custom else None
+    if custom and (custom_limits is None or not custom_limits.custom_enabled):
+        raise CustomDisabled(CUSTOM_OFF)
     local = at.astimezone(IST)
     day = local.date().isoformat()
     daily = Counter(usage_path(day), USAGE_FIELD, limits.daily_run_cap)
     hourly = Counter(hour_usage_path(day, local.hour), USAGE_FIELD, limits.hourly_run_cap)
     user = Counter(user_usage_path(day, owner_uid), USAGE_FIELD, limits.per_user_daily_run_cap)
-    counted = store.create_counted(path, data, [daily, hourly, user])
+    counters = [daily, hourly, user]
+    custom_counter = (
+        Counter(custom_usage_path(day), USAGE_FIELD, custom_limits.custom_daily_cap)
+        if custom_limits is not None
+        else None
+    )
+    if custom_counter is not None:
+        counters.append(custom_counter)
+    counted = store.create_counted(path, data, counters)
     if counted.result == CreateResult.EXISTS:
         raise DuplicateRun(f"{what} {path.rsplit('/', 1)[1]} already exists")
     if counted.result == CreateResult.CAP_REACHED:
+        if custom_limits is not None and counted.full == custom_counter:
+            raise DailyCapReached(
+                f"Today's limit of {custom_limits.custom_daily_cap} custom clause reviews is used up. Try a "
+                "sample policy, or paste a clause again tomorrow (India time)."
+            )
         if counted.full == user:
             raise DailyCapReached(
                 f"You have used your {limits.per_user_daily_run_cap} live runs for today. Open a saved run, "
@@ -238,6 +308,31 @@ def _json(model: BaseModel) -> dict[str, Any]:
     return data
 
 
+def run_json(run: Run) -> dict[str, Any]:
+    """The Run as JSON (the API's answer); a sample run leaves out the custom-only fields it does not have."""
+    data = _json(run)
+    for field in CUSTOM_ONLY_FIELDS:
+        if data[field] is None:
+            del data[field]
+    return data
+
+
+def run_doc(run: Run) -> dict[str, Any]:
+    """The Run as its Firestore document: run_json, with expires_at a real timestamp (TTL ignores strings)."""
+    data = run_json(run)
+    if run.expires_at is not None:
+        data[EXPIRES_AT] = run.expires_at
+    return data
+
+
+def child_doc(run: Run, model: BaseModel) -> dict[str, Any]:
+    """A steps/findings/audit document of `run`: the model's JSON, plus the run's expires_at if it has one."""
+    data = _json(model)
+    if run.expires_at is not None:
+        data[EXPIRES_AT] = run.expires_at
+    return data
+
+
 def read_limits(store: DocumentStore) -> Limits:
     doc = store.get(LIMITS_PATH)
     if doc is None:
@@ -246,6 +341,21 @@ def read_limits(store: DocumentStore) -> Limits:
         return Limits.model_validate(doc)
     except ValidationError as e:
         raise LimitsMissing(f"Run limits in {LIMITS_PATH} are malformed: {e.error_count()} problem(s)") from e
+
+
+def read_custom_limits(store: DocumentStore) -> CustomLimits | None:
+    """config/custom_limits, or None when it is missing or malformed: pasted-clause runs then stay off (fail
+    closed) and nothing else is affected."""
+    doc = store.get(CUSTOM_LIMITS_PATH)
+    if doc is None:
+        return None
+    try:
+        return CustomLimits.model_validate(doc)
+    except ValidationError as e:
+        log.warning(
+            "%s is malformed (%d problem(s)); custom runs stay off", CUSTOM_LIMITS_PATH, e.error_count()
+        )
+        return None
 
 
 def failed_finding(clause: Clause, reason: str) -> Finding:
@@ -310,13 +420,13 @@ class _RunContext:
         e = AuditEvent(
             seq=seq, at=self.now(), actor=actor, event=event, detail=detail, clause_id=clause_id, model=model
         )
-        return Write("create", audit_path(self.run.run_id, seq), _json(e))
+        return Write("create", audit_path(self.run.run_id, seq), child_doc(self.run, e))
 
     def _step_writes(self, step: AgentStep) -> list[Write]:
         self.steps.append(step)
         actor = "monitor" if step.kind == StepKind.MONITOR else "agent"
         return [
-            Write("create", step_path(self.run.run_id, step.seq), _json(step)),
+            Write("create", step_path(self.run.run_id, step.seq), child_doc(self.run, step)),
             self.audit_write(actor, f"step_{step.kind.value}", step.summary, step.clause_id, step.model),
         ]
 
@@ -338,7 +448,7 @@ class _RunContext:
                 f.clause_id,
                 self.run.agent_model,
             )
-        return [Write("set", finding_path(self.run.run_id, f.clause_id), _json(f)), audit]
+        return [Write("set", finding_path(self.run.run_id, f.clause_id), child_doc(self.run, f)), audit]
 
     def finish_clause(self, result: ClauseResult) -> None:
         """A worker's result; refused once the run is closed (the clause is then saved as timed out)."""
@@ -426,6 +536,8 @@ class Runner:
                 f"{policy.policy_id} has {len(policy.clauses)} clauses but the run has {self.parallel} "
                 "workers; a clause would wait for a slot and eat into the run budget"
             )
+        if policy.custom and not enforce_cap:
+            raise ValueError("a custom run always goes through the caps (enforce_cap=True)")
         started = self.now()
         run = Run(
             run_id=run_id,
@@ -440,19 +552,24 @@ class Runner:
             provider=self.settings.provider,
             rbi_as_on=self.corpus.rbi_as_on().isoformat(),
             clauses=[
-                RunClause(clause_id=c.id, title=clause_title(c.text), text=c.text) for c in policy.clauses
+                RunClause(clause_id=c.id, title=run_clause_title(policy, c), text=c.text)
+                for c in policy.clauses
             ],
             summary=RunSummary(clauses=len(policy.clauses)),
+            source=CUSTOM_SOURCE if policy.custom else None,
+            expires_at=started + CUSTOM_TTL if policy.custom else None,
         )
         if not enforce_cap:
             if not read_limits(self.store).enabled:
-                raise RunsDisabled("Argus is paused: new runs are switched off. Open a saved run instead.")
+                raise RunsDisabled(RUNS_PAUSED)
             try:
-                self.store.create(run_path(run_id), _json(run))
+                self.store.create(run_path(run_id), run_doc(run))
             except AlreadyExists as e:
                 raise DuplicateRun(f"Run {run_id} already exists") from e
             return run
-        admit_counted(self.store, run_path(run_id), _json(run), owner_uid, started, "Run")
+        admit_counted(
+            self.store, run_path(run_id), run_doc(run), owner_uid, started, "Run", custom=policy.custom
+        )
         return run
 
     def execute(self, run: Run, policy: Policy) -> Run:
@@ -464,7 +581,8 @@ class Runner:
                     ctx.audit_write(
                         f"officer:{run.owner_uid}",
                         "run_started",
-                        f"Review of {policy.title}: {len(policy.clauses)} clauses",
+                        f"Review of {policy.title}: {len(policy.clauses)} "
+                        + ("clause" if len(policy.clauses) == 1 else "clauses"),
                     )
                 ]
             )
@@ -531,7 +649,7 @@ class Runner:
         )
         self.store.commit(
             [
-                Write("set", run_path(run.run_id), _json(run)),
+                Write("set", run_path(run.run_id), run_doc(run)),
                 ctx.audit_write(
                     "agent", "run_finished", f"status {run.status.value}" + (f": {error}" if error else "")
                 ),
@@ -550,7 +668,7 @@ class Runner:
                 "cost_usd_estimate": _cost(ctx.steps),
             }
         )
-        self.store.set(run_path(run.run_id), _json(failed))
+        self.store.set(run_path(run.run_id), run_doc(failed))
 
 
 # ---- officer sign-off ---------------------------------------------------------------------------------
@@ -617,7 +735,7 @@ def sign_off(
             store.commit(
                 [
                     Write("update", finding_path(run_id, clause_id), {"signoff": _json(signoff)}),
-                    Write("create", audit_path(run_id, seq), _json(event)),
+                    Write("create", audit_path(run_id, seq), child_doc(run, event)),
                 ]
             )
         except AlreadyExists:
@@ -638,7 +756,11 @@ class NotASample(Conflict):
 def sample_refusal(run: Run) -> str | None:
     """Why `run` may not be shown publicly as a saved run, or None when it may. A saved run is presented as
     a real review, so it must be one: finished, recorded on Vertex AI with the pinned model ids, not written
-    by a seed script, and dated with the RBI as-on date of its library. There is no override."""
+    by a seed script, and dated with the RBI as-on date of its library. A pasted clause (source custom) is
+    the user's own text, kept only until its private run expires (CUSTOM_TTL): never published. No override.
+    """
+    if run.source == CUSTOM_SOURCE:
+        return "it reviews a clause a user pasted (source custom); only a sample policy run can be saved"
     if run.status != RunStatus.DONE or run.finished_at is None:
         return f"it is {run.status.value}; only a finished (done) run can be saved"
     if run.seeded:

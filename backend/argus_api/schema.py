@@ -8,13 +8,21 @@ datetime is an ISO 8601 string):
   runs/{run_id}/audit/{seq}        AuditEvent (append-only; doc id zero-padded like steps)
   samples/{run_id}                 copy of a saved run (same subcollections), publicly readable
   config/limits                    Limits     (kill switch and daily run cap; server-side only)
+  config/custom_limits             CustomLimits (switch and daily cap for pasted clauses; server-side only)
+
+A run of a clause the user pasted (Run.source "custom", see custom.py) carries expires_at, a Firestore
+timestamp runs.CUSTOM_TTL (24 h) after it started, on the run and on every steps/findings/audit document,
+so the Firestore TTL policy on expires_at (admin.py ttl) deletes all of it, normally within a day of expiry;
+purge_custom.py deletes at once whatever has expired and TTL has not removed yet. Runs of the sample policies
+have neither field.
 
 v0.1 (D-34) added the optional fields Run.clauses, Citation.withdrawn_by / withdrawn_on,
 AuditEvent.clause_id / model and Signoff.edited_rationale; also Finding.error and RunSummary.failed, so a
 clause whose review failed is an explicit state rather than a missing document.
 
 Later additive fields, each optional with a default so documents written before them still validate:
-Citation.updated_as_on; Run.provider, Run.seeded and Run.rbi_as_on. EvalResults (with EvalCondition,
+Citation.updated_as_on; Run.provider, Run.seeded and Run.rbi_as_on; Run.source and Run.expires_at. New
+document: config/custom_limits (CustomLimits). EvalResults (with EvalCondition,
 EvalMetric, EvalCell, EvalCorpus) is the shape of eval_results/latest that the Evaluation page reads.
 
 Dates: snapshot_date and corpus_as_on are the date the RBI pages were fetched. updated_as_on and rbi_as_on are
@@ -205,6 +213,10 @@ class Limits(BaseModel):
     enabled false: nothing starts (503). Otherwise a request is refused (429) when today's (IST) count is at
     daily_run_cap, this hour's at hourly_run_cap (so one visitor cannot drain the day in minutes), or the
     signed-in user's own count today at per_user_daily_run_cap.
+
+    Pasted-clause runs have their own switch and cap in config/custom_limits (CustomLimits), never here:
+    every deployed revision validates this document with extra="forbid" and refuses all runs (503) when it
+    holds a field the revision does not know, so a new field here would stop a rollback or an older revision.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -213,6 +225,26 @@ class Limits(BaseModel):
     hourly_run_cap: StrictInt = Field(ge=0)
     per_user_daily_run_cap: StrictInt = Field(ge=0)
     enabled: StrictBool
+
+
+class CustomLimits(BaseModel):
+    """config/custom_limits, read before every pasted-clause run (runs.read_custom_limits).
+
+    A pasted-clause run starts only when this document exists, is well formed and has custom_enabled true;
+    otherwise it is refused with 503 and sample runs are unaffected. It also counts against custom_daily_cap
+    (today, IST) on top of every Limits cap. It is a separate document from config/limits so that revisions
+    that predate pasted clauses never read it: writing it, switching it off or deleting it is safe whichever
+    revision is serving.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    custom_enabled: StrictBool
+    custom_daily_cap: StrictInt = Field(ge=0)
+
+
+RunSource = Literal["custom"]
+CUSTOM_SOURCE: RunSource = "custom"
 
 
 class Run(BaseModel):
@@ -236,6 +268,16 @@ class Run(BaseModel):
     provider: str | None = None  # LLM provider of the run (config.Settings.provider): vertex in the cloud
     seeded: bool = False  # True for runs written by a seed script with made-up content, never a real review
     rbi_as_on: str | None = None  # RBI's "updated as on" date of the instrument in force at the run, ISO
+    # A pasted clause: "custom". None for a sample policy (the field is then left out of the document).
+    source: RunSource | None = None
+    # When Firestore TTL deletes the run and its documents; set exactly when source is "custom".
+    expires_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _custom_runs_expire(self) -> Self:
+        if (self.source == CUSTOM_SOURCE) != (self.expires_at is not None):
+            raise ValueError("expires_at is set on a custom run and only on a custom run")
+        return self
 
 
 # ---- eval_results/latest: the Evaluation page (web/src/eval/evalResults.ts) ------------------------------
