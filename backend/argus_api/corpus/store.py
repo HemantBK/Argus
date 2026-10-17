@@ -53,6 +53,10 @@ class Instrument(_Strict):
     status_evidence: list[Evidence]
     scope: str
     paragraph_count: int
+    # The instrument that withdrew or repealed this one, checked by build_corpus against that RBI page.
+    # None while in force. Optional so a library built before the field existed still parses; Corpus refuses
+    # a withdrawn instrument without it.
+    withdrawn_by: str | None = None
 
 
 class Paragraph(_Strict):
@@ -177,6 +181,19 @@ def _read_list(path: Path) -> list[Any]:
     return data
 
 
+def _check_dates(inst: Instrument) -> None:
+    """Every date the app shows for an instrument must be in the library: an instrument in force carries
+    RBI's "updated as on" date and no withdrawal; a withdrawn one carries when (valid_to) and by what."""
+    if inst.in_force:
+        if inst.updated_as_on is None:
+            raise CorpusError(f"{inst.instrument_ref} is in force but has no updated_as_on date")
+        if inst.valid_to is not None or inst.withdrawn_by is not None:
+            raise CorpusError(f"{inst.instrument_ref} is in force but has a valid_to or withdrawn_by")
+        return
+    if inst.valid_to is None or inst.withdrawn_by is None:
+        raise CorpusError(f"{inst.instrument_ref} is not in force but lacks valid_to or withdrawn_by")
+
+
 def load_supersession(path: Path = SUPERSESSION_PATH) -> list[SupersessionRow]:
     data = json.loads(path.read_text(encoding="utf-8"))
     return [SupersessionRow.model_validate(row) for row in data["rows"]]
@@ -190,6 +207,7 @@ class Corpus:
         for inst in instruments:
             if inst.instrument_ref in self.instruments:
                 raise CorpusError(f"duplicate instrument {inst.instrument_ref}")
+            _check_dates(inst)
             self.instruments[inst.instrument_ref] = inst
         self.paragraphs: dict[tuple[str, str], Paragraph] = {}
         for p in paragraphs:
@@ -200,6 +218,10 @@ class Corpus:
                 raise CorpusError(f"paragraph {p.id} belongs to unknown instrument {p.instrument_ref}")
             if content_hash(p.text) != p.content_hash:
                 raise CorpusError(f"paragraph {p.id}: text does not match its content_hash")
+            inst = self.instruments[p.instrument_ref]
+            if (p.in_force, p.valid_to) != (inst.in_force, inst.valid_to):
+                # The in_force check reads the instrument and a Citation copies the paragraph: they agree.
+                raise CorpusError(f"paragraph {p.id}: in_force or valid_to differs from its instrument")
             self.paragraphs[key] = p
         self.supersession = supersession
         self._check_supersession()
@@ -221,6 +243,20 @@ class Corpus:
                 raise CorpusError(f"supersession row maps to {row.new_instrument_ref}, which is not in force")
             if self.current_instrument(row.old_instrument_ref).instrument_ref != row.new_instrument_ref:
                 raise CorpusError(f"{row.old_instrument_ref} does not lead to {row.new_instrument_ref}")
+
+    def rbi_as_on(self) -> date:
+        """The "updated as on" date RBI shows on the instrument in force: how current the rules a finding
+        rests on are. Not the fetch date (snapshot_date). The library holds one instrument in force; with any
+        other number a single date would misdescribe it, so this fails."""
+        current = [inst for inst in self.instruments.values() if inst.in_force]
+        if len(current) != 1:
+            raise CorpusError(
+                f"rbi_as_on needs exactly one instrument in force, the library has {len(current)}: "
+                f"{sorted(inst.instrument_ref for inst in current)}"
+            )
+        as_on = current[0].updated_as_on
+        assert as_on is not None  # _check_dates
+        return as_on
 
     def instrument(self, instrument_ref: str) -> Instrument:
         try:

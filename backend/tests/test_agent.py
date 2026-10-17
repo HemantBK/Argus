@@ -21,7 +21,7 @@ from argus_api.agent import (
     review_clause,
     search_library,
 )
-from argus_api.agent.loop import LABEL_WORDS
+from argus_api.agent.loop import CHECK_FAILURE_WORDS, LABEL_WORDS
 from argus_api.agent.prompts import DRAFT_RESPONSE_SCHEMA
 from argus_api.agent.tools import SEARCH_TOP_K, TOOL_READ, TOOL_SEARCH, TOOL_STATUS, TOOLS_BY_NAME, tokenize
 from argus_api.config import Settings
@@ -297,6 +297,36 @@ def test_fake_paragraph_is_revised_then_fixed(corpus: Corpus) -> None:
     assert normalise(first_reason) in normalise(revision.prompt.replace("&quot;", '"'))
     parent = corpus.paragraph(ref, para.split("(")[0])
     assert parent is not None and parent.text.split("\n")[1] in revision.prompt
+
+
+def test_monitor_trace_says_what_went_wrong_not_which_check_ran(corpus: Corpus) -> None:
+    """A failed check reads as the fault ("paragraph does not exist") on a read and on a draft. The old
+    wording, "failed: paragraph exists", read as if the paragraph were there."""
+    c = clause("policy_a", "c3")
+    g = gold("policy_a", "c3")
+    ref, para = g["citation"]["instrument_ref"], g["citation"]["para"]
+    fake_para = para + "(99)"
+    assert corpus.paragraph(ref, fake_para) is None
+    llm = FakeLLM(
+        turns=[turn(tool_calls=[read(ref, fake_para)]), turn(text="ready")],
+        json_replies=[
+            draft_reply("policy_a", "c3", citation_para=fake_para),
+            judgement(),
+            draft_reply("policy_a", "c3"),
+            judgement(),
+        ],
+    )
+    _, steps = review(corpus, llm, c)
+    monitor_steps = [s for s in steps if s.kind == StepKind.MONITOR]
+    read_step, draft_step, revised_step = monitor_steps
+    missing = CHECK_FAILURE_WORDS[CheckName.PARAGRAPH_EXISTS]
+    assert missing == "paragraph does not exist"
+    for step in (read_step, draft_step):
+        assert step.verdict is not None and step.verdict.action == MonitorAction.REVISE
+        assert f"({missing}" in step.summary
+    assert "(all checks passed)" in revised_step.summary
+    assert not any("failed:" in step.summary for step in steps)
+    assert set(CHECK_FAILURE_WORDS) == set(CheckName)
 
 
 def test_fake_paragraph_still_wrong_after_revision_becomes_insufficient_evidence(corpus: Corpus) -> None:

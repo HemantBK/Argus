@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from argus_api import main, runs
 from argus_api.agent import AgentStep, Clause, ClauseReviewError, ReviewOutcome
 from argus_api.agent.loop import IST
-from argus_api.config import Settings
+from argus_api.config import PINNED_MODELS, Settings
 from argus_api.corpus.store import Corpus
 from argus_api.docstore import Counted, CreateResult, StoreError
 from argus_api.docstore import Counter as UsageCounter
@@ -46,6 +46,7 @@ from tests.run_support import (
     judgement,
     policy_llm,
     settings,
+    vertex_settings,
 )
 
 OWNER, OTHER = "uid-owner", "uid-other"
@@ -173,8 +174,26 @@ def test_outdated_reference_carries_the_withdrawal_date(store: MemoryStore, corp
         assert f.replaced_citation is not None and not f.replaced_citation.in_force
         valid_to = corpus.instrument(f.replaced_citation.instrument_ref).valid_to
         assert valid_to is not None and f.replaced_citation.withdrawn_on == valid_to.isoformat()
-        assert f.replaced_citation.withdrawn_by is None  # not in the corpus; never guessed
+        withdrawn_by = corpus.instrument(f.replaced_citation.instrument_ref).withdrawn_by
+        assert withdrawn_by is not None and f.replaced_citation.withdrawn_by == withdrawn_by
+        assert f.replaced_citation.updated_as_on is None  # RBI shows no "updated as on" for a withdrawn one
         assert f.citation is not None and f.citation.in_force and f.citation.withdrawn_on is None
+        assert f.citation.withdrawn_by is None
+        as_on = corpus.instrument(f.citation.instrument_ref).updated_as_on
+        assert as_on is not None and f.citation.updated_as_on == as_on.isoformat()
+
+
+def test_run_records_provider_and_rbi_as_on(store: MemoryStore, corpus: Corpus) -> None:
+    run_id = new_run_id()
+    run = runner(store, policy_llm("policy_a"), corpus).run_review(
+        run_id, OWNER, runs.load_policy("policy_a")
+    )
+    [current] = [i for i in corpus.instruments.values() if i.in_force]
+    assert current.updated_as_on is not None
+    assert run.provider == settings().provider and run.seeded is False
+    assert run.rbi_as_on == current.updated_as_on.isoformat() == corpus.rbi_as_on().isoformat()
+    assert run.corpus_as_on == current.snapshot_date.isoformat()  # the fetch date, kept apart
+    assert Run.model_validate(store.get(runs.run_path(run_id))) == run
 
 
 def test_llm_error_fails_one_clause_and_the_run_still_finishes(store: MemoryStore, corpus: Corpus) -> None:
@@ -568,9 +587,10 @@ def test_policies_load_from_the_sample_files() -> None:
 
 @pytest.fixture()
 def finished(store: MemoryStore, corpus: Corpus) -> tuple[str, str]:
+    """A finished run recorded as the deployed app records one (Vertex, pinned models), so it may be saved."""
     run_id = new_run_id()
     policy = runs.load_policy("policy_a")
-    runner(store, policy_llm("policy_a"), corpus).run_review(run_id, OWNER, policy)
+    runs.Runner(store, policy_llm("policy_a"), vertex_settings(), corpus).run_review(run_id, OWNER, policy)
     return run_id, policy.clauses[0].id
 
 
@@ -652,11 +672,57 @@ def test_save_sample_copies_everything_with_saved_true(store: MemoryStore, finis
 
 def test_save_sample_refuses_unfinished_runs(store: MemoryStore, corpus: Corpus) -> None:
     running = new_run_id()
-    runner(store, policy_llm("policy_a"), corpus).admit(running, OWNER, runs.load_policy("policy_a"))
-    with pytest.raises(runs.Conflict):
+    runs.Runner(store, policy_llm("policy_a"), vertex_settings(), corpus).admit(
+        running, OWNER, runs.load_policy("policy_a")
+    )
+    with pytest.raises(runs.NotASample, match="only a finished"):
         runs.save_sample(store, running)
+    assert store.get(runs.run_path(running, runs.SAMPLES)) is None
     with pytest.raises(runs.Missing):
         runs.save_sample(store, new_run_id())
+
+
+def _pinned_vertex() -> dict[str, Any]:
+    agent, monitor = PINNED_MODELS[runs.SAMPLE_PROVIDER]
+    return {"agent_model": agent, "monitor_model": monitor}
+
+
+@pytest.mark.parametrize(
+    ("update", "reason"),
+    [
+        ({"status": RunStatus.FAILED}, "only a finished"),
+        ({"seeded": True}, "seed script"),
+        ({"provider": "openrouter"}, "provider is 'openrouter'"),
+        ({"provider": "aistudio"}, "provider is 'aistudio'"),
+        ({"provider": None}, "provider is None"),
+        ({"agent_model": PINNED_MODELS["openrouter"][0]}, "pinned"),
+        ({"monitor_model": PINNED_MODELS["openrouter"][1]}, "pinned"),
+        ({"agent_model": _pinned_vertex()["monitor_model"]}, "pinned"),  # both ids pinned, wrong roles
+        ({"rbi_as_on": None}, "rbi_as_on"),
+    ],
+)
+def test_save_sample_refuses_anything_but_a_real_vertex_review(
+    store: MemoryStore, finished: tuple[str, str], update: dict[str, Any], reason: str
+) -> None:
+    run_id, _ = finished
+    good = Run.model_validate(store.get(runs.run_path(run_id)))
+    assert runs.sample_refusal(good) is None
+    store.set(runs.run_path(run_id), good.model_copy(update=update).model_dump(mode="json"))
+    with pytest.raises(runs.NotASample, match=reason):
+        runs.save_sample(store, run_id)
+    assert store.get(runs.run_path(run_id, runs.SAMPLES)) is None
+    assert docs(store, run_id, "findings", runs.SAMPLES) == []  # nothing copied before the refusal
+
+
+def test_save_sample_refuses_a_run_from_the_local_stack(store: MemoryStore, corpus: Corpus) -> None:
+    """The real path, not a doctored document: a run reviewed with the local settings is refused."""
+    run_id = new_run_id()
+    run = runner(store, policy_llm("policy_a"), corpus).run_review(
+        run_id, OWNER, runs.load_policy("policy_a")
+    )
+    assert run.status == RunStatus.DONE and run.provider == settings().provider != runs.SAMPLE_PROVIDER
+    with pytest.raises(runs.NotASample, match="provider"):
+        runs.save_sample(store, run_id)
 
 
 # ---- HTTP layer -------------------------------------------------------------------------------------------

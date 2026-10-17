@@ -287,6 +287,88 @@ def test_exactly_one_current_instrument_and_three_replaced(corpus: Corpus) -> No
     assert {s.instrument_ref for s in bc.INSTRUMENTS} == set(corpus.instruments)
 
 
+# ---- dates and who withdrew what ------------------------------------------------------------------------
+
+
+def _specs() -> dict[str, bc.InstrumentSpec]:
+    return {s.instrument_ref: s for s in bc.INSTRUMENTS}
+
+
+def test_withdrawn_by_comes_from_the_build_specs(corpus: Corpus) -> None:
+    specs = _specs()
+    for ref, inst in corpus.instruments.items():
+        assert inst.withdrawn_by == specs[ref].withdrawn_by
+        assert (inst.withdrawn_by is None) is inst.in_force
+    # The Digital Lending Directions were withdrawn by the consolidation circular RBI/2025-26/100 of
+    # 28 Nov 2025; the 2022 and 2023 circulars by Annex III of the Directions themselves.
+    dl = next(s for s in bc.INSTRUMENTS if s.key == "dl_directions_2025")
+    assert corpus.instrument(dl.instrument_ref).withdrawn_by == bc.CONSOLIDATION_REF == "RBI/2025-26/100"
+    for key in ("dl_guidelines_2022", "dlg_guidelines_2023"):
+        spec = next(s for s in bc.INSTRUMENTS if s.key == key)
+        assert corpus.instrument(spec.instrument_ref).withdrawn_by == dl.instrument_ref
+
+
+def test_rbi_as_on_is_the_in_force_instruments_updated_as_on(corpus: Corpus) -> None:
+    current = corpus.instrument(_in_force_ref(corpus))
+    assert current.updated_as_on is not None
+    assert corpus.rbi_as_on() == current.updated_as_on
+    assert corpus.rbi_as_on() != current.snapshot_date  # RBI's date, not the fetch date
+
+
+def _rebuilt(corpus: Corpus, ref: str, **update: Any) -> Corpus:
+    instruments = [
+        inst.model_copy(update=update) if inst.instrument_ref == ref else inst
+        for inst in corpus.instruments.values()
+    ]
+    return Corpus(instruments, list(corpus.paragraphs.values()), corpus.supersession)
+
+
+def test_load_fails_when_the_instrument_in_force_has_no_updated_as_on(corpus: Corpus) -> None:
+    with pytest.raises(CorpusError, match="no updated_as_on"):
+        _rebuilt(corpus, _in_force_ref(corpus), updated_as_on=None)
+
+
+def test_load_fails_when_a_withdrawn_instrument_lacks_withdrawn_by_or_valid_to(corpus: Corpus) -> None:
+    ref = next(r for r, i in corpus.instruments.items() if not i.in_force)
+    for update in ({"withdrawn_by": None}, {"valid_to": None}):
+        with pytest.raises(CorpusError, match="lacks valid_to or withdrawn_by"):
+            _rebuilt(corpus, ref, **update)
+
+
+def test_load_fails_when_an_instrument_in_force_says_it_was_withdrawn(corpus: Corpus) -> None:
+    ref = _in_force_ref(corpus)
+    with pytest.raises(CorpusError, match="in force but has a valid_to or withdrawn_by"):
+        _rebuilt(corpus, ref, withdrawn_by=bc.CONSOLIDATION_REF)
+
+
+def test_load_fails_when_a_paragraph_disagrees_with_its_instrument_on_status(corpus: Corpus) -> None:
+    paragraphs = list(corpus.paragraphs.values())
+    p = next(q for q in paragraphs if not q.in_force)
+    flipped = [q.model_copy(update={"in_force": True}) if q is p else q for q in paragraphs]
+    with pytest.raises(CorpusError, match="differs from its instrument"):
+        Corpus(list(corpus.instruments.values()), flipped, corpus.supersession)
+
+
+def test_rbi_as_on_refuses_a_library_without_exactly_one_instrument_in_force(corpus: Corpus) -> None:
+    current = corpus.instrument(_in_force_ref(corpus))
+    second = current.model_copy(update={"instrument_ref": "RBI/TEST/2", "key": "second"})
+    for instruments in ([current, second], []):
+        with pytest.raises(CorpusError, match="exactly one instrument in force"):
+            Corpus(instruments, [], []).rbi_as_on()
+
+
+def test_build_refuses_a_spec_whose_withdrawn_by_disagrees_with_its_status() -> None:
+    import dataclasses
+
+    from bs4 import BeautifulSoup
+
+    empty = BeautifulSoup("", "html.parser")
+    for spec in bc.INSTRUMENTS:
+        wrong = dataclasses.replace(spec, withdrawn_by=None if spec.withdrawn_by else bc.CONSOLIDATION_REF)
+        with pytest.raises(bc.BuildError, match="withdrawn_by"):
+            bc.status_evidence(wrong, {}, empty, "")
+
+
 # ---- supersession ---------------------------------------------------------------------------------------
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from argus_api.agent.prompts import DRAFT_RESPONSE_SCHEMA
-from argus_api.config import Settings
+from argus_api.config import PINNED_MODELS, Settings
 from argus_api.corpus.store import Corpus
 from argus_api.llm import PRICES_USD_PER_MTOK, Completion, LLMError, Message, ToolSpec, Turn
 from argus_api.llm_fake import FakeLLM, turn
@@ -33,6 +33,20 @@ def settings() -> Settings:
         api_key="unused-by-fake",
         agent_model=AGENT_MODEL,
         monitor_model=MONITOR_MODEL,
+    )
+
+
+def vertex_settings() -> Settings:
+    """Settings as the deployed app has them: Vertex AI and the pinned model ids, as save_sample needs."""
+    agent, monitor = PINNED_MODELS["vertex"]
+    return Settings(
+        mode="cloud",
+        provider="vertex",
+        project="test-project",
+        location="test-location",
+        api_key=None,
+        agent_model=agent,
+        monitor_model=monitor,
     )
 
 

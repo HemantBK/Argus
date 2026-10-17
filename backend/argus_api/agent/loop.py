@@ -65,12 +65,13 @@ from argus_api.agent.prompts import (
 from argus_api.agent.tools import TOOL_SEARCH, TOOL_SPECS, ToolResult, library_index, run_tool
 from argus_api.config import Settings
 from argus_api.corpus.common import normalise
-from argus_api.corpus.store import Corpus, CorpusError, quote_in_text
+from argus_api.corpus.store import Corpus, CorpusError, Paragraph, quote_in_text
 from argus_api.llm import LLM, Completion, LLMError, Message, ToolSpec, Turn, estimate_cost_usd
 from argus_api.logs import log_event
 from argus_api.monitor import DraftFinding, MonitorError, MonitorResult, monitor_finding, monitor_read
 from argus_api.monitor.core import CITATION_CHECKS
 from argus_api.schema import (
+    CheckName,
     Citation,
     Finding,
     FindingLabel,
@@ -93,14 +94,21 @@ LABEL_WORDS: dict[FindingLabel, str] = {
     FindingLabel.COMPLIANT: "compliant",
     FindingLabel.INSUFFICIENT_EVIDENCE: "insufficient evidence",
 }
-CHECK_WORDS = {
-    "paragraph_exists": "paragraph exists",
-    "quote_matches": "quote matches",
-    "in_force": "in force",
-    "supported": "supported",
-    "no_injection": "no injection",
-    "on_task": "on task",
+# What went wrong when a check fails, as the trace says it: "paragraph does not exist", never "failed:
+# paragraph exists", which reads as if the paragraph were there.
+CHECK_FAILURE_WORDS: dict[CheckName, str] = {
+    CheckName.PARAGRAPH_EXISTS: "paragraph does not exist",
+    CheckName.QUOTE_MATCHES: "quote does not match the paragraph",
+    CheckName.IN_FORCE: "instrument not in force",
+    CheckName.SUPPORTED: "finding not supported by the paragraph",
+    CheckName.NO_INJECTION: "instructions found in the policy text",
+    CheckName.ON_TASK: "off task",
 }
+
+
+def failure_words(verdict: Verdict) -> str:
+    """The failed checks of a verdict in words, for a trace summary; empty when every check passed."""
+    return "; ".join(CHECK_FAILURE_WORDS[c.name] for c in verdict.checks if not c.passed)
 
 
 class Clause(BaseModel):
@@ -387,8 +395,8 @@ class _Review:
         started = time.perf_counter()
         verdict = monitor_read(self.corpus, ref, para, clause_id=self.clause.id, run_id=self.run_id)
         self.read_verdicts.append(verdict)
-        failed = [CHECK_WORDS[c.name.value] for c in verdict.checks if not c.passed]
-        tail = f" (failed: {', '.join(failed)})" if failed else " (paragraph exists, in force)"
+        failed = failure_words(verdict)
+        tail = f" ({failed})" if failed else " (paragraph exists, in force)"
         self.emit(
             StepKind.MONITOR,
             f"Monitor verdict on the read of {_where(ref, para)}: {verdict.action.value}{tail}.",
@@ -457,8 +465,8 @@ class _Review:
             model, c.input_tokens, c.output_tokens, estimate_cost_usd(model, c.input_tokens, c.output_tokens)
         )
         self.usage.append(usage)
-        failed = [CHECK_WORDS[c.name.value] for c in verdict.checks if not c.passed]
-        tail = f" (failed: {', '.join(failed)})" if failed else " (all checks passed)"
+        failed = failure_words(verdict)
+        tail = f" ({failed})" if failed else " (all checks passed)"
         self.emit(
             StepKind.MONITOR,
             f"Monitor verdict on the draft: {verdict.action.value}{tail}.",
@@ -502,6 +510,12 @@ class _Review:
         p = self.corpus.paragraph(ref, para)
         if p is None or not quote_in_text(quote, p.text):
             raise AgentError(f"citation of {_where(ref, para)} cannot be built from the corpus")
+        return self.corpus_citation(p, quote)
+
+    def corpus_citation(self, p: Paragraph, quote: str) -> Citation:
+        """A Citation of library paragraph `p` with `quote`, every other field from the library: the
+        instrument's "updated as on" date while in force, and when and by what it was withdrawn otherwise."""
+        inst = self.corpus.instrument(p.instrument_ref)
         return Citation(
             instrument=p.instrument,
             instrument_ref=p.instrument_ref,
@@ -511,6 +525,9 @@ class _Review:
             snapshot_date=p.snapshot_date.isoformat(),
             content_hash=p.content_hash,
             in_force=p.in_force,
+            withdrawn_by=inst.withdrawn_by,
+            withdrawn_on=inst.valid_to.isoformat() if inst.valid_to else None,
+            updated_as_on=inst.updated_as_on.isoformat() if inst.in_force and inst.updated_as_on else None,
         )
 
     def replaced_citation(self, draft: DraftFinding) -> Citation | None:
@@ -592,20 +609,7 @@ class _Review:
         (that check is part of the monitor). A paragraph that does not exist gives no citation, and the
         label still stands."""
         p = self.corpus.paragraph(draft.citation_instrument_ref, draft.citation_para)
-        citation = (
-            Citation(
-                instrument=p.instrument,
-                instrument_ref=p.instrument_ref,
-                para=p.para,
-                url=p.url,
-                quote=normalise(draft.citation_quote),
-                snapshot_date=p.snapshot_date.isoformat(),
-                content_hash=p.content_hash,
-                in_force=p.in_force,
-            )
-            if p is not None
-            else None
-        )
+        citation = self.corpus_citation(p, draft.citation_quote) if p is not None else None
         return Finding(
             clause_id=self.clause.id,
             clause_text=self.clause.text,

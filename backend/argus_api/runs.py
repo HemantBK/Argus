@@ -43,13 +43,12 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from argus_api.agent import AgentStep, Clause, ClauseReviewError, ReviewOutcome, SeqCounter, review_clause
 from argus_api.agent.loop import IST
 from argus_api.agent.prompts import corpus_as_on
-from argus_api.config import Settings
+from argus_api.config import PINNED_MODELS, Provider, Settings
 from argus_api.corpus.store import Corpus
 from argus_api.docstore import AlreadyExists, Counter, CreateResult, DocumentStore, StoreError, Write
 from argus_api.llm import LLM, call_scope
 from argus_api.schema import (
     AuditEvent,
-    Citation,
     Finding,
     FindingLabel,
     Limits,
@@ -79,6 +78,7 @@ SEQ_DIGITS = 4
 TITLE_WORDS = 8
 AUDIT_ATTEMPTS = 5
 FIRESTORE_BATCH_LIMIT = 500
+SAMPLE_PROVIDER: Provider = "vertex"  # saved runs are recorded on the deployed stack only (rules B-01, B-02)
 
 
 # ---- errors the API maps to HTTP statuses --------------------------------------------------------------
@@ -246,18 +246,6 @@ def read_limits(store: DocumentStore) -> Limits:
         return Limits.model_validate(doc)
     except ValidationError as e:
         raise LimitsMissing(f"Run limits in {LIMITS_PATH} are malformed: {e.error_count()} problem(s)") from e
-
-
-def with_withdrawal(citation: Citation | None, corpus: Corpus) -> Citation | None:
-    """Fill withdrawn_on for a citation of an instrument no longer in force, from the corpus valid_to.
-
-    withdrawn_by stays None: the corpus records the successor (superseded_by), not the instrument that did
-    the withdrawing (for the 2025 Directions that is RBI/2025-26/100, which is not in the library).
-    """
-    if citation is None or citation.in_force:
-        return citation
-    valid_to = corpus.instrument(citation.instrument_ref).valid_to
-    return citation.model_copy(update={"withdrawn_on": valid_to.isoformat() if valid_to else None})
 
 
 def failed_finding(clause: Clause, reason: str) -> Finding:
@@ -449,6 +437,8 @@ class Runner:
             agent_model=self.settings.agent_model,
             monitor_model=self.settings.monitor_model,
             corpus_as_on=corpus_as_on(self.corpus).isoformat(),
+            provider=self.settings.provider,
+            rbi_as_on=self.corpus.rbi_as_on().isoformat(),
             clauses=[
                 RunClause(clause_id=c.id, title=clause_title(c.text), text=c.text) for c in policy.clauses
             ],
@@ -516,13 +506,7 @@ class Runner:
             except ClauseReviewError as e:
                 ctx.finish_clause(ClauseResult(failed_finding(clause, f"{e}.")))
                 return
-            finding = outcome.finding.model_copy(
-                update={
-                    "citation": with_withdrawal(outcome.finding.citation, self.corpus),
-                    "replaced_citation": with_withdrawal(outcome.finding.replaced_citation, self.corpus),
-                }
-            )
-            ctx.finish_clause(ClauseResult(finding, revised=outcome.revised, stopped=outcome.stopped))
+            ctx.finish_clause(ClauseResult(outcome.finding, revised=outcome.revised, stopped=outcome.stopped))
         except RunClosed:
             return
 
@@ -647,16 +631,43 @@ def sign_off(
 # ---- saved sample runs --------------------------------------------------------------------------------
 
 
+class NotASample(Conflict):
+    """The run cannot become a public saved sample: it is not a finished, real, pinned-model Vertex review."""
+
+
+def sample_refusal(run: Run) -> str | None:
+    """Why `run` may not be shown publicly as a saved run, or None when it may. A saved run is presented as
+    a real review, so it must be one: finished, recorded on Vertex AI with the pinned model ids, not written
+    by a seed script, and dated with the RBI as-on date of its library. There is no override."""
+    if run.status != RunStatus.DONE or run.finished_at is None:
+        return f"it is {run.status.value}; only a finished (done) run can be saved"
+    if run.seeded:
+        return "it was written by a seed script (seeded), not recorded from a real review"
+    if run.provider != SAMPLE_PROVIDER:
+        return f"its provider is {run.provider!r}; a saved run must be recorded on {SAMPLE_PROVIDER!r}"
+    pinned = PINNED_MODELS[SAMPLE_PROVIDER]
+    if (run.agent_model, run.monitor_model) != pinned:
+        return (
+            f"its models are {run.agent_model!r} / {run.monitor_model!r}, not the pinned {SAMPLE_PROVIDER} "
+            f"models {pinned[0]!r} / {pinned[1]!r} (config.PINNED_MODELS)"
+        )
+    if run.rbi_as_on is None:
+        return "it has no rbi_as_on date, so the app could not say how current its RBI rules are"
+    return None
+
+
 def save_sample(store: DocumentStore, run_id: str) -> Run:
     """Copy finished run runs/{id} with its steps, findings and audit to the public samples/{id}, saved=true.
     Timestamps are kept, so the sample is labelled with the time it was recorded. Never overwrites a sample.
+    Refuses (NotASample) any run sample_refusal names, before writing anything.
     """
     doc = store.get(run_path(run_id))
     if doc is None:
         raise Missing(f"Run {run_id} not found")
     run = Run.model_validate(doc)
-    if run.status != RunStatus.DONE or run.finished_at is None:
-        raise Conflict(f"Run {run_id} is {run.status.value}; only a finished (done) run can be saved")
+    refusal = sample_refusal(run)
+    if refusal is not None:
+        raise NotASample(f"Run {run_id} cannot be saved as a sample: {refusal}")
     if store.get(run_path(run_id, SAMPLES)) is not None:
         raise DuplicateRun(f"samples/{run_id} already exists")
     writes = [

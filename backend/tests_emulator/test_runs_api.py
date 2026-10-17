@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from argus_api import main, runs
 from argus_api.agent.loop import IST
-from argus_api.config import AUTH_EMULATOR_ENV
+from argus_api.config import AUTH_EMULATOR_ENV, PINNED_MODELS
 from argus_api.docstore import FirestoreStore
 from argus_api.schema import AuditEvent, Finding, Limits, Run, RunStatus
 from tests.run_support import failing_clause_llm, fixture_corpus, policy_llm
@@ -184,7 +184,15 @@ def test_sign_off_by_owner_writes_an_audit_row_and_others_are_refused(api: Any, 
 def test_sign_off_on_a_saved_sample_is_refused(api: Any, users: Any) -> None:
     client, store = api
     (_, owner_token), _ = users
-    run_id = Run.model_validate(start(client, owner_token).json()).run_id
+    run = Run.model_validate(start(client, owner_token).json())
+    run_id = run.run_id
+    # This API runs on the local stack, which save_sample refuses (test_runs.py pins that). Record the run
+    # as the deployed app would (Vertex, pinned models): what is tested here is the sample's sign-off.
+    with pytest.raises(runs.NotASample, match="provider"):
+        runs.save_sample(store, run_id)
+    agent, monitor = PINNED_MODELS[runs.SAMPLE_PROVIDER]
+    as_vertex = {"provider": runs.SAMPLE_PROVIDER, "agent_model": agent, "monitor_model": monitor}
+    store.set(runs.run_path(run_id), run.model_copy(update=as_vertex).model_dump(mode="json"))
     sample = runs.save_sample(store, run_id)
     assert sample.saved
     assert client_read(f"samples/{run_id}", owner_token) == 200  # public read

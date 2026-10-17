@@ -85,6 +85,9 @@ class InstrumentSpec:
     superseded_by: str | None
     regions: tuple[Region, ...]
     scope_note: str
+    # The instrument that withdrew or repealed this one (None while in force). Checked at build time against
+    # the withdrawing page itself, which must show this reference (withdrawing_page below).
+    withdrawn_by: str | None = None
 
 
 def _seq(first: int, last: int) -> tuple[str, ...]:
@@ -95,6 +98,9 @@ CF_REF = "RBI/DOR/2025-26/347"
 DL_REF = "RBI/2025-26/36"
 G22_REF = "RBI/2022-23/111"
 DLG_REF = "RBI/2023-24/41"
+CONSOLIDATION_REF = (
+    "RBI/2025-26/100"  # Consolidation of Regulations - Withdrawal of circulars (CONSOLIDATION_URL)
+)
 CONSOLIDATION_DATE = date(2025, 11, 28)  # RBI/2025-26/100: DL Directions withdrawn "with immediate effect"
 DL_ISSUE_DATE = date(2025, 5, 8)  # RBI/2025-26/36 para 30(i) + Annex III: 2022 and 2023 circulars repealed
 
@@ -132,6 +138,7 @@ INSTRUMENTS: tuple[InstrumentSpec, ...] = (
         in_force=False,
         valid_to=CONSOLIDATION_DATE,
         superseded_by=CF_REF,
+        withdrawn_by=CONSOLIDATION_REF,
         regions=(
             Region("Chapter I: Preliminary", "Annex I: Data to be submitted", "roman_dot", _seq(1, 30)),
         ),
@@ -147,6 +154,7 @@ INSTRUMENTS: tuple[InstrumentSpec, ...] = (
         in_force=False,
         valid_to=DL_ISSUE_DATE,
         superseded_by=DL_REF,
+        withdrawn_by=DL_REF,
         regions=(
             Region("Guidelines on Digital Lending", "Yours faithfully", "cover", _seq(1, 4), "circular-"),
             Region("Guidelines on Digital Lending", "\x00footnote", "dotted", _seq(1, 15)),
@@ -164,6 +172,7 @@ INSTRUMENTS: tuple[InstrumentSpec, ...] = (
         in_force=False,
         valid_to=DL_ISSUE_DATE,
         superseded_by=DL_REF,
+        withdrawn_by=DL_REF,
         regions=(
             Region(
                 "Guidelines on Default Loss Guarantee (DLG) in Digital Lending",
@@ -558,6 +567,10 @@ def status_evidence(
 ) -> list[Evidence]:
     """Check each instrument's in-force status against RBI's own pages and return the quotes relied on."""
     out: list[Evidence] = []
+    if spec.in_force != (spec.withdrawn_by is None):
+        raise BuildError(
+            f"{spec.instrument_ref}: an instrument in force has no withdrawn_by and a withdrawn one needs it"
+        )
     if spec.in_force:
         row_links = [normalise(a.get_text(" ")) for a in withdrawn.find_all("a")]
         if spec.circular_no in row_links:
@@ -582,6 +595,7 @@ def status_evidence(
             f"the '@' legend is missing from {WITHDRAWN_LIST_URL}; re-check how deferral is marked"
         )
     out.append(Evidence(WITHDRAWN_LIST_URL, legend + " (this row carries no '@')"))
+    withdrawn_by_checked = False
 
     if spec.key == "dl_directions_2025":
         operative = (
@@ -591,6 +605,13 @@ def status_evidence(
         )
         out.append(Evidence(CONSOLIDATION_URL, _require_text(consolidation, operative, CONSOLIDATION_URL)))
         _require_text(consolidation, "November 28, 2025", CONSOLIDATION_URL)
+        # The circular that did the withdrawing is the one on that page.
+        if spec.withdrawn_by != CONSOLIDATION_REF:
+            raise BuildError(
+                f"{spec.instrument_ref} is withdrawn by {CONSOLIDATION_URL}, i.e. {CONSOLIDATION_REF}"
+            )
+        _require_text(consolidation, CONSOLIDATION_REF, CONSOLIDATION_URL)
+        withdrawn_by_checked = True
 
     if spec.key in ("dl_guidelines_2022", "dlg_guidelines_2023"):
         banner = (
@@ -608,6 +629,16 @@ def status_evidence(
         out.append(Evidence(dl_spec.url, "Annex III row: " + annex_row))
         commencement = "These Directions shall come into force immediately"
         out.append(Evidence(dl_spec.url, _require_text(pages[dl_spec.key], commencement, dl_spec.url)))
+        # Repealed by the Directions whose Annex III lists it.
+        if spec.withdrawn_by != dl_spec.instrument_ref:
+            raise BuildError(
+                f"{spec.instrument_ref} is repealed by Annex III of {dl_spec.instrument_ref}, "
+                f"not {spec.withdrawn_by}"
+            )
+        _require_text(pages[dl_spec.key], dl_spec.instrument_ref, dl_spec.url)
+        withdrawn_by_checked = True
+    if not withdrawn_by_checked:
+        raise BuildError(f"{spec.instrument_ref}: no RBI page checked yet shows who withdrew it")
     return out
 
 
@@ -803,6 +834,7 @@ def build(out_dir: Path, offline: bool) -> tuple[list[dict[str, object]], list[d
                 "valid_from": spec.issued_on.isoformat(),
                 "valid_to": spec.valid_to.isoformat() if spec.valid_to else None,
                 "superseded_by": spec.superseded_by,
+                "withdrawn_by": spec.withdrawn_by,
                 "status_evidence": [e.as_json() for e in evidence],
                 "scope": spec.scope_note,
                 "paragraph_count": len(records),

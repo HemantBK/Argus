@@ -13,6 +13,7 @@
   "valid_from": "2025-11-28",
   "valid_to": null,
   "superseded_by": null,
+  "withdrawn_by": null,
   "status_evidence": [
    {
     "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
@@ -36,6 +37,7 @@
   "valid_from": "2025-05-08",
   "valid_to": "2025-11-28",
   "superseded_by": "RBI/DOR/2025-26/347",
+  "withdrawn_by": "RBI/2025-26/100",
   "status_evidence": [
    {
     "url": "https://www.rbi.org.in/Scripts/NotificationUserWithdrawnCircular.aspx",
@@ -67,6 +69,7 @@
   "valid_from": "2022-09-02",
   "valid_to": "2025-05-08",
   "superseded_by": "RBI/2025-26/36",
+  "withdrawn_by": "RBI/2025-26/36",
   "status_evidence": [
    {
     "url": "https://www.rbi.org.in/Scripts/NotificationUserWithdrawnCircular.aspx",
@@ -110,6 +113,7 @@
   "valid_from": "2023-06-08",
   "valid_to": "2025-05-08",
   "superseded_by": "RBI/2025-26/36",
+  "withdrawn_by": "RBI/2025-26/36",
   "status_evidence": [
    {
     "url": "https://www.rbi.org.in/Scripts/NotificationUserWithdrawnCircular.aspx",

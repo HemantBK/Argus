@@ -12,12 +12,21 @@ datetime is an ISO 8601 string):
 v0.1 (D-34) added the optional fields Run.clauses, Citation.withdrawn_by / withdrawn_on,
 AuditEvent.clause_id / model and Signoff.edited_rationale; also Finding.error and RunSummary.failed, so a
 clause whose review failed is an explicit state rather than a missing document.
+
+Later additive fields, each optional with a default so documents written before them still validate:
+Citation.updated_as_on; Run.provider, Run.seeded and Run.rbi_as_on. EvalResults (with EvalCondition,
+EvalMetric, EvalCell, EvalCorpus) is the shape of eval_results/latest that the Evaluation page reads.
+
+Dates: snapshot_date and corpus_as_on are the date the RBI pages were fetched. updated_as_on and rbi_as_on are
+RBI's own "updated as on" date for the instrument in force; withdrawn_on / withdrawn_by say when and by what
+a withdrawn instrument stopped being in force.
 """
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StringConstraints, model_validator
 
 SCHEMA_VERSION = "v0.1"
 
@@ -111,10 +120,10 @@ class Citation(BaseModel):
     snapshot_date: str  # date the snapshot was taken, ISO
     content_hash: str  # sha256 of the paragraph text in the snapshot
     in_force: bool
-    withdrawn_by: str | None = (
-        None  # instrument_ref of the instrument that withdrew it, when the corpus has it
-    )
+    withdrawn_by: str | None = None  # instrument_ref of the instrument that withdrew it (corpus withdrawn_by)
     withdrawn_on: str | None = None  # ISO date the instrument stopped being in force (corpus valid_to)
+    # ISO date of RBI's "updated as on" line for an instrument in force; None when withdrawn.
+    updated_as_on: str | None = None
 
 
 class Check(BaseModel):
@@ -219,8 +228,77 @@ class Run(BaseModel):
     finished_at: datetime | None = None
     agent_model: str
     monitor_model: str
-    corpus_as_on: str
+    corpus_as_on: str  # date the RBI pages were fetched (the library snapshot), ISO
     clauses: list[RunClause] = Field(default_factory=list)
     summary: RunSummary = Field(default_factory=RunSummary)
     latency_ms: int | None = None
     cost_usd_estimate: float | None = None
+    provider: str | None = None  # LLM provider of the run (config.Settings.provider): vertex in the cloud
+    seeded: bool = False  # True for runs written by a seed script with made-up content, never a real review
+    rbi_as_on: str | None = None  # RBI's "updated as on" date of the instrument in force at the run, ISO
+
+
+# ---- eval_results/latest: the Evaluation page (web/src/eval/evalResults.ts) ------------------------------
+
+MetricUnit = Literal["ratio", "seconds", "usd", "count"]
+NonBlank = Annotated[str, StringConstraints(pattern=r"\S")]  # what the page's parser accepts as a string
+
+
+class _EvalModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class EvalCondition(_EvalModel):
+    id: NonBlank
+    label: NonBlank
+
+
+class EvalMetric(_EvalModel):
+    id: NonBlank
+    label: NonBlank
+    unit: MetricUnit  # ratio is 0..1 (shown as a percentage)
+
+
+class EvalCell(_EvalModel):
+    metric: NonBlank
+    condition: NonBlank
+    value: float | None = Field(default=None, ge=0)  # None: not measured yet
+    n_label: NonBlank | None = None  # sample size in words; required with a value
+
+    @model_validator(mode="after")
+    def _value_has_sample_size(self) -> Self:
+        if self.value is not None and self.n_label is None:
+            raise ValueError(f"{self.metric}/{self.condition}: a measured value must say its sample size")
+        return self
+
+
+class EvalCorpusDocument(_EvalModel):
+    instrument: NonBlank
+    instrument_ref: NonBlank
+
+
+class EvalCorpus(_EvalModel):
+    documents: list[EvalCorpusDocument]
+    as_on: NonBlank
+    paragraphs: int = Field(ge=0)
+    supersession_rows: int = Field(ge=0)
+
+
+class EvalResults(_EvalModel):
+    run_date: NonBlank  # ISO date the evaluation ran
+    conditions: list[EvalCondition]
+    metrics: list[EvalMetric]
+    results: list[EvalCell]
+    corpus: EvalCorpus | None = None
+    failure_cases: list[NonBlank] = Field(default_factory=list)  # plain-English sentences
+
+    @model_validator(mode="after")
+    def _cells_name_known_rows(self) -> Self:
+        metrics = {m.id for m in self.metrics}
+        conditions = {c.id for c in self.conditions}
+        for cell in self.results:
+            if cell.metric not in metrics:
+                raise ValueError(f"result metric {cell.metric!r} is not in metrics")
+            if cell.condition not in conditions:
+                raise ValueError(f"result condition {cell.condition!r} is not in conditions")
+        return self
