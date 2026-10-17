@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Top bar and run banners (UI_SPEC 2, 5 honest labels, 6 states).
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { run } from "../data/fixtures.test-util";
 import { RunFailedBanner, StartProblemBanner } from "./banners";
 import { libraryLabel, recordedAt, runLibrary, type LibraryDates } from "./format";
@@ -59,11 +59,17 @@ describe("TopBar", () => {
     render(<TopBar route={{ screen: "review", ...ref }} runRef={ref} run={live.ready(null)} library={null} />);
     expect(screen.getByText("Live run starting…")).toBeTruthy();
   });
+
+  it("labels a live run whose start failed as not started, not as starting", () => {
+    const ref = { source: "runs" as const, runId: ID };
+    render(<TopBar route={{ screen: "review", ...ref }} runRef={ref} run={live.ready(null)} library={null} startFailed />);
+    expect(runName()).toBe("Live run not started");
+  });
 });
 
 describe("run banners", () => {
   it("live review unavailable offers the saved run with its recording time", () => {
-    render(<StartProblemBanner problem={{ kind: "unavailable", message: "FAKE quota reached" }} saved={saved} />);
+    render(<StartProblemBanner problem={{ kind: "unavailable", message: "FAKE quota reached" }} saved={saved} onRetry={() => undefined} />);
     const alert = screen.getByRole("alert");
     expect(alert.textContent).toMatch(`Live review is temporarily unavailable. Open the saved run recorded at ${recordedAt(saved)}?`);
     expect(alert.textContent).toMatch(/FAKE quota reached/);
@@ -71,8 +77,18 @@ describe("run banners", () => {
   });
 
   it("a start error says what failed and that no saved run exists when none does", () => {
-    render(<StartProblemBanner problem={{ kind: "error", title: "FAKE title", message: "FAKE message" }} saved={null} />);
+    render(<StartProblemBanner problem={{ kind: "error", title: "FAKE title", message: "FAKE message" }} saved={null} onRetry={() => undefined} />);
     expect(screen.getByRole("alert").textContent).toMatch(/FAKE title.*FAKE message.*No saved run of this policy is available yet/s);
+  });
+
+  it.each([
+    { kind: "error", title: "FAKE title", message: "FAKE message" },
+    { kind: "unavailable", message: "FAKE quota reached" },
+  ] as const)("every start problem ($kind) offers Try again", (problem) => {
+    const onRetry = vi.fn();
+    render(<StartProblemBanner problem={problem} saved={saved} onRetry={onRetry} />);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
   it("a failed run shows its recorded reason and offers the saved run", () => {

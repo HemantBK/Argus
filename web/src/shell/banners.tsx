@@ -1,6 +1,7 @@
 // Run-level banners shown above the Review and Audit screens (UI_SPEC 6): a live run that could not start, a
 // live review that is unavailable (model quota, kill switch, run cap), and a run that ended in failure. Each
-// says what happened in plain English and offers the saved run of the same policy, labelled as saved.
+// says what happened in plain English and offers the saved run of the same policy, labelled as saved. A start
+// problem also offers "Try again", which starts a new live run of the same policy.
 import type { ReactNode } from "react";
 import type { RunDoc } from "../data/types";
 import { recordedAt } from "./format";
@@ -19,7 +20,17 @@ function SavedRunOffer({ saved }: { saved: RunDoc | null }): ReactNode {
   );
 }
 
-export function StartProblemBanner({ problem, saved }: { problem: StartProblem; saved: RunDoc | null }): ReactNode {
+function TryAgain({ onRetry }: { onRetry: () => void }): ReactNode {
+  return (
+    <p className="banner-actions">
+      <button type="button" className="primary" onClick={onRetry}>
+        Try again
+      </button>
+    </p>
+  );
+}
+
+export function StartProblemBanner({ problem, saved, onRetry }: { problem: StartProblem; saved: RunDoc | null; onRetry: () => void }): ReactNode {
   if (problem.kind === "unavailable") {
     return (
       <div className="run-banner" role="alert">
@@ -29,6 +40,7 @@ export function StartProblemBanner({ problem, saved }: { problem: StartProblem; 
         </strong>
         <p className="banner-detail">{problem.message}</p>
         <SavedRunOffer saved={saved} />
+        <TryAgain onRetry={onRetry} />
       </div>
     );
   }
@@ -37,6 +49,7 @@ export function StartProblemBanner({ problem, saved }: { problem: StartProblem; 
       <strong>{problem.title}</strong>
       <p className="banner-detail">{problem.message}</p>
       <SavedRunOffer saved={saved} />
+      <TryAgain onRetry={onRetry} />
     </div>
   );
 }

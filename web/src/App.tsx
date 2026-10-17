@@ -73,9 +73,11 @@ interface ScreenProps {
   onRun: (policyId: string) => void;
   fallbackAsOn: string | null;
   /**
-   * The live run on screen was never started because its listeners were refused (useStartRun "blocked"). The
-   * shell's banner explains that and offers the saved run; the run screens would only repeat the same listener
-   * errors for a run that does not exist, so they are not rendered.
+   * The live run on screen could not be started and its run document does not exist: its listeners were refused
+   * (useStartRun "blocked") or POST /api/runs failed before the API created the run (network error, 4xx, 5xx,
+   * run cap, kill switch). The shell's banner says so and offers "Try again" and the saved run. The run screens
+   * are not rendered: for a run that does not exist they could only say "Waiting for the run to start", which
+   * would never change and would contradict the banner.
    */
   runNotStarted: boolean;
 }
@@ -96,16 +98,17 @@ function Screen({ route, saved, onRun, fallbackAsOn, runNotStarted }: ScreenProp
   }
 }
 
-function RunBanners({ runDoc, live, isStartedRun, offer }: {
+function RunBanners({ runDoc, live, isStartedRun, offer, onRetry }: {
   runDoc: RunDoc | null;
   live: StartRun;
   isStartedRun: boolean;
   offer: RunDoc | null;
+  onRetry: () => void;
 }): ReactNode {
   const problem = isStartedRun ? startProblem(live.post) : null;
   return (
     <>
-      {problem && <StartProblemBanner problem={problem} saved={offer} />}
+      {problem && <StartProblemBanner problem={problem} saved={offer} onRetry={onRetry} />}
       {isStartedRun && live.post.status === "waiting_for_listeners" && <StartingNotice />}
       {!problem && runDoc?.status === "failed" && <RunFailedBanner run={runDoc} saved={offer} />}
     </>
@@ -142,6 +145,12 @@ export function App(): ReactNode {
     routeRun !== null && routeRun.source === "runs" && started !== null && routeRun.runId === started.runId && live.runId === started.runId;
   const policyId = runDoc?.policy_id ?? (isStartedRun ? started.policyId : null);
   const offer = policyId === null ? null : savedRunFor(policyId, savedRuns, routeRun?.runId ?? null);
+  // The start failed (startProblem) and the API never created the run. A run the API created before failing
+  // (for example a 500 mid-review) still has content to show, so its screens stay, under the banner.
+  const runNotStarted = isStartedRun && startProblem(live.post) !== null && runDoc === null;
+  const retry = useCallback(() => {
+    if (started) onRun(started.policyId);
+  }, [started, onRun]);
 
   return (
     <>
@@ -149,15 +158,15 @@ export function App(): ReactNode {
       <a className="visually-hidden skip-link" href="#main" onClick={skipToMain}>
         Skip to main content
       </a>
-      <TopBar route={route} runRef={tabsRun} run={tabsRun ? run : null} library={library} />
+      <TopBar route={route} runRef={tabsRun} run={tabsRun ? run : null} library={library} startFailed={runNotStarted} />
       <div className="shell-banners">
         {signIn.status === "error" && (
           <ErrorBanner title="Could not sign in. Live runs cannot start until sign-in works." error={signIn.error} />
         )}
-        {routeRun && <RunBanners runDoc={runDoc} live={live} isStartedRun={isStartedRun} offer={offer} />}
+        {routeRun && <RunBanners runDoc={runDoc} live={live} isStartedRun={isStartedRun} offer={offer} onRetry={retry} />}
       </div>
       <main id="main" tabIndex={-1}>
-        <Screen route={route} saved={saved} onRun={onRun} fallbackAsOn={savedAsOn} runNotStarted={isStartedRun && live.post.status === "blocked"} />
+        <Screen route={route} saved={saved} onRun={onRun} fallbackAsOn={savedAsOn} runNotStarted={runNotStarted} />
       </main>
     </>
   );

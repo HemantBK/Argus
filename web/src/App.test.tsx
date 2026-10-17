@@ -9,11 +9,39 @@ import { run, T0 } from "./data/fixtures.test-util";
 import type { PostState } from "./data/useStartRun";
 import { libraryLabel, recordedAt } from "./shell/format";
 import { href } from "./shell/route";
+import { startProblem } from "./shell/startProblem";
 import { live } from "./shell/screens.test-util";
 import { DEMO_POLICY_ID } from "./start/catalog";
 
 const LIVE_ID = "0123456789ab4def8123456789abcdef";
 const SAVED_ID = "fedcba9876544321a123456789abcdef";
+const RETRY_ID = "abcdefabcdef4abc8abcabcdefabcdef";
+
+function httpError(status: number, detail: string): PostState {
+  return { status: "error", error: new ApiError("http", messageForStatus(status, detail), status, detail) };
+}
+
+/** Every way a live start can fail, as useStartRun reports it. */
+const FAILED_STARTS: [string, PostState][] = [
+  [
+    "network error (fetch rejected, as for a 500 without CORS headers)",
+    { status: "error", error: new ApiError("network", "Could not reach the Argus API at FAKE. Failed to fetch") },
+  ],
+  ["sign-in token unavailable", { status: "error", error: new ApiError("auth", "FAKE token refresh failed") }],
+  ["HTTP 400", httpError(400, "FAKE unknown policy")],
+  ["HTTP 401", httpError(401, "FAKE invalid token")],
+  ["HTTP 500", httpError(500, "FAKE Internal Server Error")],
+  ["HTTP 429 run cap", httpError(429, "FAKE daily cap reached")],
+  ["HTTP 503 kill switch", httpError(503, "FAKE kill switch")],
+  ["listeners refused", { status: "blocked", error: new Error("FAKE permission-denied") }],
+];
+
+/** The banner heading the shell shows for a start problem. */
+function bannerTitle(post: PostState): string {
+  const problem = startProblem(post);
+  if (!problem) throw new Error("not a start problem");
+  return problem.kind === "unavailable" ? "Live review is temporarily unavailable." : problem.title;
+}
 
 /** What the FAKE hooks return; each test sets it in beforeEach. */
 interface Fake {
@@ -70,10 +98,12 @@ beforeEach(() => {
   fake.runs = new Map([[`samples/${SAVED_ID}`, live.ready(saved)]]);
   fake.post = { status: "idle" };
   fake.liveRunId = null;
+  const ids = [LIVE_ID, RETRY_ID]; // a second start (Try again) gets a new run id
   fake.start = vi.fn(() => {
-    fake.liveRunId = LIVE_ID;
+    const id = ids.shift() ?? RETRY_ID;
+    fake.liveRunId = id;
     fake.post = { status: "waiting_for_listeners" };
-    return LIVE_ID;
+    return id;
   });
   fake.signIn = () => Promise.resolve({ uid: "FAKE-uid" });
 });
@@ -120,6 +150,59 @@ describe("App", () => {
     go(href.audit({ source: "runs", runId: LIVE_ID }));
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     expect(screen.queryByRole("heading", { name: "Audit log" })).toBeNull();
+  });
+
+  it.each(FAILED_STARTS)(
+    "a failed start (%s) shows a banner with Try again and the saved run instead of 'Waiting for the run to start'",
+    async (_, failure) => {
+      render(<App />);
+      fireEvent.click(screen.getByRole("button", { name: "Run demo on a sample NBFC policy" }));
+      fake.runs.set(`runs/${LIVE_ID}`, live.ready(null)); // the API never created the run
+      fake.post = failure;
+      go(window.location.hash);
+
+      const alert = await screen.findByRole("alert");
+      expect(alert.querySelector("strong")?.textContent).toContain(bannerTitle(failure));
+      expect(alert.textContent).toContain(failure.status === "error" || failure.status === "blocked" ? failure.error.message : "");
+      expect(screen.getByRole("link", { name: `Open the saved run recorded at ${recordedAt(saved)}` }).getAttribute("href")).toBe(
+        href.review({ source: "samples", runId: SAVED_ID }),
+      );
+      // Nothing on the page still says the run is starting.
+      expect(screen.queryByTestId("review")).toBeNull();
+      expect(document.body.textContent).not.toMatch(/Waiting for the run to start|Live run starting|Starting the live review/);
+      expect(document.querySelector(".topbar-run")?.textContent).toBe("Live run not started");
+
+      // Try again starts a new live run of the same policy and opens it.
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(fake.start).toHaveBeenCalledTimes(2);
+      expect(fake.start).toHaveBeenLastCalledWith(DEMO_POLICY_ID);
+      expect(window.location.hash).toBe(href.review({ source: "runs", runId: RETRY_ID }));
+      go(window.location.hash);
+      expect((await screen.findByTestId("review")).textContent).toBe(`runs/${RETRY_ID}`);
+      expect(screen.queryByRole("alert")).toBeNull();
+    },
+  );
+
+  it("offers Try again without a saved-run link when the policy has no saved run", async () => {
+    fake.saved = live.ready({ runs: [], invalid: [] });
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Run demo on a sample NBFC policy" }));
+    fake.post = httpError(500, "FAKE Internal Server Error");
+    go(window.location.hash);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/No saved run of this policy is available yet/);
+    expect(screen.queryByRole("link", { name: /Open the saved run/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("keeps the Review screen under the banner when the API created the run before the start failed", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Run demo on a sample NBFC policy" }));
+    fake.runs.set(`runs/${LIVE_ID}`, live.ready(run({ run_id: LIVE_ID, policy_id: DEMO_POLICY_ID, status: "running" })));
+    fake.post = httpError(500, "FAKE crashed mid-review");
+    go(window.location.hash);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/FAKE crashed mid-review/);
+    expect(screen.getByTestId("review").textContent).toBe(`runs/${LIVE_ID}`);
   });
 
   it("shows the run-failed banner above the Audit log, offering the saved run", async () => {

@@ -16,9 +16,14 @@ export interface TopBarProps {
   run: LiveRead<RunDoc | null> | null;
   /** The RBI library dates to show, or null when no data has given them yet. */
   library: LibraryDates | null;
+  /** The live run on screen could not be started (the shell's banner says why), so it is not "starting". */
+  startFailed?: boolean;
 }
 
-function RunName({ runRef, run }: { runRef: RunRef; run: LiveRead<RunDoc | null> | null }): ReactNode {
+function RunName({ runRef, run, startFailed }: { runRef: RunRef; run: LiveRead<RunDoc | null> | null; startFailed: boolean }): ReactNode {
+  if (startFailed && (!run || run.status !== "ready" || run.data === null)) {
+    return <span className="topbar-run text-muted">Live run not started</span>;
+  }
   if (!run || run.status === "loading" || run.status === "idle") {
     return <span className="topbar-run text-muted">Loading run…</span>;
   }
@@ -59,14 +64,14 @@ function Tab({ label, to, current, disabledReason }: { label: string; to: string
   );
 }
 
-export function TopBar({ route, runRef, run, library }: TopBarProps): ReactNode {
+export function TopBar({ route, runRef, run, library, startFailed = false }: TopBarProps): ReactNode {
   const noRun = "Run the demo or open a saved run first.";
   return (
     <header className="topbar">
       <a className="topbar-brand" href={href.start()}>
         Argus
       </a>
-      {runRef && <RunName runRef={runRef} run={run} />}
+      {runRef && <RunName runRef={runRef} run={run} startFailed={startFailed} />}
       <nav aria-label="Screens" className="topbar-nav">
         <ul>
           <Tab label="Review" to={runRef ? href.review(runRef) : null} current={route.screen === "review"} disabledReason={noRun} />

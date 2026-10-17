@@ -99,7 +99,8 @@
   color: var(--status-gap);
 }
 .banner-detail,
-.banner-offer {
+.banner-offer,
+.banner-actions {
   margin: var(--space) 0 0;
 }
 .run-notice {
