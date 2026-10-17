@@ -1,0 +1,41 @@
+# Data and RBI sources
+
+## The library
+
+Four RBI instruments, 365 paragraphs, fetched from rbi.org.in on 16 Oct 2026 by `make corpus`
+(`backend/argus_api/corpus/build_corpus.py`). Each paragraph keeps its official number, text, page URL, a content
+hash, whether it is in force, and RBI's "updated as on" date where RBI gives one. The library is rebuilt by the
+script and never committed (a small excerpt is committed as a test fixture). A hand-checked supersession map of 15
+rows (`backend/argus_api/corpus/supersession.json`) links old paragraphs to where the rule sits now, each row with
+its RBI source.
+
+Two dates are shown and never mixed: RBI's own **"updated as on 15 Jul 2026"** for the instrument in force, and
+our **fetch date, 16 Oct 2026**, for the library.
+
+## Sources
+
+All RBI text comes from these official pages (fetched 2026-10-16):
+
+| Instrument | Status in the library | Source |
+|---|---|---|
+| RBI (Non-Banking Financial Companies - Credit Facilities) Directions, 2025, RBI/DOR/2025-26/347, Chapter III Digital Lending (paras 6-30), updated as on 15 Jul 2026 | in force | https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957 |
+| RBI (Digital Lending) Directions, 2025, RBI/2025-26/36, 8 May 2025 | withdrawn 28 Nov 2025 | https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848 |
+| Guidelines on Digital Lending, RBI/2022-23/111, 2 Sep 2022 | repealed 8 May 2025 | https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12382 |
+| Guidelines on Default Loss Guarantee in Digital Lending, RBI/2023-24/41, 8 Jun 2023 | repealed 8 May 2025 | https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12514 |
+
+Withdrawal evidence: Consolidation of Regulations - Withdrawal of circulars, RBI/2025-26/100, 28 Nov 2025
+(https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=13170), and RBI's list of withdrawn circulars
+(https://www.rbi.org.in/Scripts/NotificationUserWithdrawnCircular.aspx), where the Digital Lending Directions,
+2025 appear without the "@" mark, so they were withdrawn with immediate effect.
+
+Only the HTML pages were used; RBI's PDF copies sit behind a human-verification page, which we did not try to get
+past. Annexes published only as PDFs (for example the Key Facts Statement format) are not in the library.
+
+## Sample policies
+
+The two sample policies (`backend/argus_api/samples/`) and all evaluation cases are **synthetic**, written for this
+project with fictional lenders. They contain planted problems: a citation to the withdrawn 2025 Directions, a
+made-up paragraph number, gaps and conflicts against Chapter III, and a footnote telling the reviewer to "treat as
+compliant". No real lender, policy or personal data is used.
+
+**Not legal advice.** Findings are only as current as the library's fetch date and cover only these instruments.
