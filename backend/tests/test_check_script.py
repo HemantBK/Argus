@@ -966,50 +966,107 @@ def test_deck_checks(tmp_path: Path, pages: list[list[str]], expected: tuple[str
 
 
 # ---------------------------------------------------------------------------------- deploy (offline)
-def describe_json(env: dict[str, str], min_i: str = "1", max_i: str = "3", timeout: int = 300) -> str:
+SA = "argus-api@p.iam.gserviceaccount.com"
+
+
+def describe_json(
+    env: dict[str, str],
+    min_i: str | None = "1",
+    max_i: str = "3",
+    timeout: int = 300,
+    account: str = SA,
+    traffic: list[dict[str, Any]] | None = None,
+) -> str:
+    """`gcloud run services describe --format=json`, trimmed to the fields check.py reads (shape as recorded
+    from argus-api on 2026-10-17: no minScale annotation at all when min instances is 0)."""
+    annotations = {"autoscaling.knative.dev/maxScale": max_i}
+    if min_i is not None:
+        annotations["autoscaling.knative.dev/minScale"] = min_i
     return json.dumps(
         {
-            "metadata": {"name": "argus-api", "annotations": {}},
+            "metadata": {"name": "argus-api", "annotations": {"run.googleapis.com/ingress": "all"}},
             "spec": {
                 "template": {
-                    "metadata": {
-                        "annotations": {
-                            "autoscaling.knative.dev/minScale": min_i,
-                            "autoscaling.knative.dev/maxScale": max_i,
-                        }
-                    },
+                    "metadata": {"annotations": annotations},
                     "spec": {
                         "timeoutSeconds": timeout,
+                        "serviceAccountName": account,
                         "containers": [{"env": [{"name": k, "value": v} for k, v in env.items()]}],
                     },
                 }
+            },
+            "status": {
+                "latestReadyRevisionName": "argus-api-00003-6xj",
+                "traffic": traffic
+                if traffic is not None
+                else [{"latestRevision": True, "percent": 100, "revisionName": "argus-api-00003-6xj"}],
             },
         }
     )
 
 
+CLOUD_ENV = {
+    "ARGUS_MODE": "cloud",
+    "GOOGLE_CLOUD_PROJECT": "p",
+    "GOOGLE_CLOUD_LOCATION": "global",
+    "ARGUS_ALLOWED_ORIGINS": "https://p.web.app",
+    "ARGUS_GIT_SHA": "abc",
+}
+OLD_REVISION = [
+    {"latestRevision": False, "percent": 100, "revisionName": "argus-api-00002-qqg"},
+    {"latestRevision": True, "percent": 0, "revisionName": "argus-api-00003-6xj"},
+]
+
+
 @pytest.mark.parametrize(
-    ("env", "scale", "expected"),
+    ("env", "kwargs", "allow_min_zero", "expected"),
     [
-        ({"ARGUS_MODE": "cloud"}, ("1", "3", 300), check.PASS),
-        ({"ARGUS_MODE": "local"}, ("1", "3", 300), check.FAIL),
-        ({"ARGUS_MODE": "cloud", "OPENROUTER_API_KEY": "x"}, ("1", "3", 300), check.FAIL),
-        ({"ARGUS_MODE": "cloud", "ARGUS_AGENT_MODEL": "x"}, ("1", "3", 300), check.FAIL),
-        ({"ARGUS_MODE": "cloud"}, ("0", "3", 300), check.FAIL),
-        ({"ARGUS_MODE": "cloud"}, ("1", "10", 300), check.FAIL),
-        ({"ARGUS_MODE": "cloud"}, ("1", "3", 60), check.FAIL),
+        (CLOUD_ENV, {}, False, check.PASS),
+        ({**CLOUD_ENV, "ARGUS_MODE": "local"}, {}, False, check.FAIL),
+        ({**CLOUD_ENV, "OPENROUTER_API_KEY": "x"}, {}, False, check.FAIL),
+        ({**CLOUD_ENV, "ARGUS_AGENT_MODEL": "x"}, {}, False, check.FAIL),
+        ({**CLOUD_ENV, "SOME_API_KEY": "x"}, {}, False, check.FAIL),
+        ({**CLOUD_ENV, "FIRESTORE_EMULATOR_HOST": "x"}, {}, False, check.FAIL),
+        ({**CLOUD_ENV, "OPENROUTER_BASE": "x"}, {}, False, check.FAIL),
+        (CLOUD_ENV, {"min_i": "0"}, False, check.FAIL),
+        (CLOUD_ENV, {"min_i": None}, False, check.FAIL),
+        (CLOUD_ENV, {"min_i": None}, True, check.PASS),
+        (CLOUD_ENV, {"min_i": "0"}, True, check.PASS),
+        (CLOUD_ENV, {"min_i": "2"}, True, check.FAIL),
+        (CLOUD_ENV, {"max_i": "10"}, False, check.FAIL),
+        (CLOUD_ENV, {"timeout": 60}, False, check.FAIL),
+        (CLOUD_ENV, {"account": "419264532549-compute@developer.gserviceaccount.com"}, False, check.FAIL),
+        (CLOUD_ENV, {"traffic": OLD_REVISION}, False, check.FAIL),
     ],
-    ids=["good", "local-mode", "openrouter-key", "model-override", "min-0", "max-10", "timeout-60"],
+    ids=[
+        "good",
+        "local-mode",
+        "openrouter-key",
+        "model-override",
+        "any-key-name",
+        "emulator",
+        "openrouter-other",
+        "min-0",
+        "min-unset",
+        "min-unset-allowed",
+        "min-0-allowed",
+        "min-2-allowed-flag",
+        "max-10",
+        "timeout-60",
+        "default-compute-sa",
+        "traffic-on-old-revision",
+    ],
 )
 def test_run_config_reads_the_service_description(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     env: dict[str, str],
-    scale: tuple[str, str, int],
+    kwargs: dict[str, Any],
+    allow_min_zero: bool,
     expected: str,
 ) -> None:
     def fake_gcloud(ctx: Any, *args: str) -> Any:
-        return check.CmdRun("gcloud " + " ".join(args), ".", 0, describe_json(env, *scale), "t", 0.0)
+        return check.CmdRun("gcloud " + " ".join(args), ".", 0, describe_json(env, **kwargs), "t", 0.0)
 
     monkeypatch.setattr(check, "_gcloud", fake_gcloud)
     result = run_one(
@@ -1019,8 +1076,10 @@ def test_run_config_reads_the_service_description(
         service_url="https://x.run.app",
         service="argus-api",
         region="asia-south1",
+        allow_min_zero=allow_min_zero,
     )
     assert result.status == expected, (result.reason, result.details)
+    assert "argus-api-00003-6xj" in result.reason
 
 
 def test_deploy_without_project_is_blocked(tmp_path: Path) -> None:
@@ -1114,6 +1173,706 @@ def test_deploy_samples_blocked_without_access(
 
 def test_sample_provider_matches_the_backend() -> None:
     assert check.SAMPLE_PROVIDER == SAMPLE_PROVIDER
+
+
+# ---------------------------------------------------------------------------------- deploy: recorded fakes
+# Responses below copy the shape of what the live services returned on 2026-10-17 (values shortened).
+LIVE = {
+    "project": "p",
+    "service_url": "https://argus-api-1.asia-south1.run.app",
+    "hosting_origin": "https://p.web.app",
+}
+PROJECT_NUMBER = "419264532549"
+WEB_KEY = key("AIza", 35, "W")
+
+
+def route_http(
+    monkeypatch: pytest.MonkeyPatch, routes: dict[str, tuple[int | None, Any]]
+) -> list[tuple[str, dict[str, Any]]]:
+    """Answer check.http from routes {url substring: (status, body)}; the longest matching substring wins.
+    A dict or list body is sent as JSON. An unmatched URL is unreachable, so a missed route shows up."""
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_http(ctx: Any, url: str, **kwargs: Any) -> Any:
+        calls.append((url, kwargs))
+        matches = [k for k in routes if k in url]
+        if not matches:
+            return check.HttpResult(None, url, {}, b"", "no route in test")
+        status, body = routes[max(matches, key=len)]
+        raw = json.dumps(body).encode() if isinstance(body, (dict, list)) else body
+        return check.HttpResult(status, url, {}, raw, "" if status else "down")
+
+    monkeypatch.setattr(check, "http", fake_http)
+    return calls
+
+
+def route_gcloud(monkeypatch: pytest.MonkeyPatch, routes: dict[str, tuple[int, Any]]) -> list[str]:
+    """Answer check._gcloud from routes {joined-args prefix: (exit code, stdout)}."""
+    calls: list[str] = []
+
+    def fake_gcloud(ctx: Any, *args: str) -> Any:
+        joined = " ".join(args)
+        calls.append(joined)
+        for prefix, (code, out) in routes.items():
+            if joined.startswith(prefix):
+                text = json.dumps(out) if isinstance(out, (dict, list)) else str(out)
+                return check.CmdRun("gcloud " + joined, ".", code, text, "t", 0.0)
+        return check.CmdRun("gcloud " + joined, ".", 1, "no route in test", "t", 0.0)
+
+    monkeypatch.setattr(check, "_gcloud", fake_gcloud)
+    return calls
+
+
+@pytest.fixture
+def logged_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(check.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(check, "_gcloud_token", lambda ctx: "token")
+
+
+# ---------------------------------------------------------------------------------- D-HEALTH
+MODELS = ("gemini-agent-x", "gemini-monitor-y")
+CORPUS = "c" * 64
+SHA = "a" * 40
+HEALTH = {
+    "status": "ok",
+    "git_sha": SHA,
+    "mode": "cloud",
+    "provider": "vertex",
+    "agent_model": MODELS[0],
+    "monitor_model": MODELS[1],
+    "location": "global",
+    "corpus_hash": CORPUS,
+}
+
+
+@pytest.mark.parametrize(
+    ("change", "expect_sha", "expected"),
+    [
+        ({}, SHA, check.PASS),
+        ({}, None, check.PASS),
+        ({"git_sha": "b" * 40}, SHA, check.FAIL),
+        ({"git_sha": "unknown"}, None, check.FAIL),
+        ({"mode": "local"}, SHA, check.FAIL),
+        ({"provider": "openrouter"}, SHA, check.FAIL),
+        ({"agent_model": "gemini-latest"}, SHA, check.FAIL),
+        ({"monitor_model": "other"}, SHA, check.FAIL),
+        ({"location": "asia-south1"}, SHA, check.FAIL),
+        ({"corpus_hash": "d" * 64}, SHA, check.FAIL),
+    ],
+    ids=[
+        "good",
+        "good-no-sha",
+        "other-sha",
+        "sha-unknown",
+        "local",
+        "openrouter",
+        "agent",
+        "monitor",
+        "location",
+        "corpus",
+    ],
+)
+def test_deploy_health_compares_every_field(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    change: dict[str, str],
+    expect_sha: str | None,
+    expected: str,
+) -> None:
+    route_http(monkeypatch, {"/health": (200, {**HEALTH, **change})})
+    monkeypatch.setattr(check, "repo_pinned_models", lambda ctx: MODELS)
+    monkeypatch.setattr(check, "repo_corpus_hash", lambda ctx: CORPUS)
+    result = run_one(tmp_path, check.check_deploy_health, **LIVE, expect_sha=expect_sha)
+    assert result.status == expected, (result.reason, result.details)
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "expected"),
+    [(None, b"", check.BLOCKED), (503, b"{}", check.FAIL), (200, b"<html>", check.FAIL)],
+    ids=["unreachable", "503", "not-json"],
+)
+def test_deploy_health_bad_answers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: int | None, body: bytes, expected: str
+) -> None:
+    route_http(monkeypatch, {"/health": (status, body)})
+    monkeypatch.setattr(check, "repo_pinned_models", lambda ctx: MODELS)
+    monkeypatch.setattr(check, "repo_corpus_hash", lambda ctx: CORPUS)
+    assert run_one(tmp_path, check.check_deploy_health, **LIVE).status == expected
+
+
+def test_repo_pinned_models_are_the_vertex_pins() -> None:
+    from argus_api.config import PINNED_MODELS
+
+    assert check.repo_pinned_models(ctx_for(REPO)) == PINNED_MODELS["vertex"]
+
+
+@pytest.mark.skipif(not (REPO / "backend/data/corpus/paragraphs.json").is_file(), reason="no local corpus")
+def test_repo_corpus_hash_is_the_loaded_corpus_hash() -> None:
+    from argus_api.corpus.store import Corpus
+
+    assert check.repo_corpus_hash(ctx_for(REPO)) == Corpus.load().corpus_hash
+
+
+# ---------------------------------------------------------------------------------- D-WEB, D-WEB-SECRETS
+INDEX_HTML = (
+    b'<!doctype html><link rel="icon" href="/favicon.svg" />'
+    b'<script type="module" crossorigin src="/assets/index-abc.js"></script>'
+    b'<link rel="stylesheet" crossorigin href="/assets/index-def.css">'
+)
+
+
+def bundle(extra: str = "") -> bytes:
+    config = f'const c={{apiKey:"{WEB_KEY}",authDomain:"p.firebaseapp.com"}};'
+    api = 'const API="https://argus-api-1.asia-south1.run.app";'
+    return (config + api + extra + "\n//# sourceMappingURL=index-abc.js.map\n").encode()
+
+
+def web_repo(tmp_path: Path, js: bytes, *, dist: bool = True, env_key: str | None = WEB_KEY) -> Path:
+    repo = tmp_path / "repo"
+    (repo / "web" / "dist" / "assets").mkdir(parents=True)
+    if dist:
+        (repo / "web" / "dist" / "index.html").write_bytes(INDEX_HTML)
+        (repo / "web" / "dist" / "assets" / "index-abc.js").write_bytes(js)
+        (repo / "web" / "dist" / "assets" / "index-def.css").write_bytes(b"body{}")
+    if env_key is not None:
+        (repo / "web" / ".env.production.local").write_text(
+            f"# public web config\nVITE_USE_EMULATORS=false\nVITE_FIREBASE_API_KEY={env_key}\n",
+            encoding="utf-8",
+        )
+    return repo
+
+
+def site_routes(
+    js: bytes, source_map: Any = None, index: tuple[int, bytes] = (200, INDEX_HTML)
+) -> dict[str, Any]:
+    routes: dict[str, Any] = {
+        "web.app/": index,
+        "/assets/index-abc.js": (200, js),
+        "/assets/index-def.css": (200, b"body{}"),
+        "/assets/index-abc.js.map": (404, b"") if source_map is None else (200, source_map),
+    }
+    return routes
+
+
+@pytest.mark.parametrize(
+    ("served_js", "index", "dist", "expected"),
+    [
+        (bundle(), (200, INDEX_HTML), True, check.PASS),
+        (bundle("changed"), (200, INDEX_HTML), True, check.FAIL),
+        (bundle(), (404, b"not found"), True, check.FAIL),
+        (bundle(), (None, b""), True, check.BLOCKED),
+        (bundle(), (200, INDEX_HTML), False, check.BLOCKED),
+        (bundle(), (200, INDEX_HTML.replace(b"index-def.css", b"index-new.css")), True, check.FAIL),
+    ],
+    ids=["equal", "asset-differs", "index-404", "unreachable", "no-dist", "asset-not-in-dist"],
+)
+def test_deploy_web_serves_web_dist(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    served_js: bytes,
+    index: tuple[int | None, bytes],
+    dist: bool,
+    expected: str,
+) -> None:
+    repo = web_repo(tmp_path, bundle(), dist=dist)
+    routes = site_routes(served_js, index=index)  # type: ignore[arg-type]
+    routes["/assets/index-new.css"] = (200, b"body{}")
+    route_http(monkeypatch, routes)
+    result = run_one(repo, check.check_deploy_web, **LIVE)
+    assert result.status == expected, (result.reason, result.details)
+
+
+@pytest.mark.parametrize(
+    ("js", "source_map", "env_key", "expected"),
+    [
+        (bundle(), None, WEB_KEY, check.PASS),
+        (bundle(), b'{"sourcesContent":["export const x = 1"]}', WEB_KEY, check.PASS),
+        (bundle(f'const k="{key("AIza", 35, "Z")}";'), None, WEB_KEY, check.FAIL),
+        (bundle(), None, key("AIza", 35, "Z"), check.FAIL),
+        (
+            bundle(),
+            json.dumps({"sourcesContent": [f'k="{key("sk-or-v1-", 40, "b")}"']}).encode(),
+            WEB_KEY,
+            check.FAIL,
+        ),
+        (bundle('const n="OPENROUTER_' + 'API_KEY";'), None, WEB_KEY, check.FAIL),
+        (bundle('{"private_' + 'key": "x"}'), None, WEB_KEY, check.FAIL),
+        (bundle(), None, None, check.BLOCKED),
+    ],
+    ids=[
+        "web-key-only",
+        "clean-source-map",
+        "second-google-key",
+        "key-not-the-web-key",
+        "secret-in-source-map",
+        "server-env-name",
+        "private-key-field",
+        "no-env-file",
+    ],
+)
+def test_deploy_web_secrets_allow_only_the_web_api_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    js: bytes,
+    source_map: bytes | None,
+    env_key: str | None,
+    expected: str,
+) -> None:
+    repo = web_repo(tmp_path, js, env_key=env_key)
+    route_http(monkeypatch, site_routes(js, source_map))
+    result = run_one(repo, check.check_deploy_web_secrets, **LIVE)
+    assert result.status == expected, (result.reason, result.details)
+    report = result.reason + " ".join(result.details)
+    assert key("sk-or-v1-", 40, "b") not in report and key("AIza", 35, "Z") not in report
+
+
+def test_served_assets_reads_script_and_style_links() -> None:
+    assert check.served_assets(INDEX_HTML.decode()) == ["/assets/index-abc.js", "/assets/index-def.css"]
+
+
+# ---------------------------------------------------------------------------------- D-NO-TOKEN
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [(401, check.PASS), (200, check.FAIL), (422, check.FAIL), (500, check.FAIL), (None, check.BLOCKED)],
+)
+def test_deploy_no_token_post_is_401(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: int | None, expected: str
+) -> None:
+    calls = route_http(monkeypatch, {"/api/runs": (status, {"detail": "Missing bearer token"})})
+    assert run_one(tmp_path, check.check_deploy_no_token, **LIVE).status == expected
+    [(url, kwargs)] = calls
+    assert kwargs["method"] == "POST" and "Authorization" not in kwargs.get("headers", {})
+
+
+# ---------------------------------------------------------------------------------- D-SA-ROLES
+def iam_policy(roles: list[str]) -> dict[str, Any]:
+    member = "serviceAccount:argus-api@p.iam.gserviceaccount.com"
+    bindings = [{"role": r, "members": [member]} for r in roles]
+    bindings.append({"role": "roles/owner", "members": ["user:owner@example.com"]})
+    return {"bindings": bindings, "etag": "x", "version": 1}
+
+
+FOUR_ROLES = [
+    "roles/aiplatform.user",
+    "roles/datastore.user",
+    "roles/firebaseauth.viewer",
+    "roles/logging.logWriter",
+]
+
+
+@pytest.mark.parametrize(
+    ("code", "roles", "expected"),
+    [
+        (0, FOUR_ROLES, check.PASS),
+        (0, [*FOUR_ROLES, "roles/editor"], check.FAIL),
+        (0, FOUR_ROLES[:3], check.FAIL),
+        (1, FOUR_ROLES, check.BLOCKED),
+    ],
+    ids=["exact", "extra-editor", "missing-logwriter", "gcloud-fails"],
+)
+def test_deploy_sa_roles_are_exactly_four(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, code: int, roles: list[str], expected: str
+) -> None:
+    route_gcloud(monkeypatch, {"projects get-iam-policy p": (code, iam_policy(roles))})
+    result = run_one(tmp_path, check.check_deploy_sa_roles, **LIVE)
+    assert result.status == expected, (result.reason, result.details)
+
+
+# ---------------------------------------------------------------------------------- D-RULES
+RULES_TEXT = "rules_version = '2';\nservice cloud.firestore {\n}\n"
+
+
+def rules_routes(deployed: str | None, status: int = 200) -> dict[str, Any]:
+    release = {"name": "projects/p/releases/cloud.firestore", "rulesetName": "projects/p/rulesets/rs-1"}
+    return {
+        "/releases/cloud.firestore": (status, release if deployed is not None else {}),
+        "/projects/p/rulesets/rs-1": (
+            200,
+            {
+                "name": "projects/p/rulesets/rs-1",
+                "source": {"files": [{"name": "firestore.rules", "content": deployed}]},
+            },
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    ("deployed", "status", "expected"),
+    [
+        (RULES_TEXT, 200, check.PASS),
+        (RULES_TEXT.replace("{\n}", "{ match /{d=**} { allow read; } }"), 200, check.FAIL),
+        (None, 200, check.FAIL),
+        (RULES_TEXT, 403, check.BLOCKED),
+    ],
+    ids=["equal", "differs", "never-deployed", "forbidden"],
+)
+def test_deploy_rules_equal_the_repo_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logged_in: None,
+    deployed: str | None,
+    status: int,
+    expected: str,
+) -> None:
+    (tmp_path / "firestore.rules").write_text(RULES_TEXT, encoding="utf-8")
+    route_http(monkeypatch, rules_routes(deployed, status))
+    result = run_one(tmp_path, check.check_deploy_rules, **LIVE)
+    assert result.status == expected, (result.reason, result.details)
+
+
+# ---------------------------------------------------------------------------------- D-ANON-AUTH
+@pytest.mark.parametrize(
+    ("status", "config", "expected"),
+    [
+        (
+            200,
+            {
+                "signIn": {"anonymous": {"enabled": True}},
+                "authorizedDomains": ["p.firebaseapp.com", "p.web.app"],
+            },
+            check.PASS,
+        ),
+        (200, {"signIn": {"anonymous": {"enabled": False}}, "authorizedDomains": ["p.web.app"]}, check.FAIL),
+        (200, {"signIn": {}, "authorizedDomains": ["p.web.app"]}, check.FAIL),
+        (200, {"signIn": {"anonymous": {"enabled": True}}, "authorizedDomains": ["localhost"]}, check.FAIL),
+        (403, {}, check.BLOCKED),
+    ],
+    ids=["enabled", "disabled", "provider-absent", "domain-missing", "forbidden"],
+)
+def test_deploy_anon_auth_and_domains(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logged_in: None,
+    status: int,
+    config: dict[str, Any],
+    expected: str,
+) -> None:
+    calls = route_http(monkeypatch, {"/admin/v2/projects/p/config": (status, config)})
+    result = run_one(tmp_path, check.check_deploy_anon_auth, **LIVE)
+    assert result.status == expected, (result.reason, result.details)
+    assert calls[0][1]["headers"]["Authorization"] == "Bearer token"
+
+
+# ---------------------------------------------------------------------------------- D-API-KEY
+KEY_NAME = f"projects/{PROJECT_NUMBER}/locations/global/keys/k1"
+FIREBASE_TARGETS = [{"service": "identitytoolkit.googleapis.com"}, {"service": "firestore.googleapis.com"}]
+
+
+def api_key(referrers: list[str] | None, targets: list[dict[str, str]]) -> dict[str, Any]:
+    restrictions: dict[str, Any] = {"apiTargets": targets, "browserKeyRestrictions": {}}
+    if referrers is not None:
+        restrictions["browserKeyRestrictions"] = {"allowedReferrers": referrers}
+    return {
+        "name": KEY_NAME,
+        "displayName": "Browser key (auto created by Firebase)",
+        "restrictions": restrictions,
+    }
+
+
+@pytest.mark.parametrize(
+    ("lookup_name", "key_doc", "expected"),
+    [
+        (
+            KEY_NAME,
+            api_key(["https://p.web.app/*", "https://p.firebaseapp.com/*"], FIREBASE_TARGETS),
+            check.PASS,
+        ),
+        (KEY_NAME, api_key(None, FIREBASE_TARGETS), check.FAIL),  # as live on 2026-10-17
+        (KEY_NAME, api_key(["https://evil.example/*"], FIREBASE_TARGETS), check.FAIL),
+        (KEY_NAME, api_key(["p.web.app/*"], []), check.FAIL),
+        (KEY_NAME, api_key(["p.web.app/*"], [{"service": "generativelanguage.googleapis.com"}]), check.FAIL),
+        ("projects/999/locations/global/keys/k9", api_key(["p.web.app/*"], FIREBASE_TARGETS), check.FAIL),
+    ],
+    ids=[
+        "restricted",
+        "no-referrers",
+        "foreign-referrer",
+        "no-api-targets",
+        "gemini-target",
+        "other-project",
+    ],
+)
+def test_deploy_api_key_is_restricted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logged_in: None,
+    lookup_name: str,
+    key_doc: dict[str, Any],
+    expected: str,
+) -> None:
+    repo = web_repo(tmp_path, bundle(), dist=False)
+    calls = route_http(
+        monkeypatch,
+        {
+            "keys:lookupKey": (200, {"parent": lookup_name.rsplit("/keys/", 1)[0], "name": lookup_name}),
+            f"/v2/{KEY_NAME}": (200, key_doc),
+        },
+    )
+    route_gcloud(monkeypatch, {"projects describe p": (0, PROJECT_NUMBER + "\n")})
+    result = run_one(repo, check.check_deploy_api_key, **LIVE)
+    assert result.status == expected, (result.reason, result.details)
+    lookup_url, kwargs = calls[0]
+    assert WEB_KEY in lookup_url and WEB_KEY not in kwargs["shown_url"]  # the evidence never holds the key
+    assert "x-goog-user-project" not in kwargs["headers"]  # API Keys need not be enabled on the project
+
+
+# ---------------------------------------------------------------------------------- D-FIRESTORE-CORPUS
+def corpus_docs(collection: str, n: int) -> list[dict[str, Any]]:
+    docs = []
+    for i in range(n):
+        fields = {}
+        if collection == "rbi_paragraphs":
+            fields = {"id": {"stringValue": f"para-{i:03d}"}, "content_hash": {"stringValue": f"h{i}"}}
+        docs.append({"name": f"projects/p/databases/(default)/documents/{collection}/d{i}", "fields": fields})
+    return docs
+
+
+def corpus_hash_of(n: int) -> str:
+    from types import SimpleNamespace
+
+    from argus_api.corpus.store import corpus_hash
+
+    # corpus_hash reads only .id and .content_hash, so stand-ins are enough to compute the real function.
+    paragraphs: list[Any] = [SimpleNamespace(id=f"para-{i:03d}", content_hash=f"h{i}") for i in range(n)]
+    return corpus_hash(paragraphs)
+
+
+@pytest.mark.parametrize(
+    ("counts", "local_hash_n", "expected"),
+    [
+        ((365, 4, 15), 365, check.PASS),
+        ((364, 4, 15), 364, check.FAIL),
+        ((365, 3, 15), 365, check.FAIL),
+        ((365, 4, 16), 365, check.FAIL),
+        ((365, 4, 15), 364, check.FAIL),
+    ],
+    ids=["full", "paragraph-missing", "instrument-missing", "extra-row", "hash-differs"],
+)
+def test_deploy_firestore_corpus_counts_and_hash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logged_in: None,
+    counts: tuple[int, int, int],
+    local_hash_n: int,
+    expected: str,
+) -> None:
+    names = ("rbi_paragraphs", "rbi_instruments", "supersession")
+    routes: dict[str, Any] = {}
+    for name, n in zip(names, counts, strict=True):
+        docs = corpus_docs(name, n)
+        # two pages for the paragraphs, as the REST API pages at 300
+        routes[f"/documents/{name}?"] = (
+            200,
+            {"documents": docs[:300], **({"nextPageToken": "t2"} if n > 300 else {})},
+        )
+        routes[
+            f"/documents/{name}?pageSize=300&mask.fieldPaths=id&mask.fieldPaths=content_hash&pageToken=t2"
+        ] = (200, {"documents": docs[300:]})
+    route_http(monkeypatch, routes)
+    monkeypatch.setattr(check, "repo_corpus_hash", lambda ctx: corpus_hash_of(local_hash_n))
+    result = run_one(tmp_path, check.check_deploy_firestore_corpus, **LIVE)
+    assert result.status == expected, (result.reason, result.details)
+
+
+# ---------------------------------------------------------------------------------- D-LIMITS
+def limits_doc(**values: Any) -> dict[str, Any]:
+    def v(x: Any) -> dict[str, Any]:
+        return {"booleanValue": x} if isinstance(x, bool) else {"integerValue": str(x)}
+
+    return {
+        "name": "projects/p/databases/(default)/documents/config/limits",
+        "fields": {k: v(x) for k, x in values.items()},
+    }
+
+
+GOOD_LIMITS = {"daily_run_cap": 60, "hourly_run_cap": 20, "per_user_daily_run_cap": 5, "enabled": True}
+
+
+@pytest.mark.parametrize(
+    ("status", "values", "expected"),
+    [
+        (200, GOOD_LIMITS, check.PASS),
+        (200, {**GOOD_LIMITS, "per_user_daily_run_cap": 1}, check.FAIL),
+        (200, {**GOOD_LIMITS, "enabled": False}, check.FAIL),
+        (200, {**GOOD_LIMITS, "extra": 1}, check.FAIL),
+        (404, {}, check.FAIL),
+        (403, {}, check.BLOCKED),
+    ],
+    ids=["60-20-5-on", "user-cap-1", "kill-switch-on", "extra-field", "missing", "forbidden"],
+)
+def test_deploy_limits_read_back(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logged_in: None,
+    status: int,
+    values: dict[str, Any],
+    expected: str,
+) -> None:
+    route_http(monkeypatch, {"/documents/config/limits": (status, limits_doc(**values))})
+    result = run_one(tmp_path, check.check_deploy_limits, **LIVE)
+    assert result.status == expected, (result.reason, result.details)
+
+
+# ---------------------------------------------------------------------------------- D-UPTIME
+def uptime_config(host: str, path: str, check_id: str = "argus-health-x1") -> dict[str, Any]:
+    return {
+        "name": f"projects/p/uptimeCheckConfigs/{check_id}",
+        "displayName": "argus health",
+        "monitoredResource": {"type": "uptime_url", "labels": {"host": host, "project_id": "p"}},
+        "httpCheck": {"path": path, "port": 443, "useSsl": True},
+        "period": "300s",
+    }
+
+
+def alert_policy(check_id: str, enabled: bool = True) -> dict[str, Any]:
+    return {
+        "name": "projects/p/alertPolicies/1",
+        "displayName": "argus down",
+        "enabled": enabled,
+        "conditions": [
+            {
+                "conditionThreshold": {
+                    "filter": 'metric.type="monitoring.googleapis.com/uptime_check/check_passed" '
+                    f'AND metric.label.check_id="{check_id}" AND resource.type="uptime_url"'
+                }
+            }
+        ],
+    }
+
+
+API_HOST = "argus-api-1.asia-south1.run.app"
+
+
+@pytest.mark.parametrize(
+    ("configs", "policies", "expected"),
+    [
+        ([uptime_config(API_HOST, "/health")], [alert_policy("argus-health-x1")], check.PASS),
+        ([], [], check.FAIL),  # as live on 2026-10-17
+        ([uptime_config(API_HOST, "/")], [alert_policy("argus-health-x1")], check.FAIL),
+        ([uptime_config("p.web.app", "/health")], [alert_policy("argus-health-x1")], check.FAIL),
+        ([uptime_config(API_HOST, "/health")], [], check.FAIL),
+        ([uptime_config(API_HOST, "/health")], [alert_policy("argus-health-x1", enabled=False)], check.FAIL),
+        ([uptime_config(API_HOST, "/health")], [alert_policy("other-check")], check.FAIL),
+    ],
+    ids=["check-and-alert", "none", "wrong-path", "wrong-host", "no-alert", "alert-disabled", "alert-other"],
+)
+def test_deploy_uptime_check_and_alert(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logged_in: None,
+    configs: list[dict[str, Any]],
+    policies: list[dict[str, Any]],
+    expected: str,
+) -> None:
+    route_gcloud(monkeypatch, {"monitoring uptime list-configs": (0, configs)})
+    route_http(
+        monkeypatch, {"/v3/projects/p/alertPolicies": (200, {"alertPolicies": policies} if policies else {})}
+    )
+    result = run_one(tmp_path, check.check_deploy_uptime, **LIVE)
+    assert result.status == expected, (result.reason, result.details)
+    if not configs:
+        assert "no uptime check" in result.reason and "/health" in result.reason
+
+
+# ---------------------------------------------------------------------------------- deploy defaults
+def test_deploy_defaults_are_the_live_stack() -> None:
+    args = check.parse_args(["deploy", "--strict", "--allow-min-zero", "--expect-sha", SHA])
+    assert (args.project, args.hosting_origin) == ("argus-aibc", "https://argus-aibc.web.app")
+    assert (
+        args.service_url.endswith(".asia-south1.run.app") and args.allow_min_zero and args.expect_sha == SHA
+    )
+    assert check.parse_args(["deploy"]).allow_min_zero is False
+
+
+def test_every_deploy_check_has_an_offline_test() -> None:
+    tested = {
+        "D-HEALTH",
+        "D-WEB",
+        "D-WEB-SECRETS",
+        "D-CORS",
+        "D-NO-TOKEN",
+        "D-RUN-CONFIG",
+        "D-SA-ROLES",
+        "D-RULES",
+        "D-ANON-AUTH",
+        "D-API-KEY",
+        "D-FIRESTORE-CORPUS",
+        "D-LIMITS",
+        "D-BUDGET",
+        "D-UPTIME",
+        "D-SAMPLES",
+    }
+    assert {c.check_id for c in check.DEPLOY_CHECKS} == tested
+
+
+# ---------------------------------------------------------------------------------- D-CORS, D-BUDGET
+@pytest.mark.parametrize(
+    ("good_allow", "evil_allow", "expected"),
+    [
+        ("https://p.web.app", None, check.PASS),
+        (None, None, check.FAIL),
+        ("https://p.web.app", "https://evil.example", check.FAIL),
+        ("https://p.web.app", "*", check.FAIL),
+    ],
+    ids=["echoed-and-refused", "not-echoed", "evil-echoed", "wildcard"],
+)
+def test_deploy_cors_echoes_only_the_app(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    good_allow: str | None,
+    evil_allow: str | None,
+    expected: str,
+) -> None:
+    def fake_http(ctx: Any, url: str, **kwargs: Any) -> Any:
+        origin = kwargs["headers"]["Origin"]
+        allow = good_allow if origin == "https://p.web.app" else evil_allow
+        status = 200 if allow else 400  # Starlette answers a refused preflight with 400 and no allow header
+        return check.HttpResult(status, url, {"access-control-allow-origin": allow} if allow else {}, b"")
+
+    monkeypatch.setattr(check, "http", fake_http)
+    assert run_one(tmp_path, check.check_deploy_cors, **LIVE).status == expected
+
+
+@pytest.mark.parametrize(
+    ("billing", "budgets", "expected"),
+    [
+        (
+            {"billingEnabled": True, "billingAccountName": "billingAccounts/A-1"},
+            [
+                {
+                    "displayName": "argus-real-cost",
+                    "budgetFilter": {"projects": [f"projects/{PROJECT_NUMBER}"]},
+                    "amount": {"specifiedAmount": {"units": "200", "currencyCode": "INR"}},
+                }
+            ],
+            check.PASS,
+        ),
+        (
+            {"billingEnabled": True, "billingAccountName": "billingAccounts/A-1"},
+            [{"displayName": "other", "budgetFilter": {"projects": ["projects/1"]}}],
+            check.FAIL,
+        ),
+        ({"billingEnabled": False, "billingAccountName": ""}, [], check.FAIL),
+    ],
+    ids=["budget-on-project", "budget-elsewhere", "billing-off"],
+)
+def test_deploy_budget_covers_the_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    billing: dict[str, Any],
+    budgets: list[Any],
+    expected: str,
+) -> None:
+    route_gcloud(
+        monkeypatch,
+        {
+            "billing projects describe p": (0, billing),
+            "projects describe p": (0, PROJECT_NUMBER + "\n"),
+            "billing budgets list": (0, budgets),
+        },
+    )
+    result = run_one(tmp_path, check.check_deploy_budget, **LIVE)
+    assert result.status == expected, (result.reason, result.details)
 
 
 # ------------------------------------------------------------------------------------------- pre-commit hook

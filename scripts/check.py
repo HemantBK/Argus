@@ -4,7 +4,7 @@
 Run from the repository root:
 
     backend/.venv/bin/python scripts/check.py commit [--fast]
-    backend/.venv/bin/python scripts/check.py deploy --project P --service-url URL --hosting-origin ORIGIN
+    backend/.venv/bin/python scripts/check.py deploy --strict [--expect-sha SHA] [--allow-min-zero]
     backend/.venv/bin/python scripts/check.py submission --submission submission.json   # or ../SUBMISSION.md
     backend/.venv/bin/python scripts/check.py rules-coverage [--rules-file RULES.md]
 
@@ -1313,20 +1313,33 @@ class HttpResult:
 
 
 def http(
-    ctx: Ctx, url: str, *, method: str = "GET", headers: dict[str, str] | None = None, follow: bool = True
+    ctx: Ctx,
+    url: str,
+    *,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    follow: bool = True,
+    data: bytes | None = None,
+    timeout_s: float = HTTP_TIMEOUT_S,
+    limit: int = 200_000,
+    shown_url: str | None = None,
 ) -> HttpResult:
-    """A cookie-less request (urllib keeps no cookie jar), recorded as evidence."""
+    """A cookie-less request (urllib keeps no cookie jar), recorded as evidence.
+
+    shown_url replaces url in the evidence when the real one carries a value that must not be written out."""
     started, t0 = utc_now(), time.monotonic()
-    req = urllib.request.Request(url, method=method, headers={"User-Agent": USER_AGENT, **(headers or {})})
+    req = urllib.request.Request(
+        url, method=method, data=data, headers={"User-Agent": USER_AGENT, **(headers or {})}
+    )
     handlers: list[urllib.request.BaseHandler] = [] if follow else [_NoRedirect()]
     opener = urllib.request.build_opener(*handlers)
     try:
-        with opener.open(req, timeout=HTTP_TIMEOUT_S) as resp:
+        with opener.open(req, timeout=timeout_s) as resp:
             res = HttpResult(
                 resp.status,
                 resp.geturl(),
                 {k.lower(): v for k, v in resp.headers.items()},
-                resp.read(200_000),
+                resp.read(limit),
             )
     except urllib.error.HTTPError as exc:
         res = HttpResult(
@@ -1338,9 +1351,17 @@ def http(
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         res = HttpResult(None, url, {}, b"", f"{type(exc).__name__}: {getattr(exc, 'reason', exc)}")
     shown = "\n".join(f"{k}: {v}" for k, v in sorted(res.headers.items()))
-    output = f"status {res.status} final {res.final_url} {res.error}\n{shown}"
+    final = shown_url if shown_url is not None else res.final_url
+    output = f"status {res.status} final {final} {res.error}\n{shown}"
     ctx.runs.append(
-        CmdRun(f"http {method} {url}", "-", res.status, output, started, round(time.monotonic() - t0, 2))
+        CmdRun(
+            f"http {method} {shown_url or url}",
+            "-",
+            res.status,
+            output,
+            started,
+            round(time.monotonic() - t0, 2),
+        )
     )
     return res
 
@@ -1372,6 +1393,39 @@ def _worst(statuses: Iterable[str]) -> str:
 
 
 # --------------------------------------------------------------------------------------------- deploy checks
+# The live stack (DECISIONS D-48): the defaults, so `check.py deploy --strict` needs no flags.
+DEFAULT_PROJECT = "argus-aibc"
+DEFAULT_SERVICE_URL = "https://argus-api-419264532549.asia-south1.run.app"
+DEFAULT_HOSTING_ORIGIN = "https://argus-aibc.web.app"
+HEALTH_TIMEOUT_S = 60  # at min instances 0 the first /health waits for a cold start
+EXPECTED_LOCATION = "global"
+SERVICE_ACCOUNT_NAME = "argus-api"
+# Exactly the project roles of the API's service account: Firestore, Vertex AI, logs, token revocation (D-53).
+SERVICE_ACCOUNT_ROLES = frozenset(
+    {"roles/datastore.user", "roles/aiplatform.user", "roles/logging.logWriter", "roles/firebaseauth.viewer"}
+)
+MAX_INSTANCES = 3
+REQUEST_TIMEOUT_S = 300
+# The production library (backend/data/corpus + supersession.json), as loaded to Firestore (D-48).
+EXPECTED_FIRESTORE_COUNTS = {"rbi_paragraphs": 365, "rbi_instruments": 4, "supersession": 15}
+# config/limits as set for the competition (D-48): 60 runs a day, 20 an hour, 5 per user, switched on.
+EXPECTED_LIMITS = {"daily_run_cap": 60, "hourly_run_cap": 20, "per_user_daily_run_cap": 5, "enabled": True}
+WEB_ENV_FILE = "web/.env.production.local"  # the Firebase web config the hosted bundle was built with
+WEB_API_KEY_VAR = "VITE_FIREBASE_API_KEY"
+# Names that must never reach the browser bundle, even without a value next to them.
+BUNDLE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("server-secret-name", re.compile(r"OPENROUTER_API_KEY|GEMINI_API_KEY|GOOGLE_APPLICATION_CREDENTIALS")),
+    ("private-key-field", re.compile(r"\"private_key(?:_id)?\"\s*:")),
+]
+API_KEY_FORBIDDEN_TARGETS = ("generativelanguage.googleapis.com", "aiplatform.googleapis.com")
+FIREBASE_RULES_API = "https://firebaserules.googleapis.com/v1"
+IDENTITY_TOOLKIT_API = "https://identitytoolkit.googleapis.com/admin/v2"
+API_KEYS_API = "https://apikeys.googleapis.com/v2"
+MONITORING_API = "https://monitoring.googleapis.com/v3"
+FIRESTORE_API = "https://firestore.googleapis.com/v1"
+SAMPLE_PROVIDER = "vertex"  # runs.SAMPLE_PROVIDER: a public saved run is a real review on Vertex AI
+
+
 def _deploy_inputs(ctx: Ctx) -> tuple[str, str]:
     project, url = getattr(ctx.args, "project", None), getattr(ctx.args, "service_url", None)
     if not project or not url:
@@ -1379,15 +1433,247 @@ def _deploy_inputs(ctx: Ctx) -> tuple[str, str]:
     return project, url.rstrip("/")
 
 
+def _hosting_origin(ctx: Ctx) -> str:
+    origin = getattr(ctx.args, "hosting_origin", None)
+    if not origin:
+        raise Blocked("needs --hosting-origin (the Firebase Hosting URL)")
+    return str(origin).rstrip("/")
+
+
+def _stdout(run: CmdRun) -> str:
+    return run.output.split("\n[stderr]\n")[0]
+
+
+def _repo_python(ctx: Ctx, code_or_script: list[str], what: str) -> str:
+    """Run the backend venv's python in the repo (offline) and return its stdout; Blocked when it cannot."""
+    python = ctx.venv_tool("python")
+    if python is None:
+        raise Blocked(f"{what}: no python in {ctx.venv_bin}")
+    run = ctx.run([str(python), *code_or_script], ctx.repo, env=ctx.tool_env(offline=True), timeout_s=120)
+    if not run.ok:
+        raise Blocked(f"{what} failed (exit {run.exit_code}): {run.output.strip()[-200:]}")
+    return _stdout(run).strip()
+
+
+def repo_corpus_hash(ctx: Ctx) -> str:
+    """scripts/corpus_hash.py: the hash of the library in backend/data/corpus, as /health computes it."""
+    return _repo_python(ctx, ["scripts/corpus_hash.py"], "scripts/corpus_hash.py").splitlines()[-1]
+
+
+def repo_pinned_models(ctx: Ctx) -> tuple[str, str]:
+    """config.PINNED_MODELS['vertex'] from the repo: (agent model, monitor model)."""
+    code = (
+        "import json, sys; sys.path.insert(0, 'backend'); "
+        "from argus_api.config import PINNED_MODELS; print(json.dumps(list(PINNED_MODELS['vertex'])))"
+    )
+    agent, monitor = json.loads(
+        _repo_python(ctx, ["-c", code], "reading config.PINNED_MODELS").splitlines()[-1]
+    )
+    return str(agent), str(monitor)
+
+
+def health_problems(
+    body: dict[str, Any], *, models: tuple[str, str], corpus_hash: str, expect_sha: str | None
+) -> list[str]:
+    """Why a /health body does not describe the expected deploy (empty when it does)."""
+    want: dict[str, Any] = {
+        "status": "ok",
+        "mode": "cloud",
+        "provider": "vertex",
+        "agent_model": models[0],
+        "monitor_model": models[1],
+        "location": EXPECTED_LOCATION,
+        "corpus_hash": corpus_hash,
+    }
+    if expect_sha:
+        want["git_sha"] = expect_sha
+    problems = [f"{k} is {body.get(k)!r}, expected {v!r}" for k, v in want.items() if body.get(k) != v]
+    if not expect_sha and body.get("git_sha") in {None, "", "unknown"}:
+        problems.append(f"git_sha is {body.get('git_sha')!r}: the deploy did not record its commit")
+    return problems
+
+
 def check_deploy_health(ctx: Ctx) -> Result:
-    rules = ("S-03", "B-02")
+    rules = ("S-03", "B-01", "B-02")
     _, url = _deploy_inputs(ctx)
-    res = http(ctx, f"{url}/health")
+    res = http(ctx, f"{url}/health", timeout_s=HEALTH_TIMEOUT_S)
     if res.status is None:
         return Result("D-HEALTH", rules, BLOCKED, f"{url}/health unreachable: {res.error}")
     if res.status != 200:
         return Result("D-HEALTH", rules, FAIL, f"{url}/health returned {res.status}")
-    return Result("D-HEALTH", rules, PASS, f"{url}/health returned 200")
+    try:
+        body = json.loads(res.body)
+    except ValueError:
+        return Result("D-HEALTH", rules, FAIL, f"{url}/health is not JSON")
+    ctx.internal("health-body", json.dumps(body, indent=2, sort_keys=True))
+    expect_sha = getattr(ctx.args, "expect_sha", None)
+    problems = health_problems(
+        body, models=repo_pinned_models(ctx), corpus_hash=repo_corpus_hash(ctx), expect_sha=expect_sha
+    )
+    summary = (
+        f"{url}/health: sha {str(body.get('git_sha'))[:12]}, {body.get('mode')}/{body.get('provider')}, "
+        f"{body.get('agent_model')} + {body.get('monitor_model')}, location {body.get('location')}, "
+        f"corpus {str(body.get('corpus_hash'))[:12]}"
+    )
+    if problems:
+        return Result("D-HEALTH", rules, FAIL, summary, problems)
+    sha_note = "sha equals --expect-sha" if expect_sha else "no --expect-sha given"
+    return Result(
+        "D-HEALTH", rules, PASS, f"{summary}; corpus hash equals scripts/corpus_hash.py; {sha_note}"
+    )
+
+
+# ---- the hosted web app
+ASSET_REF = re.compile(r"""(?:src|href)\s*=\s*["'](/assets/[^"'?#]+)["']""")
+SOURCE_MAP_REF = re.compile(r"//[#@]\s*sourceMappingURL=([^\s'\"]+)")
+
+
+def served_assets(index_html: str) -> list[str]:
+    """The /assets/... files index.html loads, in order, without duplicates."""
+    return list(dict.fromkeys(ASSET_REF.findall(index_html)))
+
+
+def _fetch_site(ctx: Ctx, origin: str) -> dict[str, bytes]:
+    """index.html, every asset it loads and each script's source map (when served): path -> bytes."""
+    index = http(ctx, f"{origin}/", timeout_s=HTTP_TIMEOUT_S, limit=5_000_000)
+    if index.status is None:
+        raise Blocked(f"{origin} unreachable: {index.error}")
+    if index.status != 200:
+        raise _Fail(f"{origin}/ returned HTTP {index.status}")
+    files = {"index.html": index.body}
+    for path in served_assets(index.body.decode("utf-8", "replace")):
+        res = http(ctx, origin + path, limit=50_000_000)
+        if res.status != 200:
+            raise _Fail(f"{origin}{path} returned HTTP {res.status} {res.error}".strip())
+        files[path.lstrip("/")] = res.body
+        if path.endswith(".js"):
+            refs = SOURCE_MAP_REF.findall(res.body[-2000:].decode("utf-8", "replace"))
+            map_path = urllib.parse.urljoin(path, refs[-1]) if refs else path + ".map"
+            if map_path.startswith("/assets/"):
+                got = http(ctx, origin + map_path, limit=50_000_000)
+                if got.status == 200:
+                    files[map_path.lstrip("/")] = got.body
+    return files
+
+
+class _Fail(Exception):
+    """Raised inside a check for a FAIL found while gathering inputs."""
+
+
+def check_deploy_web(ctx: Ctx) -> Result:
+    """The hosted app answers 200 and serves exactly the files in web/dist (the build that was checked)."""
+    rules = ("S-03", "B-03")
+    origin = _hosting_origin(ctx)
+    try:
+        files = _fetch_site(ctx, origin)
+    except _Fail as exc:
+        return Result("D-WEB", rules, FAIL, str(exc))
+    dist = ctx.repo / "web" / "dist"
+    if not (dist / "index.html").is_file():
+        raise Blocked("web/dist/index.html missing: build the web app to compare what is served")
+    problems = []
+    for path, body in files.items():
+        if path.endswith(".map"):
+            continue  # compared as part of the script it belongs to; scanned by D-WEB-SECRETS
+        local = dist / path
+        if not local.is_file():
+            problems.append(f"{path} is served but not in web/dist")
+        elif hashlib.sha256(local.read_bytes()).hexdigest() != hashlib.sha256(body).hexdigest():
+            problems.append(f"{path}: served sha256 differs from web/dist")
+    ctx.internal(
+        "served-files",
+        "\n".join(f"{hashlib.sha256(b).hexdigest()}  {len(b):>9}  {p}" for p, b in sorted(files.items())),
+    )
+    assets = [p for p in files if p != "index.html" and not p.endswith(".map")]
+    if not assets:
+        problems.append("index.html loads no /assets/ files")
+    summary = f"{origin}/ 200; {len(assets)} assets"
+    if problems:
+        return Result("D-WEB", rules, FAIL, summary, problems)
+    maps = [p for p in files if p.endswith(".map")]
+    note = f"; {len(maps)} source map(s) also served" if maps else ""
+    return Result("D-WEB", rules, PASS, f"{summary}, index.html and every asset equal web/dist{note}")
+
+
+def web_api_key(ctx: Ctx) -> str:
+    """The Firebase web apiKey (public by design) the hosted bundle was built with, from WEB_ENV_FILE."""
+    path = ctx.repo / WEB_ENV_FILE
+    if not path.is_file():
+        raise Blocked(f"{WEB_ENV_FILE} missing: cannot tell the Firebase web apiKey from a leaked key")
+    for line in path.read_text(encoding="utf-8").splitlines():
+        name, sep, value = line.partition("=")
+        if sep and name.strip() == WEB_API_KEY_VAR and value.strip():
+            return value.strip().strip("'\"")
+    raise Blocked(f"{WEB_API_KEY_VAR} not set in {WEB_ENV_FILE}")
+
+
+def bundle_secret_hits(files: dict[str, bytes], allowed_key: str) -> list[str]:
+    """Every secret-looking string in the served files but the Firebase web apiKey, values redacted."""
+    hits = []
+    for path, body in sorted(files.items()):
+        text = body.decode("utf-8", "replace")
+        found = find_secrets(text)
+        for lineno, line in enumerate(text.splitlines(), 1):
+            found += [(name, lineno, m.group(0)) for name, pat in BUNDLE_PATTERNS for m in pat.finditer(line)]
+        for name, lineno, value in found:
+            if name == "google-api-key" and value == allowed_key:
+                continue
+            shown = value if name in {"server-secret-name", "private-key-field"} else redact(value)
+            hits.append(f"{path}:{lineno}: {name} {shown}")
+    return hits
+
+
+def check_deploy_web_secrets(ctx: Ctx) -> Result:
+    """No secret in what the browser downloads; the one Google API key there is the Firebase web apiKey."""
+    rules = ("ENG-E7", "S-03", "G1")
+    origin = _hosting_origin(ctx)
+    allowed = web_api_key(ctx)
+    try:
+        files = _fetch_site(ctx, origin)
+    except _Fail as exc:
+        return Result("D-WEB-SECRETS", rules, FAIL, str(exc))
+    hits = bundle_secret_hits(files, allowed)
+    keys = {
+        m.group(0)
+        for b in files.values()
+        for m in SECRET_PATTERNS[0][1].finditer(b.decode("utf-8", "replace"))
+    }
+    ctx.internal("bundle-scan", f"scanned {len(files)} files: {', '.join(sorted(files))}\n" + "\n".join(hits))
+    if hits:
+        return Result(
+            "D-WEB-SECRETS", rules, FAIL, f"{len(hits)} secret-looking strings in the served app", hits
+        )
+    key_note = "the Firebase web apiKey" if allowed in keys else "no Google API key"
+    return Result(
+        "D-WEB-SECRETS",
+        rules,
+        PASS,
+        f"{len(files)} served files scanned ({sum(len(b) for b in files.values()) // 1024} KiB): "
+        f"only {key_note} and the API URL",
+    )
+
+
+# ---- the API
+def check_deploy_no_token(ctx: Ctx) -> Result:
+    """Starting a run without a Firebase ID token is refused with 401 (and so spends nothing)."""
+    rules = ("S-03", "ENG-E9")
+    _, url = _deploy_inputs(ctx)
+    res = http(
+        ctx,
+        f"{url}/api/runs",
+        method="POST",
+        data=b"{}",
+        headers={"Content-Type": "application/json"},
+        follow=False,
+        timeout_s=HEALTH_TIMEOUT_S,
+    )
+    if res.status is None:
+        return Result("D-NO-TOKEN", rules, BLOCKED, f"POST {url}/api/runs unreachable: {res.error}")
+    if res.status != 401:
+        return Result(
+            "D-NO-TOKEN", rules, FAIL, f"POST /api/runs without a token returned {res.status}, not 401"
+        )
+    return Result("D-NO-TOKEN", rules, PASS, "POST /api/runs without a token returned 401")
 
 
 def _gcloud(ctx: Ctx, *args: str) -> CmdRun:
@@ -1414,13 +1700,69 @@ def _find_service(ctx: Ctx, project: str, url: str) -> tuple[str, str]:
     run = _gcloud(ctx, "run", "services", "list", f"--project={project}", "--format=json")
     if not run.ok:
         raise Blocked(f"gcloud run services list failed (exit {run.exit_code}); pass --service and --region")
-    for svc in json.loads(run.output.split("\n[stderr]\n")[0] or "[]"):
+    for svc in json.loads(_stdout(run) or "[]"):
         meta = svc.get("metadata", {})
         urls = {svc.get("status", {}).get("url", "")}
         urls |= set(json.loads(meta.get("annotations", {}).get("run.googleapis.com/urls", "[]") or "[]"))
         if url in {u.rstrip("/") for u in urls if u}:
             return meta.get("name", ""), meta.get("labels", {}).get("cloud.googleapis.com/location", "")
     raise Blocked(f"no Cloud Run service in {project} serves {url}; pass --service and --region")
+
+
+def env_name_problems(names: Iterable[str]) -> list[str]:
+    """Environment variables a cloud deploy must not carry: keys, OpenRouter, emulators, model overrides."""
+    problems = []
+    for name in sorted(set(names)):
+        if "KEY" in name.upper():
+            problems.append(f"{name} is set on the service (no *KEY* variables in cloud mode)")
+        elif (
+            name in FORBIDDEN_CLOUD_ENV or name.upper().startswith("OPENROUTER") or "EMULATOR" in name.upper()
+        ):
+            problems.append(f"{name} is set on the service (local-only variable)")
+    return problems
+
+
+def run_config_problems(svc: dict[str, Any], project: str, *, allow_min_zero: bool) -> tuple[str, list[str]]:
+    """(summary, problems) for a `gcloud run services describe --format=json` document."""
+    tmpl = svc.get("spec", {}).get("template", {})
+    ann = {
+        **svc.get("metadata", {}).get("annotations", {}),
+        **tmpl.get("metadata", {}).get("annotations", {}),
+    }
+    spec = tmpl.get("spec", {})
+    containers = spec.get("containers", [])
+    env = {e.get("name"): e.get("value", "<from secret>") for c in containers for e in c.get("env", [])}
+    # No minScale annotation means Cloud Run's default, 0.
+    min_i = ann.get("autoscaling.knative.dev/minScale") or ann.get("run.googleapis.com/minScale") or "0"
+    max_i = ann.get("autoscaling.knative.dev/maxScale") or ann.get("run.googleapis.com/maxScale")
+    timeout = spec.get("timeoutSeconds")
+    account = spec.get("serviceAccountName")
+    want_account = f"{SERVICE_ACCOUNT_NAME}@{project}.iam.gserviceaccount.com"
+    status = svc.get("status", {})
+    serving = [t for t in status.get("traffic", []) if t.get("percent")]
+    problems = []
+    if env.get("ARGUS_MODE") != "cloud":
+        problems.append(f"ARGUS_MODE is {env.get('ARGUS_MODE')!r}, expected 'cloud'")
+    if str(min_i) != "1" and not (allow_min_zero and str(min_i) == "0"):
+        problems.append(
+            f"min instances {min_i}, expected 1" + ("" if allow_min_zero else " (or --allow-min-zero)")
+        )
+    if max_i is None or not str(max_i).isdigit() or int(max_i) > MAX_INSTANCES:
+        problems.append(f"max instances {max_i}, expected <= {MAX_INSTANCES}")
+    if str(timeout) != str(REQUEST_TIMEOUT_S):
+        problems.append(f"request timeout {timeout} s, expected {REQUEST_TIMEOUT_S}")
+    if account != want_account:
+        problems.append(f"service account {account!r}, expected {want_account!r}")
+    problems += env_name_problems(n for n in env if n)
+    if not serving or any(not t.get("latestRevision") for t in serving):
+        problems.append(f"traffic does not all go to the latest revision: {serving}")
+    revision = status.get("latestReadyRevisionName")
+    min_note = " (allowed by --allow-min-zero)" if allow_min_zero and str(min_i) == "0" else ""
+    summary = (
+        f"{svc.get('metadata', {}).get('name')} revision {revision}: mode={env.get('ARGUS_MODE')} "
+        f"min={min_i}{min_note} max={max_i} timeout={timeout}s sa={account}"
+    )
+    return summary, problems
 
 
 def check_deploy_run_config(ctx: Ctx) -> Result:
@@ -1441,104 +1783,37 @@ def check_deploy_run_config(ctx: Ctx) -> Result:
         return Result(
             "D-RUN-CONFIG", rules, BLOCKED, f"gcloud run services describe failed (exit {run.exit_code})"
         )
-    svc = json.loads(run.output.split("\n[stderr]\n")[0])
-    tmpl = svc.get("spec", {}).get("template", {})
-    ann = {
-        **svc.get("metadata", {}).get("annotations", {}),
-        **tmpl.get("metadata", {}).get("annotations", {}),
-    }
-    containers = tmpl.get("spec", {}).get("containers", [])
-    env = {e.get("name"): e.get("value", "<from secret>") for c in containers for e in c.get("env", [])}
-    min_i = ann.get("autoscaling.knative.dev/minScale") or ann.get("run.googleapis.com/minScale")
-    max_i = ann.get("autoscaling.knative.dev/maxScale") or ann.get("run.googleapis.com/maxScale")
-    timeout = tmpl.get("spec", {}).get("timeoutSeconds")
-    problems = []
-    if env.get("ARGUS_MODE") != "cloud":
-        problems.append(f"ARGUS_MODE is {env.get('ARGUS_MODE')!r}, expected 'cloud'")
-    if str(min_i) != "1":
-        problems.append(f"min instances {min_i}, expected 1")
-    if max_i is None or int(max_i) > 3:
-        problems.append(f"max instances {max_i}, expected <= 3")
-    if str(timeout) != "300":
-        problems.append(f"request timeout {timeout} s, expected 300")
-    problems += [f"{name} is set on the service" for name in FORBIDDEN_CLOUD_ENV if name in env]
-    summary = f"{service} ({region}): mode={env.get('ARGUS_MODE')} min={min_i} max={max_i} timeout={timeout}s"
+    summary, problems = run_config_problems(
+        json.loads(_stdout(run)), project, allow_min_zero=bool(getattr(ctx.args, "allow_min_zero", False))
+    )
     if problems:
         return Result("D-RUN-CONFIG", rules, FAIL, summary, problems)
-    return Result("D-RUN-CONFIG", rules, PASS, summary + "; no local-only variables")
+    return Result("D-RUN-CONFIG", rules, PASS, summary + "; env names clean")
 
 
-def check_deploy_budget(ctx: Ctx) -> Result:
-    rules = ("S-03", "ENG-E9")
+def service_account_roles(policy: dict[str, Any], member: str) -> set[str]:
+    """Project roles bound to member in an IAM policy (conditional bindings included)."""
+    return {b.get("role", "") for b in policy.get("bindings", []) if member in b.get("members", [])}
+
+
+def check_deploy_sa_roles(ctx: Ctx) -> Result:
+    rules = ("B-02", "ENG-E7")
     project, _ = _deploy_inputs(ctx)
-    info = _gcloud(ctx, "billing", "projects", "describe", project, "--format=json")
-    if not info.ok:
-        return Result(
-            "D-BUDGET", rules, BLOCKED, f"cannot read billing for {project} (exit {info.exit_code})"
-        )
-    billing = json.loads(info.output.split("\n[stderr]\n")[0])
-    account = (billing.get("billingAccountName") or "").removeprefix("billingAccounts/")
-    if not billing.get("billingEnabled") or not account:
-        return Result("D-BUDGET", rules, FAIL, f"billing not enabled for {project}")
-    number = _gcloud(ctx, "projects", "describe", project, "--format=value(projectNumber)").output.split()[
-        0:1
-    ]
-    budgets = _gcloud(ctx, "billing", "budgets", "list", f"--billing-account={account}", "--format=json")
-    if not budgets.ok:
-        status = BLOCKED
-        why = "no permission to list budgets" if _permission_problem(budgets) else f"exit {budgets.exit_code}"
-        return Result("D-BUDGET", rules, status, f"gcloud billing budgets list: {why}")
-    matching = []
-    for b in json.loads(budgets.output.split("\n[stderr]\n")[0] or "[]"):
-        projects = b.get("budgetFilter", {}).get("projects", [])
-        if not projects or any(p.endswith(f"/{number[0]}") for p in projects if number):
-            amount = b.get("amount", {}).get("specifiedAmount", {})
-            matching.append(
-                f"{b.get('displayName')}: {amount.get('units', '?')} {amount.get('currencyCode', '')}"
-            )
-    if not matching:
-        return Result("D-BUDGET", rules, FAIL, f"no budget on billing account covers {project}")
-    return Result(
-        "D-BUDGET", rules, PASS, f"{len(matching)} budget(s) cover {project}: {'; '.join(matching)}"
-    )
-
-
-def _preflight(ctx: Ctx, url: str, origin: str) -> HttpResult:
-    return http(
-        ctx,
-        f"{url}/api/runs",
-        method="OPTIONS",
-        follow=False,
-        headers={
-            "Origin": origin,
-            "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "authorization,content-type",
-        },
-    )
-
-
-def check_deploy_cors(ctx: Ctx) -> Result:
-    rules = ("S-03", "G9")
-    _, url = _deploy_inputs(ctx)
-    origin = getattr(ctx.args, "hosting_origin", None)
-    if not origin:
-        raise Blocked("needs --hosting-origin (the Firebase Hosting URL)")
-    good, evil = _preflight(ctx, url, origin.rstrip("/")), _preflight(ctx, url, EVIL_ORIGIN)
-    if good.status is None or evil.status is None:
-        return Result("D-CORS", rules, BLOCKED, f"preflight unreachable: {good.error or evil.error}")
-    problems = []
-    if good.status != 200 or good.headers.get("access-control-allow-origin") != origin.rstrip("/"):
-        problems.append(
-            f"preflight from {origin}: {good.status}, allow-origin="
-            f"{good.headers.get('access-control-allow-origin')!r}"
-        )
-    if evil.headers.get("access-control-allow-origin") in {EVIL_ORIGIN, "*"}:
-        problems.append(f"preflight from {EVIL_ORIGIN} allowed ({evil.status})")
+    run = _gcloud(ctx, "projects", "get-iam-policy", project, "--format=json")
+    if not run.ok:
+        why = "no permission" if _permission_problem(run) else f"exit {run.exit_code}"
+        return Result("D-SA-ROLES", rules, BLOCKED, f"gcloud projects get-iam-policy: {why}")
+    member = f"serviceAccount:{SERVICE_ACCOUNT_NAME}@{project}.iam.gserviceaccount.com"
+    roles = service_account_roles(json.loads(_stdout(run)), member)
+    extra, missing = sorted(roles - SERVICE_ACCOUNT_ROLES), sorted(SERVICE_ACCOUNT_ROLES - roles)
+    problems = [f"extra role {r}" for r in extra] + [f"missing role {r}" for r in missing]
+    summary = f"{member.split(':', 1)[1]} has {', '.join(sorted(roles)) or 'no roles'}"
     if problems:
-        return Result("D-CORS", rules, FAIL, "CORS is wrong", problems)
-    return Result("D-CORS", rules, PASS, f"{origin} allowed; {EVIL_ORIGIN} refused ({evil.status})")
+        return Result("D-SA-ROLES", rules, FAIL, summary, problems)
+    return Result("D-SA-ROLES", rules, PASS, summary + " (exactly the 4 expected)")
 
 
+# ---- Google APIs read with the gcloud login
 def _gcloud_token(ctx: Ctx) -> str | None:
     """An access token from the active gcloud login, or None. The token never reaches the evidence."""
     if shutil.which("gcloud") is None:
@@ -1565,46 +1840,357 @@ def _gcloud_token(ctx: Ctx) -> str | None:
     return token_value if proc.returncode == 0 and token_value else None
 
 
+def _google_get(
+    ctx: Ctx,
+    url: str,
+    project: str,
+    *,
+    token: str | None = None,
+    shown_url: str | None = None,
+    bill_project: bool = True,
+) -> dict[str, Any]:
+    """GET a Google REST API as the gcloud user; Blocked when there is no login or the call fails.
+
+    bill_project False leaves out x-goog-user-project, so the call is attributed as gcloud's own calls are:
+    for an API that need not be enabled on the project (API Keys)."""
+    if token is None:
+        if shutil.which("gcloud") is None:
+            raise Blocked("gcloud not found on PATH; cannot call Google APIs")
+        token = _gcloud_token(ctx)
+        if token is None:
+            raise Blocked("no gcloud access token (gcloud auth login)")
+    headers = {"Authorization": f"Bearer {token}"}
+    if bill_project:
+        headers["x-goog-user-project"] = project
+    res = http(ctx, url, headers=headers, shown_url=shown_url)
+    if res.status != 200:
+        raise Blocked(f"GET {shown_url or url} failed: {res.error or f'HTTP {res.status}'}")
+    body = json.loads(res.body or b"{}")
+    return body if isinstance(body, dict) else {}
+
+
+def _sha(text: str | bytes) -> str:
+    return hashlib.sha256(text.encode("utf-8") if isinstance(text, str) else text).hexdigest()
+
+
+def check_deploy_rules(ctx: Ctx) -> Result:
+    """The Firestore rules in force are the repo's firestore.rules, byte for byte."""
+    rules = ("B-09", "S-03", "G4")
+    project, _ = _deploy_inputs(ctx)
+    local_path = ctx.repo / "firestore.rules"
+    if not local_path.is_file():
+        raise Blocked("firestore.rules missing in the repo")
+    local = local_path.read_text(encoding="utf-8")
+    token = _gcloud_token(ctx) if shutil.which("gcloud") else None
+    if token is None:
+        raise Blocked("no gcloud access token; cannot read the deployed rules")
+    release = _google_get(
+        ctx, f"{FIREBASE_RULES_API}/projects/{project}/releases/cloud.firestore", project, token=token
+    )
+    ruleset_name = release.get("rulesetName")
+    if not ruleset_name:
+        return Result(
+            "D-RULES", rules, FAIL, f"no cloud.firestore release in {project}: rules never deployed"
+        )
+    ruleset = _google_get(ctx, f"{FIREBASE_RULES_API}/{ruleset_name}", project, token=token)
+    files = ruleset.get("source", {}).get("files", [])
+    deployed = "".join(f.get("content", "") for f in files)
+    ctx.internal("deployed-rules", deployed)
+    summary = (
+        f"{ruleset_name.rsplit('/', 1)[-1]}: deployed sha256 {_sha(deployed)[:12]}, repo {_sha(local)[:12]}"
+    )
+    if len(files) != 1 or deployed != local:
+        return Result(
+            "D-RULES",
+            rules,
+            FAIL,
+            summary,
+            [f"{len(files)} rules file(s) deployed; text differs from firestore.rules"],
+        )
+    return Result("D-RULES", rules, PASS, summary + " (equal)")
+
+
+def auth_config_problems(config: dict[str, Any], hosting_host: str) -> list[str]:
+    problems = []
+    if config.get("signIn", {}).get("anonymous", {}).get("enabled") is not True:
+        problems.append("Anonymous sign-in is disabled")
+    domains = config.get("authorizedDomains", [])
+    if hosting_host not in domains:
+        problems.append(f"authorized domains {domains} do not include {hosting_host}")
+    return problems
+
+
 def check_deploy_anon_auth(ctx: Ctx) -> Result:
     rules = ("S-03", "B-03")
     project, _ = _deploy_inputs(ctx)
-    human = Result(
-        "D-ANON-AUTH", rules, HUMAN, "confirm Firebase Console > Authentication > Anonymous is enabled"
+    host = urllib.parse.urlparse(_hosting_origin(ctx)).hostname or ""
+    config = _google_get(ctx, f"{IDENTITY_TOOLKIT_API}/projects/{project}/config", project)
+    problems = auth_config_problems(config, host)
+    if problems:
+        return Result("D-ANON-AUTH", rules, FAIL, "Firebase Auth config is wrong", problems)
+    return Result(
+        "D-ANON-AUTH",
+        rules,
+        PASS,
+        f"Anonymous sign-in enabled; {host} is an authorized domain (Identity Toolkit)",
     )
-    if shutil.which("gcloud") is None:
-        human.reason += " (gcloud missing, cannot read Identity Toolkit config)"
-        return human
-    token_value = _gcloud_token(ctx)
-    if token_value is None:
-        human.reason += " (no gcloud access token)"
-        return human
-    res = http(
+
+
+def api_key_problems(key: dict[str, Any], hosts: set[str]) -> list[str]:
+    """Why a Firebase web API key (API Keys v2 resource) is not locked to the app's sites and to safe APIs."""
+    restrictions = key.get("restrictions", {})
+    problems = []
+    referrers = restrictions.get("browserKeyRestrictions", {}).get("allowedReferrers", [])
+    if not referrers:
+        problems.append("no HTTP referrer restriction: any site can use the key")
+    for ref in referrers:
+        host = urllib.parse.urlparse(ref if "://" in ref else f"https://{ref}").hostname or ""
+        if host not in hosts:
+            problems.append(f"referrer {ref!r} is outside {sorted(hosts)}")
+    targets = [t.get("service", "") for t in restrictions.get("apiTargets", [])]
+    if not targets:
+        problems.append("no API restriction: the key works for every enabled API")
+    problems += [f"key may call {t}" for t in targets if t in API_KEY_FORBIDDEN_TARGETS]
+    return problems
+
+
+def check_deploy_api_key(ctx: Ctx) -> Result:
+    """The public Firebase web apiKey belongs to the project and is restricted by referrer and by API."""
+    rules = ("ENG-E7", "ENG-E9", "S-03")
+    project, _ = _deploy_inputs(ctx)
+    host = urllib.parse.urlparse(_hosting_origin(ctx)).hostname or ""
+    key_string = web_api_key(ctx)
+    token = _gcloud_token(ctx) if shutil.which("gcloud") else None
+    if token is None:
+        raise Blocked("no gcloud access token; cannot read the API key restrictions")
+    lookup = _google_get(
         ctx,
-        f"https://identitytoolkit.googleapis.com/admin/v2/projects/{project}/config",
-        headers={"Authorization": f"Bearer {token_value}", "x-goog-user-project": project},
+        f"{API_KEYS_API}/keys:lookupKey?" + urllib.parse.urlencode({"keyString": key_string}),
+        project,
+        token=token,
+        shown_url=f"{API_KEYS_API}/keys:lookupKey?keyString={redact(key_string)}",
+        bill_project=False,
     )
-    if res.status != 200:
-        human.reason += f" (Identity Toolkit config API returned {res.status})"
-        return human
-    enabled = json.loads(res.body or b"{}").get("signIn", {}).get("anonymous", {}).get("enabled") is True
-    if not enabled:
-        return Result("D-ANON-AUTH", rules, FAIL, "Anonymous sign-in is disabled (Identity Toolkit config)")
-    return Result("D-ANON-AUTH", rules, PASS, "Anonymous sign-in enabled (Identity Toolkit config API)")
+    name = str(lookup.get("name", ""))
+    number = _stdout(_gcloud(ctx, "projects", "describe", project, "--format=value(projectNumber)")).strip()
+    if not number or not name.startswith(f"projects/{number}/"):
+        return Result(
+            "D-API-KEY", rules, FAIL, f"the web apiKey is not a key of {project} ({name or 'not found'})"
+        )
+    key = _google_get(ctx, f"{API_KEYS_API}/{name}", project, token=token, bill_project=False)
+    hosts = {host, f"{project}.firebaseapp.com"}
+    problems = api_key_problems(key, hosts)
+    summary = f"{key.get('displayName', name)} ({name.rsplit('/', 1)[-1]})"
+    if problems:
+        return Result("D-API-KEY", rules, FAIL, summary, problems)
+    return Result("D-API-KEY", rules, PASS, summary + f": referrers within {sorted(hosts)}, APIs restricted")
 
 
-SAMPLE_PROVIDER = "vertex"  # runs.SAMPLE_PROVIDER: a public saved run is a real review on Vertex AI
-FIRESTORE_API = "https://firestore.googleapis.com/v1"
+def check_deploy_budget(ctx: Ctx) -> Result:
+    rules = ("S-03", "ENG-E9")
+    project, _ = _deploy_inputs(ctx)
+    info = _gcloud(ctx, "billing", "projects", "describe", project, "--format=json")
+    if not info.ok:
+        return Result(
+            "D-BUDGET", rules, BLOCKED, f"cannot read billing for {project} (exit {info.exit_code})"
+        )
+    billing = json.loads(_stdout(info))
+    account = (billing.get("billingAccountName") or "").removeprefix("billingAccounts/")
+    if not billing.get("billingEnabled") or not account:
+        return Result("D-BUDGET", rules, FAIL, f"billing not enabled for {project}")
+    number = _stdout(_gcloud(ctx, "projects", "describe", project, "--format=value(projectNumber)")).split()[
+        0:1
+    ]
+    budgets = _gcloud(ctx, "billing", "budgets", "list", f"--billing-account={account}", "--format=json")
+    if not budgets.ok:
+        status = BLOCKED
+        why = "no permission to list budgets" if _permission_problem(budgets) else f"exit {budgets.exit_code}"
+        return Result("D-BUDGET", rules, status, f"gcloud billing budgets list: {why}")
+    matching = []
+    for b in json.loads(_stdout(budgets) or "[]"):
+        projects = b.get("budgetFilter", {}).get("projects", [])
+        if not projects or any(p.endswith(f"/{number[0]}") for p in projects if number):
+            amount = b.get("amount", {}).get("specifiedAmount", {})
+            matching.append(
+                f"{b.get('displayName')}: {amount.get('units', '?')} {amount.get('currencyCode', '')}"
+            )
+    if not matching:
+        return Result("D-BUDGET", rules, FAIL, f"no budget on billing account covers {project}")
+    return Result(
+        "D-BUDGET", rules, PASS, f"{len(matching)} budget(s) cover {project}: {'; '.join(matching)}"
+    )
 
 
+def uptime_checks_for(configs: list[dict[str, Any]], host: str) -> list[dict[str, Any]]:
+    """Uptime check configs that probe https://<host>/health."""
+    found = []
+    for c in configs:
+        labels = c.get("monitoredResource", {}).get("labels", {})
+        path = c.get("httpCheck", {}).get("path", "")
+        if labels.get("host") == host and path.rstrip("/") == "/health":
+            found.append(c)
+    return found
+
+
+def alerting_policies_for(policies: list[dict[str, Any]], check_ids: set[str]) -> list[str]:
+    """Names of enabled alert policies with a condition on one of these uptime checks."""
+    names = []
+    for p in policies:
+        if p.get("enabled") is False:
+            continue
+        for cond in p.get("conditions", []):
+            spec = cond.get("conditionThreshold") or cond.get("conditionAbsent") or {}
+            text = spec.get("filter", "")
+            if "uptime_check" in text and any(cid in text for cid in check_ids):
+                names.append(p.get("displayName") or p.get("name", "?"))
+                break
+    return names
+
+
+def check_deploy_uptime(ctx: Ctx) -> Result:
+    """An uptime check probes the API's /health and an alert policy fires on it (S-03 until Nov 6)."""
+    rules = ("S-03",)
+    project, url = _deploy_inputs(ctx)
+    host = urllib.parse.urlparse(url).hostname or ""
+    run = _gcloud(ctx, "monitoring", "uptime", "list-configs", f"--project={project}", "--format=json")
+    if not run.ok:
+        why = "no permission" if _permission_problem(run) else f"exit {run.exit_code}"
+        return Result("D-UPTIME", rules, BLOCKED, f"gcloud monitoring uptime list-configs: {why}")
+    checks = uptime_checks_for(json.loads(_stdout(run) or "[]"), host)
+    if not checks:
+        return Result(
+            "D-UPTIME",
+            rules,
+            FAIL,
+            f"no uptime check on https://{host}/health in {project}: create one "
+            f"(Monitoring > Uptime checks, path /health) with an email alert policy",
+        )
+    check_ids = {str(c.get("name", "")).rsplit("/", 1)[-1] for c in checks} - {""}
+    policies = _google_get(ctx, f"{MONITORING_API}/projects/{project}/alertPolicies", project)
+    alerting = alerting_policies_for(policies.get("alertPolicies", []), check_ids)
+    names = ", ".join(str(c.get("displayName", "?")) for c in checks)
+    if not alerting:
+        return Result(
+            "D-UPTIME", rules, FAIL, f"uptime check {names} exists but no enabled alert policy watches it"
+        )
+    return Result(
+        "D-UPTIME", rules, PASS, f"uptime check {names} on /health; alert policy {', '.join(alerting)}"
+    )
+
+
+# ---- Firestore (production), read with the gcloud login
 def _firestore_value(value: dict[str, Any]) -> Any:
-    """One Firestore REST value as Python; only the scalar kinds the sample check reads."""
+    """One Firestore REST value as Python; only the scalar kinds these checks read."""
     if "booleanValue" in value:
         return value["booleanValue"]
     if "stringValue" in value:
         return value["stringValue"]
+    if "integerValue" in value:
+        return int(value["integerValue"])
     if "nullValue" in value:
         return None
     return value
+
+
+def firestore_list(
+    ctx: Ctx, project: str, collection: str, fields: list[str], token: str
+) -> list[dict[str, Any]]:
+    """Every document of a top-level collection (REST form), only the given fields, following page tokens."""
+    base = f"{FIRESTORE_API}/projects/{project}/databases/(default)/documents/{collection}"
+    docs: list[dict[str, Any]] = []
+    page = ""
+    while True:
+        query = urllib.parse.urlencode(
+            {"pageSize": 300, "mask.fieldPaths": fields, **({"pageToken": page} if page else {})}, doseq=True
+        )
+        res = http(
+            ctx,
+            f"{base}?{query}",
+            headers={"Authorization": f"Bearer {token}", "x-goog-user-project": project},
+        )
+        if res.status != 200:
+            why = res.error or f"HTTP {res.status}"
+            raise Blocked(f"Firestore REST list of {collection}/ in {project} failed: {why}")
+        body = json.loads(res.body or b"{}")
+        docs += body.get("documents", [])
+        page = body.get("nextPageToken", "")
+        if not page:
+            return docs
+
+
+def _firestore_token(ctx: Ctx) -> str:
+    if shutil.which("gcloud") is None:
+        raise Blocked("gcloud not found on PATH; cannot read production Firestore")
+    token_value = _gcloud_token(ctx)
+    if token_value is None:
+        raise Blocked("no gcloud access token (gcloud auth login)")
+    return token_value
+
+
+def paragraphs_hash(docs: list[dict[str, Any]]) -> str:
+    """corpus_hash (corpus.store) of Firestore rbi_paragraphs: sha256 of sorted "<id> <hash>" lines."""
+    lines = []
+    for d in docs:
+        f = d.get("fields", {})
+        pid = _firestore_value(f["id"]) if "id" in f else None
+        chash = _firestore_value(f["content_hash"]) if "content_hash" in f else None
+        lines.append(f"{pid} {chash}\n")
+    return _sha("".join(sorted(lines)))
+
+
+def check_deploy_firestore_corpus(ctx: Ctx) -> Result:
+    """Production Firestore holds the whole library (365 paragraphs, 4 instruments, 15 supersession rows)
+    and its paragraphs hash to the repo library's corpus hash."""
+    rules = ("B-03", "S-03")
+    project, _ = _deploy_inputs(ctx)
+    token = _firestore_token(ctx)
+    counts, problems = {}, []
+    paragraphs: list[dict[str, Any]] = []
+    for collection, want in EXPECTED_FIRESTORE_COUNTS.items():
+        fields = ["id", "content_hash"] if collection == "rbi_paragraphs" else ["__name__"]
+        docs = firestore_list(ctx, project, collection, fields, token)
+        counts[collection] = len(docs)
+        if collection == "rbi_paragraphs":
+            paragraphs = docs
+        if len(docs) != want:
+            problems.append(f"{collection}: {len(docs)} documents, expected {want}")
+    remote_hash, local_hash = paragraphs_hash(paragraphs), repo_corpus_hash(ctx)
+    if remote_hash != local_hash:
+        problems.append(
+            f"Firestore paragraphs hash {remote_hash[:12]} differs from corpus_hash.py {local_hash[:12]}"
+        )
+    summary = ", ".join(f"{k} {v}" for k, v in counts.items()) + f"; paragraphs hash {remote_hash[:12]}"
+    if problems:
+        return Result("D-FIRESTORE-CORPUS", rules, FAIL, summary, problems)
+    return Result("D-FIRESTORE-CORPUS", rules, PASS, summary + " equals the repo library")
+
+
+def limits_problems(fields: dict[str, Any]) -> list[str]:
+    values = {k: _firestore_value(v) for k, v in fields.items()}
+    problems = [
+        f"{k} is {values.get(k)!r}, expected {v!r}" for k, v in EXPECTED_LIMITS.items() if values.get(k) != v
+    ]
+    problems += [f"unexpected field {k}" for k in sorted(set(values) - set(EXPECTED_LIMITS))]
+    return problems
+
+
+def check_deploy_limits(ctx: Ctx) -> Result:
+    """config/limits reads back as 60 a day, 20 an hour, 5 per user, enabled."""
+    rules = ("S-03", "ENG-E9")
+    project, _ = _deploy_inputs(ctx)
+    token = _firestore_token(ctx)
+    url = f"{FIRESTORE_API}/projects/{project}/databases/(default)/documents/config/limits"
+    res = http(ctx, url, headers={"Authorization": f"Bearer {token}", "x-goog-user-project": project})
+    if res.status == 404:
+        return Result("D-LIMITS", rules, FAIL, f"config/limits missing in {project}: every run is refused")
+    if res.status != 200:
+        raise Blocked(f"Firestore REST get config/limits failed: {res.error or f'HTTP {res.status}'}")
+    fields = json.loads(res.body or b"{}").get("fields", {})
+    shown = {k: _firestore_value(v) for k, v in sorted(fields.items())}
+    problems = limits_problems(fields)
+    if problems:
+        return Result("D-LIMITS", rules, FAIL, f"config/limits = {shown}", problems)
+    return Result("D-LIMITS", rules, PASS, f"config/limits = {shown}")
 
 
 def sample_problems(doc: dict[str, Any]) -> list[str]:
@@ -1626,36 +2212,7 @@ def check_deploy_samples(ctx: Ctx) -> Result:
     project = getattr(ctx.args, "project", None)
     if not project:
         raise Blocked("needs --project")
-    if shutil.which("gcloud") is None:
-        raise Blocked("gcloud not found on PATH; cannot read the production samples/ collection")
-    token_value = _gcloud_token(ctx)
-    if token_value is None:
-        raise Blocked("no gcloud access token (gcloud auth login)")
-    base = f"{FIRESTORE_API}/projects/{project}/databases/(default)/documents/samples"
-    docs: list[dict[str, Any]] = []
-    page = ""
-    while True:
-        query = urllib.parse.urlencode(
-            {
-                "pageSize": 300,
-                "mask.fieldPaths": ["seeded", "provider"],
-                **({"pageToken": page} if page else {}),
-            },
-            doseq=True,
-        )
-        res = http(
-            ctx,
-            f"{base}?{query}",
-            headers={"Authorization": f"Bearer {token_value}", "x-goog-user-project": project},
-        )
-        if res.status != 200:
-            why = res.error or f"HTTP {res.status}"
-            raise Blocked(f"Firestore REST list of samples/ in {project} failed: {why}")
-        body = json.loads(res.body or b"{}")
-        docs += body.get("documents", [])
-        page = body.get("nextPageToken", "")
-        if not page:
-            break
+    docs = firestore_list(ctx, project, "samples", ["seeded", "provider"], _firestore_token(ctx))
     problems = [p for doc in docs for p in sample_problems(doc)]
     if problems:
         return Result(
@@ -1671,12 +2228,55 @@ def check_deploy_samples(ctx: Ctx) -> Result:
     )
 
 
+def _preflight(ctx: Ctx, url: str, origin: str) -> HttpResult:
+    return http(
+        ctx,
+        f"{url}/api/runs",
+        method="OPTIONS",
+        follow=False,
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+
+
+def check_deploy_cors(ctx: Ctx) -> Result:
+    rules = ("S-03", "G9")
+    _, url = _deploy_inputs(ctx)
+    origin = _hosting_origin(ctx)
+    good, evil = _preflight(ctx, url, origin.rstrip("/")), _preflight(ctx, url, EVIL_ORIGIN)
+    if good.status is None or evil.status is None:
+        return Result("D-CORS", rules, BLOCKED, f"preflight unreachable: {good.error or evil.error}")
+    problems = []
+    if good.status != 200 or good.headers.get("access-control-allow-origin") != origin.rstrip("/"):
+        problems.append(
+            f"preflight from {origin}: {good.status}, allow-origin="
+            f"{good.headers.get('access-control-allow-origin')!r}"
+        )
+    if evil.headers.get("access-control-allow-origin") in {EVIL_ORIGIN, "*"}:
+        problems.append(f"preflight from {EVIL_ORIGIN} allowed ({evil.status})")
+    if problems:
+        return Result("D-CORS", rules, FAIL, "CORS is wrong", problems)
+    return Result("D-CORS", rules, PASS, f"{origin} allowed; {EVIL_ORIGIN} refused ({evil.status})")
+
+
 DEPLOY_CHECKS = [
-    Check("D-HEALTH", ("S-03", "B-02"), check_deploy_health),
-    Check("D-RUN-CONFIG", ("S-03", "B-01", "B-02", "ENG-E7"), check_deploy_run_config),
-    Check("D-BUDGET", ("S-03", "ENG-E9"), check_deploy_budget),
+    Check("D-HEALTH", ("S-03", "B-01", "B-02"), check_deploy_health),
+    Check("D-WEB", ("S-03", "B-03"), check_deploy_web),
+    Check("D-WEB-SECRETS", ("ENG-E7", "S-03", "G1"), check_deploy_web_secrets),
     Check("D-CORS", ("S-03", "G9"), check_deploy_cors),
+    Check("D-NO-TOKEN", ("S-03", "ENG-E9"), check_deploy_no_token),
+    Check("D-RUN-CONFIG", ("S-03", "B-01", "B-02", "ENG-E7"), check_deploy_run_config),
+    Check("D-SA-ROLES", ("B-02", "ENG-E7"), check_deploy_sa_roles),
+    Check("D-RULES", ("B-09", "S-03", "G4"), check_deploy_rules),
     Check("D-ANON-AUTH", ("S-03", "B-03"), check_deploy_anon_auth),
+    Check("D-API-KEY", ("ENG-E7", "ENG-E9", "S-03"), check_deploy_api_key),
+    Check("D-FIRESTORE-CORPUS", ("B-03", "S-03"), check_deploy_firestore_corpus),
+    Check("D-LIMITS", ("S-03", "ENG-E9"), check_deploy_limits),
+    Check("D-BUDGET", ("S-03", "ENG-E9"), check_deploy_budget),
+    Check("D-UPTIME", ("S-03",), check_deploy_uptime),
     Check("D-SAMPLES", ("S-03", "B-01", "B-09"), check_deploy_samples),
 ]
 
@@ -2145,11 +2745,23 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--repo", default=".", help="repository root (default: current directory)")
     p.add_argument("--venv", help="directory holding ruff/mypy/python (default: backend/.venv/bin)")
     p.add_argument("--node-dir", help="directory holding node (default: ARGUS_NODE_DIR or PATH)")
-    p.add_argument("--project", help="deploy: Google Cloud project id")
-    p.add_argument("--service-url", help="deploy: Cloud Run service URL")
+    p.add_argument(
+        "--project", default=DEFAULT_PROJECT, help=f"deploy: Google Cloud project id ({DEFAULT_PROJECT})"
+    )
+    p.add_argument("--service-url", default=DEFAULT_SERVICE_URL, help="deploy: Cloud Run service URL")
     p.add_argument("--service", help="deploy: Cloud Run service name (default: found from --service-url)")
     p.add_argument("--region", help="deploy: Cloud Run region (default: found from --service-url)")
-    p.add_argument("--hosting-origin", help="deploy: Firebase Hosting origin that must pass CORS")
+    p.add_argument(
+        "--hosting-origin",
+        default=DEFAULT_HOSTING_ORIGIN,
+        help="deploy: Firebase Hosting origin (the web app)",
+    )
+    p.add_argument("--expect-sha", help="deploy: /health git_sha must equal this commit")
+    p.add_argument(
+        "--allow-min-zero",
+        action="store_true",
+        help="deploy: accept min instances 0 (cost saving before the final gate, D-49); default needs 1",
+    )
     p.add_argument(
         "--submission",
         help="submission: JSON with deck_pdf, video_file, video_url, repo_url, "
