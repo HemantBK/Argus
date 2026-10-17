@@ -1,7 +1,7 @@
 // The Evaluation page's reading of eval_results/latest. schema.py has no model for it yet (requested in
 // BACKEND_REQUESTS.md, item 2), so this module states the shape the page expects and checks every field: a
 // document that breaks it is an error on screen, never a half-rendered table. Every number must carry its
-// sample size (UI_SPEC 3.4); a metric with no value is "not measured yet". Pure; tested in evalResults.test.ts.
+// sample size (UI_SPEC 3.4); a metric with no value in a stored run is "not measured yet". Pure; tested in evalResults.test.ts.
 
 export type MetricUnit = "ratio" | "seconds" | "usd" | "count";
 

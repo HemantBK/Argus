@@ -76,3 +76,26 @@
   margin: 0;
   padding-left: calc(var(--space) * 2.5);
 }
+
+/* Shown while no evaluation is published to this page: a pointer to the official one, no numbers. */
+.eval-official {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: calc(var(--space) * 2) calc(var(--space) * 2.5);
+  margin: calc(var(--space) * 2) 0 calc(var(--space) * 4);
+  max-width: 720px;
+}
+.eval-official h2 {
+  margin-top: 0;
+}
+.eval-official a {
+  overflow-wrap: anywhere;
+}
+/* A run id moves to the next line whole rather than breaking at its hyphen. */
+.eval-runs .mono {
+  white-space: nowrap;
+}
+.eval-runs {
+  margin: 0;
+  padding-left: calc(var(--space) * 2.5);
+}

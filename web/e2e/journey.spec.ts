@@ -34,7 +34,22 @@ test("start, saved review, audit and evaluation screens render with no console e
   await tabs.getByRole("link", { name: "Evaluation" }).click();
   await expect(page).toHaveURL(/#\/eval$/);
   await expect(page.getByRole("heading", { name: "Evaluation", level: 1 })).toBeVisible();
-  await expect(page.getByRole("table")).toBeVisible();
+  // The seeded emulator has no eval_results/latest, as production does not: the page points to the official
+  // evaluation in the repository instead of a table, and never says no evaluation was run.
+  const official = page.getByRole("region", { name: "Official evaluation" });
+  await expect(official).toContainText("No evaluation has been published to this page.");
+  await expect(official.getByRole("link", { name: "docs/evaluation.md" })).toHaveAttribute(
+    "href",
+    "https://github.com/HemantBK/Argus/blob/main/docs/evaluation.md",
+  );
+  await expect(official.getByRole("link", { name: "evidence/2026-10-17/eval-official/" })).toHaveAttribute(
+    "href",
+    "https://github.com/HemantBK/Argus/tree/main/evidence/2026-10-17/eval-official",
+  );
+  await expect(official.getByRole("listitem")).toHaveCount(6);
+  await expect(official).toContainText("R2 strong, hard (headline): 20261017T154026Z-446cd6");
+  await expect(page.getByRole("table")).toHaveCount(0);
+  await expect(page.locator("main#main")).not.toContainText(/not measured yet|No evaluation run has been recorded/);
   await expect(legal).toContainText("Synthetic data only · Not legal advice");
 
   await expect(page.getByRole("alert")).toHaveCount(0);

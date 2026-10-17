@@ -286,7 +286,7 @@ export function useSavedRuns(max = 10): LiveRead<SavedRuns> {
 
 /**
  * eval_results/latest as stored (its schema is not in schema.py yet), or null when it does not exist, in which
- * case the Evaluation page says "not measured yet".
+ * case the Evaluation page shows no table and points to the official evaluation in the repository.
  */
 export function useEvalLatest(): LiveRead<Record<string, unknown> | null> {
   return useLive("eval_results/latest", false, () => (onData, onError) => {

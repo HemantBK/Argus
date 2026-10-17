@@ -63,7 +63,7 @@ describe("seeded demo data (emulator)", () => {
     expect(badges.some((b) => b.state === "verified")).toBe(true);
   });
 
-  it("has no eval_results/latest, so the Evaluation page says not measured yet", async () => {
+  it("has no eval_results/latest, so the Evaluation page points to the official evaluation in the repository", async () => {
     expect((await getDoc(doc(db, "eval_results", "latest"))).exists()).toBe(false);
   });
 
