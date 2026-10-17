@@ -1754,9 +1754,16 @@ def run_config_problems(svc: dict[str, Any], project: str, *, allow_min_zero: bo
     if account != want_account:
         problems.append(f"service account {account!r}, expected {want_account!r}")
     problems += env_name_problems(n for n in env if n)
-    if not serving or any(not t.get("latestRevision") for t in serving):
-        problems.append(f"traffic does not all go to the latest revision: {serving}")
     revision = status.get("latestReadyRevisionName")
+    # The template read above is the latest ready revision's, so all traffic must be on that one revision,
+    # whether it follows "latest" or is pinned by name (scripts/release.sh promote pins the revision it
+    # tested). A pin to an older revision, or a split, means the settings checked here are not what serves.
+    if (
+        len(serving) != 1
+        or serving[0].get("percent") != 100
+        or not (serving[0].get("latestRevision") or serving[0].get("revisionName") == revision)
+    ):
+        problems.append(f"traffic does not all go to the latest ready revision {revision}: {serving}")
     min_note = " (allowed by --allow-min-zero)" if allow_min_zero and str(min_i) == "0" else ""
     summary = (
         f"{svc.get('metadata', {}).get('name')} revision {revision}: mode={env.get('ARGUS_MODE')} "

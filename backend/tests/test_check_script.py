@@ -1016,6 +1016,19 @@ OLD_REVISION = [
     {"latestRevision": False, "percent": 100, "revisionName": "argus-api-00002-qqg"},
     {"latestRevision": True, "percent": 0, "revisionName": "argus-api-00003-6xj"},
 ]
+# scripts/release.sh promote: the tested revision pinned by name, still tagged "candidate".
+PINNED_LATEST = [
+    {
+        "percent": 100,
+        "revisionName": "argus-api-00003-6xj",
+        "tag": "candidate",
+        "url": "https://candidate---x",
+    }
+]
+SPLIT = [
+    {"latestRevision": True, "percent": 50, "revisionName": "argus-api-00003-6xj"},
+    {"percent": 50, "revisionName": "argus-api-00002-qqg"},
+]
 
 
 @pytest.mark.parametrize(
@@ -1037,6 +1050,8 @@ OLD_REVISION = [
         (CLOUD_ENV, {"timeout": 60}, False, check.FAIL),
         (CLOUD_ENV, {"account": "419264532549-compute@developer.gserviceaccount.com"}, False, check.FAIL),
         (CLOUD_ENV, {"traffic": OLD_REVISION}, False, check.FAIL),
+        (CLOUD_ENV, {"traffic": PINNED_LATEST}, False, check.PASS),
+        (CLOUD_ENV, {"traffic": SPLIT}, False, check.FAIL),
     ],
     ids=[
         "good",
@@ -1055,6 +1070,8 @@ OLD_REVISION = [
         "timeout-60",
         "default-compute-sa",
         "traffic-on-old-revision",
+        "traffic-pinned-to-the-latest-ready-revision",
+        "traffic-split",
     ],
 )
 def test_run_config_reads_the_service_description(
