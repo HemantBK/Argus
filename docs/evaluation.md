@@ -75,6 +75,16 @@ won by stopping everything.
    since a correct citation must quote the library word for word. We have not yet compared against Gemini with all
    365 paragraphs pasted into its prompt.
 2. The tool-using agent is accurate and hard to fool on its own.
-3. The monitor is a safety net for when the agent is weaker or wrong, as the cheaper model is here: attack success
+3. The monitor is a fail-safe for when the agent is weaker or wrong, as the cheaper model is here: attack success
    fell from 8/36 to 0/36 with 0/32 false stops, for about 3-5 s more per clause.
-4. **We do not claim the monitor makes the strong agent more accurate.** It was neutral there.
+4. **We do not claim the monitor improves the shipped agent.** It was neutral on Gemini 3.8 Flash.
+
+## Live runs on the deployed stack (not an evaluation)
+
+On 17 Oct 2026 the cloud verification ran five reviews of the sample policies through Vertex AI on the deployed
+build (code `92c4ab1`, revision `argus-api-00003-6xj`): policy A runs `95c9f5f8ccc748c4865ff5daef0d676a`,
+`d38710fb772d490eb705acff965f8b8b`, `d67c3dfef827415f8a0c79ed7bae1d53`; policy B runs
+`f30914e657fd4b5881d8fb7d49f4aa13`, `c0de9595619e4ab1bb8e85fb0c209b82`. Each 8-clause review took 20-25 s and
+about $0.10 of Gemini (estimate from measured tokens and list prices). The labels matched the sample policies'
+planted answers on 39/40 clauses; the miss was policy B c8, labelled compliant instead of gap in run `f30914e6`.
+These are checks of the deployment on two built-in policies, not a measure of accuracy.

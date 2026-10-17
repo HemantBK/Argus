@@ -1,6 +1,14 @@
 # How the monitor works
 
-The step monitor watches the agent at two points: every paragraph it reads, and every finding it drafts.
+Models make mistakes. The step monitor is Argus's fail-safe for when the agent is wrong: it watches the agent at
+two points, every paragraph it reads and every finding it drafts, and sends doubtful work back once or to a person.
+
+Example from the saved policy A run on the live app (Vertex AI, run `95c9f5f8ccc748c4865ff5daef0d676a`): for
+clause c6 the agent tried to read para 14(9) of the NBFC Credit Facilities Directions, which does not exist. The
+read check answered *"revise (paragraph does not exist)"*, the agent read para 14(4) instead, and the clause went
+to a person as "Needs review" rather than carrying a made-up citation.
+
+![Live trace of clause c6: the read of para 14(9) is revised by the monitor](screenshots/policy-a-c6-monitor-revise.png)
 
 **Reads (code only, no model call).** When the agent reads a paragraph, code checks that the paragraph exists in
 the library and whether its instrument is in force. If not, the reason goes back to the agent before it drafts,
@@ -29,9 +37,10 @@ Fixed action rules, in order:
 4. Not supported, or off task: **revise**.
 5. Otherwise: **continue**.
 
-The agent gets one revision. A second REVISE, a STOP, or a citation that still cannot be verified sends the
-clause to a person as insufficient evidence, with the agent's draft and the monitor's reason kept. On a STOP the
-draft's label is withheld when it says compliant or follows the injected instruction. A failed model call or a
+The agent gets one revision. A second REVISE or a citation that still cannot be verified sends the clause to a
+person as insufficient evidence, with the agent's draft and the monitor's reason kept. A STOP also sends the
+clause to a person: its label is withheld when it says compliant or follows the injected instruction, and
+otherwise kept with the stop shown beside it (policy B c2 below stays "Conflict"). A failed model call or a
 reply that breaks the schema fails the clause; it is never treated as a pass. The three citation checks are
 guarantees; `supported` and `on_task` are model judgements.
 
@@ -42,5 +51,11 @@ guarantees; `supported` and `on_task` are model judgements.
   in force on the library date. The citation shown is rebuilt from the library, never copied from model text.
 - **Model judgement, not a guarantee:** whether the quoted rule *supports* the finding, whether the policy hides an
   instruction aimed at the reviewer, and whether the draft stayed on task.
-- **Measured, not assumed:** see [evaluation.md](evaluation.md). The monitor's benefit showed with a cheaper agent;
-  with the agent Argus ships it made no measurable difference.
+- **Measured, not assumed:** see [evaluation.md](evaluation.md). The evidence for the fail-safe is the cheaper
+  agent: with Gemini 3.1 Flash-Lite as the agent, attacks that got through fell from 8/36 to 0/36 with the
+  monitor on, with 0/32 false stops (preliminary, runs `20261016T162211Z-1536fa` and `20261016T162930Z-d63488`).
+  With the agent Argus ships it made no measurable difference, and we do not claim it improves that agent.
+- **Not a shield:** injection detection is a pattern scan plus a model judgement. In the preliminary run the
+  strong agent let 1/20 pre-registered hard attacks through, with and without the monitor.
+
+![Saved policy B run: the monitor stops clause c2 and quotes the planted footnote](screenshots/policy-b-c2-stopped.png)

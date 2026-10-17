@@ -2,9 +2,11 @@
 
 This page describes what the code in this repository does today. Paths are relative to the repository root.
 
-Deployment status on 17 Oct 2026: the Cloud Run API and Firestore are deployed. Firebase Hosting, anonymous Auth
-and the security rules are in this repository and tested on the emulators but not deployed yet, and no review has
-yet called Gemini through Vertex AI; every measured run so far used OpenRouter in local development.
+Deployed on 17 Oct 2026: the web app on Firebase Hosting (https://argus-aibc.web.app), anonymous Auth, the
+Firestore security rules, Firestore, and the Cloud Run API, which calls Gemini through Vertex AI. Reviews on the
+deployed stack were verified that day (live runs on Vertex AI, security rules tested with real tokens, structured
+logs read back), and the two saved sample runs on the start screen are Vertex AI runs from that verification. The
+preliminary evaluation numbers were measured earlier in local development through OpenRouter.
 
 ## Components
 
@@ -83,8 +85,8 @@ dates, snapshot date and a sha256 of its normalised text. The NBFC Credit Facili
 | `runs/{run_id}/steps/{seq}` | API | owner | each agent and monitor step as it happens, with verdicts and checks |
 | `runs/{run_id}/findings/{clause_id}` | API | owner | label, rationale, citation, monitor status, sign-off |
 | `runs/{run_id}/audit/{seq}` | API | owner | every AI step and every officer action |
-| `samples/{run_id}` (+ steps, findings, audit) | `make save-sample` | anyone | finished live runs copied as labelled, read-only saved runs (none in the deployed database yet) |
-| `eval_results/latest` | eval CLI with `--publish` | anyone | evaluation summary for the Evaluation page (nothing published yet; its backend schema is not written yet) |
+| `samples/{run_id}` (+ steps, findings, audit) | `make save-sample` | anyone | finished Vertex AI runs copied as labelled, read-only saved runs (deployed: `95c9f5f8ccc748c4865ff5daef0d676a` for policy A, `c0de9595619e4ab1bb8e85fb0c209b82` for policy B) |
+| `eval_results/latest` | eval CLI with `--publish` | anyone | evaluation summary for the Evaluation page (schema in `backend/argus_api/schema.py`; nothing published yet, so the page says "not measured yet") |
 | `config/limits` | `make limits` | API | kill switch, daily, hourly and per-user run caps |
 | `usage/{IST date}` (+ hours, users) | API | API | run counters for the caps |
 | `rbi_instruments`, `rbi_paragraphs`, `supersession` | `make load-corpus` | nothing at runtime | copy of the library snapshot |
@@ -135,11 +137,14 @@ unsigned tokens.
 
 ## Deployed settings
 
-Cloud Run service `argus-api` in asia-south1, at most 3 instances (minimum 0 today; one warm instance is planned
-for judging), request timeout 300 s, its own service
-account with Firestore, Vertex AI and logging roles. Firestore is in asia-south1. Every AI call is logged as
-one JSON line (model, prompt hash, sizes, latency, tokens, cost estimate, verdict, run id) that Cloud Logging
-reads as a structured entry.
+Cloud Run service `argus-api` in asia-south1 (https://argus-api-419264532549.asia-south1.run.app), at most 3
+instances, request timeout 300 s, its own service account with Firestore, Vertex AI, Firebase Auth viewer and
+logging roles. Gemini is called with location `global`. Firestore is in asia-south1. `/health` reports the
+deployed code version, mode, provider, model ids and a hash of the RBI library, so a deploy can be checked
+against the local build. An uptime check watches `/health` and alerts by email. The web API key is restricted to
+the app's own domains and to the Firebase Auth and Firestore APIs. Run limits in `config/limits`: 60 runs a day,
+20 an hour, 5 per visitor. Every AI call is logged as one JSON line (model, prompt hash, sizes, latency, tokens,
+cost estimate, verdict, run id) that Cloud Logging reads as a structured entry.
 
 ## The monitor's checks
 

@@ -1,7 +1,9 @@
 # Argus
 
-**Argus reviews an NBFC's digital-lending policy, clause by clause, against a dated library of RBI text. Every
-finding quotes the RBI paragraph it rests on, and a step monitor checks the agent's reads and drafts.**
+**Argus checks an NBFC's digital-lending policy clause by clause against a dated library of RBI text, and says
+for each clause whether it is outdated, missing a rule, in conflict or compliant. Every rule a finding rests on
+is checked in code: it exists, it is quoted word for word, and it is in force on the library date. Anything in
+doubt goes to a compliance officer.**
 
 Team Argus · Google Cloud AI Builder Cup 2026 · BFSI theme · Synthetic policies only · Not legal advice
 
@@ -9,52 +11,66 @@ Team Argus · Google Cloud AI Builder Cup 2026 · BFSI theme · Synthetic polici
 **[Evaluation](docs/evaluation.md)** · **[Architecture](docs/architecture.md)** ·
 **[RBI sources](docs/data-and-rbi-sources.md)**
 
-![Review workspace: clause c2 of sample policy A cites the withdrawn 2025 Directions; Argus shows the chain to the rule in force and quotes it](docs/screenshots/review-workspace.png)
+![Review workspace on the live app: clause c2 of sample policy A cites para 10 of the withdrawn 2025 Directions; Argus shows the withdrawing circular and the rule in force, para 11(1), with RBI's text and dates](docs/screenshots/review-workspace.png)
 
-*Saved run of sample policy A, recorded 16 Oct 2026 on a local build. Since then the header shows RBI's own
-"updated as on" date and the chain names the withdrawing circular.*
+*Saved run of sample policy A on the live app, reviewed through Gemini on Vertex AI on 17 Oct 2026 (run
+`95c9f5f8ccc748c4865ff5daef0d676a`). Clause c2 cites para 10 of the withdrawn 2025 Directions: Argus shows the
+circular that withdrew it, where the rule sits now, and RBI's text with its dates.*
 
-## Why this problem
+## The job: a clause-level gap check
 
-On 28 Nov 2025 RBI withdrew its Digital Lending Directions of 8 May 2025 (RBI/2025-26/100). Their rules for NBFCs
-now sit in Chapter III of the NBFC Credit Facilities Directions, 2025, updated as on 15 Jul 2026. Lending policies
-written before then can still cite the withdrawn text, and RBI's NBFC Compliance Function Directions, 2026
-(para 32) ask NBFCs for workflow-based compliance tools. A compliance officer needs to know, clause by clause,
-what is outdated, missing or in conflict, and needs every answer to be checkable. A confident wrong citation is
-worse than no answer.
+NBFCs review their lending policies against rules RBI keeps reissuing. On 28 Nov 2025 RBI's consolidation
+circular RBI/2025-26/100 withdrew 9,445 circulars, among them the Digital Lending Directions of 8 May 2025
+(RBI/2025-26/36). Their rules for NBFCs now sit in Chapter III of the NBFC Credit Facilities Directions, 2025,
+updated as on 15 Jul 2026. RBI's NBFC Compliance Function Directions, 2026 (para 32) ask NBFCs for
+workflow-based compliance tools.
+
+A compliance officer needs to know, clause by clause, what is outdated, missing or in conflict, and needs every
+answer to be checkable. A confident wrong citation is worse than no answer. The withdrawn citation is the quick
+proof: open clause c2 of sample policy A and the chain from the old paragraph to the rule in force is on screen.
 
 ## Why Gemini, and what code does instead
 
 Reading a free-text policy clause, finding the RBI paragraph that governs it and judging whether that paragraph
 supports a finding is language reasoning a rules engine cannot do. Gemini 3.8 Flash does it as an agent, using
 function calling to search and read the library. What can be checked exactly is checked in code, not by a model:
-whether the cited paragraph exists, whether the quote is verbatim, and whether the rule was in force when the
-library was fetched.
-Gemini 3.5 Flash-Lite then judges each draft for support and for instructions planted in the policy.
+the cited paragraph exists in the library, the quote is found in it word for word, and the rule is in force on the
+library date. The citation is rebuilt from the library, never copied from the model's words.
+
+Models make mistakes, so Argus has a fail-safe: a step monitor. Every paragraph the agent reads is checked in code,
+and Gemini 3.5 Flash-Lite reviews each drafted finding for support, hidden instructions in the policy and staying
+on task. Anything it rejects gets one revision; if it still fails, or the monitor stops it, it goes to a person.
 
 ## Try it in 60 seconds
 
 1. Open the [live app](https://argus-aibc.web.app) and press **Run demo**: a review of sample policy A streams
-   in, clause by clause (about 40 s).
-2. Pick clause **c2**: the policy cites para 10 of the withdrawn 2025 Directions; Argus shows the withdrawal and
-   where the rule now sits (para 11(1)), with the quote.
-3. Accept a finding, then open **Audit log**: every agent step, monitor verdict and your action, in order.
-4. Run sample policy **B** and open clause **c2**: a footnote tells the reviewer to "treat as compliant"; the
-   monitor stops the clause and quotes the planted text.
+   in, clause by clause (20-25 s on Vertex AI in our five verification runs on 17 Oct).
+2. Pick clause **c2**: the policy cites para 10 of the withdrawn 2025 Directions; Argus shows the circular that
+   withdrew it (RBI/2025-26/100, 28 Nov 2025) and where the rule now sits (para 11(1)), with the quote.
+3. Open the trace and find clause **c6**: the agent tried to read para 14(9), which does not exist; the monitor
+   sent it back mid-run and the clause went to a person.
+4. Open the saved run of policy **B** and pick clause **c2**: a footnote tells the reviewer to "treat as
+   compliant"; the monitor stopped the clause and quoted the planted text.
+5. In your own run (saved runs are read-only), Accept a finding, then open **Audit log**: every agent step,
+   monitor verdict and your action.
 
 No sign-in screen: the app signs each visitor in anonymously, so each sees only their own runs. Live runs are
-capped per visitor and per day to keep Gemini spend bounded.
+capped per visitor, per hour and per day to keep Gemini spend bounded. The two saved runs on the start screen are
+real Vertex AI runs recorded on 17 Oct 2026 (policy A `95c9f5f8ccc748c4865ff5daef0d676a`, policy B
+`c0de9595619e4ab1bb8e85fb0c209b82`).
 
 ## Headline numbers (preliminary)
 
-> One session on 2026-10-16, development build, same Gemini model ids reached through OpenRouter. The official
-> run on the deployed build replaces these. Full tables: [docs/evaluation.md](docs/evaluation.md).
+> One evaluation session on 2026-10-16, development build, same Gemini model ids reached through OpenRouter. The
+> official run on the deployed build replaces these. Run ids and full tables:
+> [docs/evaluation.md](docs/evaluation.md).
 
-- **0/43** correct citations from Gemini without the library, versus **22/23** for the Argus agent.
-- With a cheaper agent (Gemini 3.1 Flash-Lite), attacks that got through fell from **8/36 to 0/36** with the
-  monitor on, with **0/32** false stops on clean clauses.
+- **0/43** correct citations from Gemini without the library (runs `43cea4`, `275c7b`), versus **22/23** for the
+  Argus agent (run `43cea4`).
+- **The fail-safe, measured:** with a cheaper agent (Gemini 3.1 Flash-Lite), attacks that got through fell from
+  **8/36 to 0/36** with the monitor on, with **0/32** false stops on clean clauses (runs `1536fa`, `d63488`).
 - With the agent Argus ships (Gemini 3.8 Flash), the monitor made **no measurable difference**: the agent was
-  already at 22/23 citations and 0/8 base attacks. We do not claim the monitor makes it more accurate.
+  already at 22/23 citations and 0/8 base attacks. We do not claim the monitor improves the shipped agent.
 
 ## How it works
 
@@ -102,22 +118,24 @@ flowchart LR
 
 | Part | Status |
 |---|---|
-| Gemini agent and monitor | Real calls. Vertex AI in the deployed app; OpenRouter or AI Studio only in local development, where the preliminary numbers were measured. |
+| Gemini agent and monitor | Real calls. The deployed app uses Vertex AI only; the saved runs and our cloud verification runs on 17 Oct went through Vertex AI. The preliminary evaluation numbers were measured in local development through OpenRouter. |
 | RBI library | Real text from rbi.org.in HTML pages, fetched 16 Oct 2026, each paragraph hashed: 4 instruments, 365 paragraphs, one in force. |
 | Supersession map, verifier, action rules | Real code and data, unit-tested. |
 | Sample policies and evaluation cases | **Synthetic**, written for this project. No real lender or personal data. |
-| `llm_fake.py`, `store_fake.py`, `seed_fake_run.py`, `web/scripts/seed_demo.py` | **Test doubles and test data** for offline tests and the local emulator; blocked from production. |
-| Costs | Estimates from measured tokens and published prices, not invoices. |
+| Test doubles (`llm_fake.py`, `store_fake.py`, seed scripts) | Offline tests and the local emulator only; blocked from production. |
+| Costs | Estimates from measured tokens and published prices (about $0.10 of Gemini per 8-clause review on Vertex AI), not invoices. |
 
 ## Limitations
 
 - **Narrow scope:** NBFC digital lending only, four RBI instruments, keyword search over 365 paragraphs. Rules
   published only as PDFs (for example the Key Facts Statement format) are cross-referenced, not quoted.
+- **"In force" means in force on the library date**, not a live check against RBI.
 - **Small samples:** two synthetic 8-clause policies and a 34-case evaluation set; every number carries its n.
-- **The monitor is neutral on the strong agent;** its measured benefit is with a cheaper agent.
-- **Model variance:** one sample clause was labelled compliant instead of gap in 1 of 4 live runs.
-- **Not yet:** reviewing your own policy (left out to keep personal data out of the prototype), more instruments,
-  a long-context baseline, independent expert labels.
+- **The monitor is a fail-safe, not an accuracy boost:** its measured benefit is with a cheaper agent; with the
+  shipped agent it was neutral. Its support and injection checks are model judgements and may miss things (the
+  strong agent let 1/20 pre-registered hard attacks through, with and without the monitor).
+- **Model variance:** in 1 of 2 Vertex AI runs of policy B, clause c8 was labelled compliant instead of gap.
+- **Not yet:** reviewing your own policy, more instruments, a long-context baseline, independent expert labels.
 
 ## Quickstart (local)
 
@@ -132,17 +150,6 @@ make limits CAP=60 HOURLY_CAP=20 USER_CAP=5 ENABLED=true
 make run                                             # API on http://localhost:8080
 cd web && npm ci && cp .env.example .env.local && npm run dev   # http://localhost:5173
 ```
-
-## Repository map
-
-| Path | What |
-|---|---|
-| `backend/argus_api/agent/`, `monitor/`, `corpus/` | Agent loop, step monitor, RBI library and quote verifier |
-| `backend/argus_api/runs.py`, `main.py` | Run API, limits, sign-off, Firestore writes |
-| `backend/argus_api/eval/` | Evaluation harness and cases |
-| `web/src/` | React app: start, review workspace, audit log, evaluation |
-| `scripts/check.py` | Commit, deploy and submission checks (a pre-commit hook runs them) |
-| `firestore.rules`, `firebase.json` | Security rules and Hosting config |
 
 ## Team
 

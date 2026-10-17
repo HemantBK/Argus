@@ -29,3 +29,14 @@ http://localhost:5173.
 `ARGUS_MODE=local` uses the emulators and OpenRouter or AI Studio. `ARGUS_MODE=cloud` (the deployed app) uses real
 Firestore, real Firebase Auth and Gemini on Vertex AI only; the API refuses to start in cloud mode with any other
 provider or with emulator settings.
+
+## Repository map
+
+| Path | What |
+|---|---|
+| `backend/argus_api/agent/`, `monitor/`, `corpus/` | Agent loop, step monitor, RBI library and quote verifier |
+| `backend/argus_api/runs.py`, `main.py` | Run API, limits, sign-off, Firestore writes |
+| `backend/argus_api/eval/` | Evaluation harness and cases |
+| `web/src/` | React app: start, review workspace, audit log, evaluation |
+| `scripts/check.py`, `scripts/cloud_e2e.py` | Commit, deploy and submission checks; live tests against the deployed stack |
+| `firestore.rules`, `firebase.json` | Security rules and Hosting config |
