@@ -417,8 +417,15 @@ def _with_retries(
     raise AssertionError("unreachable")
 
 
+# HTTP 499 CANCELLED: Vertex AI answers it, like 504 DEADLINE_EXCEEDED, when a stalled call reaches the
+# server-side deadline that google-genai derives from our timeout. On 2026-10-17 a release candidate's clause
+# got 499 "The operation was cancelled." after 27.6 s of a 30 s try, while its other clauses got 504 after
+# 27.1-27.4 s: the same stall, so it is retried and handed over the same way.
+CANCELLED_STATUS = 499
+
+
 def _is_transient_status(code: int | None) -> bool:
-    return code is not None and (code == 429 or code >= 500)
+    return code is not None and (code == 429 or code == CANCELLED_STATUS or code >= 500)
 
 
 def _status_kind(code: int | None) -> Classification:

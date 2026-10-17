@@ -883,3 +883,22 @@ def test_a_last_try_cut_by_our_deadline_is_our_deadline_not_the_providers_give_u
         llm.complete(OR_MODEL, "hi")
     e = raised.value
     assert (e.kind, e.cause, e.attempts, e.failures) == ("deadline", "throttled", 2, ("throttled",))
+
+
+def test_google_treats_499_cancelled_like_a_504_stall() -> None:
+    # Vertex AI answered 499 CANCELLED for a stalled call on 2026-10-17, where its sibling calls got 504.
+    llm, models, _ = google([genai_errors.ClientError(499, {}), g_text("ok")])
+    assert llm.complete(MODEL, "hi").text == "ok"
+    assert len(models.requests) == 2
+    llm, _, _ = google([genai_errors.ClientError(499, {}) for _ in range(MAX_ATTEMPTS)])
+    with pytest.raises(LLMError) as raised:
+        llm.complete(MODEL, "hi")
+    assert (raised.value.kind, raised.value.cause) == ("transient", "transient")
+
+
+def test_other_client_errors_are_still_fatal() -> None:
+    for code in (400, 403, 404):
+        llm, models, _ = google([genai_errors.ClientError(code, {})])
+        with pytest.raises(LLMError) as raised:
+            llm.complete(MODEL, "hi")
+        assert raised.value.kind == "fatal" and len(models.requests) == 1
