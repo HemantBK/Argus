@@ -300,3 +300,14 @@ def test_live_lock_is_exclusive(tmp_path: Path) -> None:
                 pass
     with e2e.live_lock(path):
         pass
+
+
+def test_api_flag_points_every_check_at_another_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """release.sh tests the tagged candidate revision before it gets traffic, through --api."""
+    seen: list[str] = []
+    monkeypatch.setattr(e2e, "API", e2e.API)
+    monkeypatch.setitem(e2e.COMMANDS, "smoke", lambda args, gate: seen.append(e2e.API))
+    monkeypatch.setattr(e2e.Gate, "finish", lambda self, **kw: 0)
+    url = "https://candidate---argus-api.example.run.app"
+    assert e2e.main(["--out", str(tmp_path), "--api", url + "/", "smoke"]) == 0
+    assert seen == [url]

@@ -65,6 +65,8 @@ EXPECTED = BACKEND / "argus_api" / "samples" / "expected.json"
 PROJECT = "argus-aibc"
 REGION = "asia-south1"
 SERVICE = "argus-api"
+# The public service URL. --api points every check at another URL of the same service instead, such as the
+# tagged no-traffic candidate revision that scripts/release.sh tests before moving traffic to it.
 API = "https://argus-api-419264532549.asia-south1.run.app"
 WEB = "https://argus-aibc.web.app"
 FIRESTORE = f"https://firestore.googleapis.com/v1/projects/{PROJECT}/databases/(default)/documents"
@@ -1212,6 +1214,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--state", type=Path, default=DEFAULT_STATE, help="owners + spend ledger (mode 600)")
     ap.add_argument("--budget", type=int, default=DEFAULT_BUDGET, help="max live POSTs in the ledger")
     ap.add_argument("--gate-id", help="evidence file stem (default: the subcommand)")
+    ap.add_argument("--api", default=API, help=f"API base URL (default {API})")
     sub = ap.add_subparsers(dest="command", required=True)
     sub.add_parser("smoke", help="1 live run of policy_a")
     hero = sub.add_parser("hero", help="policy_a, policy_a, policy_b, policy_b, serially")
@@ -1228,7 +1231,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
+    global API
     args = parse_args(argv)
+    API = args.api.rstrip("/")
     gate = Gate(args.gate_id or args.command, args.out)
     print(f"{gate.name}: started {gate.started_utc}", flush=True)
     try:
