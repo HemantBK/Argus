@@ -28,8 +28,8 @@ flowchart LR
     M["Step monitor<br/>continue / revise / stop"]
     C[("RBI library snapshot<br/>bundled in the image")]
   end
-  subgraph Vertex["Vertex AI"]
-    G1["Gemini 3.8 Flash<br/>agent, function calling"]
+  subgraph Vertex["Agent Platform (Vertex AI)"]
+    G1["Gemini 3.8 Flash<br/>agent, function calling<br/>(backup: Gemini 3.1 Flash-Lite)"]
     G2["Gemini 3.5 Flash-Lite<br/>monitor judgement"]
   end
   FS[("Firestore")]
@@ -56,6 +56,7 @@ flowchart LR
 | Firestore rules | `firestore.rules` | A live run and its steps, findings and audit rows are readable only by the user who started it. Saved sample runs and evaluation results are public and read-only. No client may write anything. |
 | Run API | `backend/argus_api/main.py`, `runs.py` | Admits a run (kill switch, daily, hourly and per-user caps, checked in one Firestore transaction), reviews every clause in parallel, writes each step as it happens, closes the run after a 90 s budget, saves failures as an explicit state. |
 | Agent | `backend/argus_api/agent/` | Per clause: Gemini 3.8 Flash with function calling over three tools, at most 6 tool calls, then one structured draft finding. Thinking level is pinned to `low`. |
+| Backup agent model | `backend/argus_api/runs.py`, `breaker.py`, `config.py` | When Gemini 3.8 Flash is busy or stops answering on a clause, the clause is reviewed again from the start by Gemini 3.1 Flash-Lite, with the same monitor, prompts and citation checks. The finding records the model and the reason (`Finding.agent_model`, `fallback_reason`), the summary bar counts such clauses, and a run with one is never saved as a sample. The monitor model has no backup. A circuit breaker sends clauses straight to the backup while the agent model keeps failing busy; `/health` shows its state. |
 | Tools | `backend/argus_api/agent/tools.py` | `search_library` (BM25 keyword scoring, no embeddings), `read_paragraph` (full text, in-force status, where a replaced rule now sits), `check_status` (in force or not, end date, replacement). |
 | Verifier | `backend/argus_api/monitor/checks.py`, `corpus/store.py` | Deterministic checks with no model call: the cited paragraph exists in the snapshot, the quote appears word for word, the instrument is in force, and a pattern scan for instructions aimed at the reviewer. |
 | Monitor | `backend/argus_api/monitor/core.py` | Checks every read step and every drafted finding; one Gemini 3.5 Flash-Lite call per draft for support, injection and on-task; fixed rules choose continue, revise or stop. |
@@ -142,7 +143,7 @@ instances, request timeout 300 s, its own service account with Firestore, Vertex
 logging roles. Gemini is called with location `global`. Firestore is in asia-south1. `/health` reports the
 deployed code version, mode, provider, model ids and a hash of the RBI library, so a deploy can be checked
 against the local build. An uptime check watches `/health` and alerts by email. The web API key is restricted to
-the app's own domains and to the Firebase Auth and Firestore APIs. Run limits in `config/limits`: 60 runs a day,
+the app's own domains and to the Firebase Auth and Firestore APIs. Run limits in `config/limits`: 100 runs a day,
 20 an hour, 5 per visitor. Every AI call is logged as one JSON line (model, prompt hash, sizes, latency, tokens,
 cost estimate, verdict, run id) that Cloud Logging reads as a structured entry.
 

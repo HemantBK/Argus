@@ -1028,8 +1028,9 @@ def check_firestore_rules(ctx: Ctx) -> Result:
 
 
 # Claims the product does not make (plan step 5): retired features (clause splitting and upload: policies are
-# the pre-split sample files), an absolute claim, a live-status claim (CLAIMS_LEDGER N2) and a stale UI label.
-# Matched case-insensitively, across line breaks, as whole words.
+# the pre-split sample files), absolute claims (CLAIMS_LEDGER N10, N22: saved runs are Firestore reads and can
+# fail like any request), a live-status claim (N2), a promise of a feature switched on during judging (N23)
+# and a stale UI label. Matched case-insensitively, across line breaks, as whole words.
 BANNED_PHRASES = (
     "no finding rests",
     "snapshot as on",
@@ -1043,6 +1044,11 @@ BANNED_PHRASES = (
     "uploaded policy",
     "in force today",
     "prevents injection",
+    "always work",
+    "always works",
+    "always open",
+    "always opens",
+    "will be switched on",
     "FREE-AI compliant",
 )
 # These are wrong in any sentence: the first is itself the absolute claim, the second the retired label, the

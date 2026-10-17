@@ -42,7 +42,9 @@ person as insufficient evidence, with the agent's draft and the monitor's reason
 clause to a person: its label is withheld when it says compliant or follows the injected instruction, and
 otherwise kept with the stop shown beside it (policy B c2 below stays "Conflict"). A failed model call or a
 reply that breaks the schema fails the clause; it is never treated as a pass. The three citation checks are
-guarantees; `supported` and `on_task` are model judgements.
+guarantees; `supported` and `on_task` are model judgements. When the agent model is busy and a clause goes to the
+backup agent model (Gemini 3.1 Flash-Lite), the monitor and its checks stay the same; the monitor model itself has
+no backup.
 
 
 ## What it guarantees and what it does not

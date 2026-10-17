@@ -88,3 +88,18 @@ build (code `92c4ab1`, revision `argus-api-00003-6xj`): policy A runs `95c9f5f8c
 about $0.10 of Gemini (estimate from measured tokens and list prices). The labels matched the sample policies'
 planted answers on 39/40 clauses; the miss was policy B c8, labelled compliant instead of gap in run `f30914e6`.
 These are checks of the deployment on two built-in policies, not a measure of accuracy.
+
+### Under load, on the build Argus runs now
+
+On 17 Oct 2026 Gemini 3.8 Flash on Vertex AI was overloaded while the current build (code `7c3072d`, revision
+`argus-api-00008-nev`) was released. Its two release checks reviewed sample policy A:
+
+| Run | Who reviewed the 8 clauses | Time | Labels matched |
+|---|---|---|---|
+| `1fa5321b7a9e4373883bfe7427d50a6d` (candidate) | 5 by Gemini 3.8 Flash, 3 by the backup, Gemini 3.1 Flash-Lite | 49.0 s | 8/8 |
+| `69eaa7ca0c1144fb8266651b09a99ad3` (after promotion) | all 8 by the backup | 41.7 s | 6/8 |
+
+In the second run the backup labelled c2 (the withdrawn citation) a gap instead of an outdated reference and c7 a
+gap instead of compliant; the monitor passed both, and both findings carried the backup label. Neither run has a
+cost estimate, because the backup's price is not pinned in the code. Like the runs above, these are deployment
+checks, not an evaluation; the official evaluation runs with the backup switched off.
