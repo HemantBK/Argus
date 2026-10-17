@@ -42,6 +42,10 @@ smoke:
 corpus:
 	cd backend && .venv/bin/python -m argus_api.corpus.build_corpus $(if $(OFFLINE),--offline)
 
+# The corpus hash of backend/data/corpus, as GET /health reports it (DIR=<corpus dir> for another library).
+corpus-hash:
+	$(PY) scripts/corpus_hash.py $(DIR)
+
 # Write backend/data/corpus to Firestore (rbi_instruments, rbi_paragraphs, supersession).
 load-corpus:
 	cd backend && set -a && . ./.env && set +a && .venv/bin/python -m argus_api.admin load-corpus
@@ -65,5 +69,5 @@ check:
 install-hooks:
 	sh scripts/install-hooks.sh
 
-.PHONY: setup test test-emulator lint up down run models seed smoke corpus load-corpus limits save-sample \
-	check install-hooks
+.PHONY: setup test test-emulator lint up down run models seed smoke corpus corpus-hash load-corpus limits \
+	save-sample check install-hooks

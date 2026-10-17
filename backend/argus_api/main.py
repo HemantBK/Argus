@@ -1,6 +1,8 @@
 """Argus API on Cloud Run.
 
-  GET  /health                                          liveness, no dependencies
+  GET  /health                                          liveness and what is deployed: git sha, mode,
+                                                        provider, pinned models, location, corpus hash;
+                                                        no calls to Firestore, Auth or the model
   POST /api/smoke                                       Firebase Auth -> Gemini -> Firestore round trip; one
                                                         model call, admitted like a run (kill switch, caps)
   POST /api/runs {run_id, policy_id}                    review a sample policy; the work is done inside the
@@ -18,6 +20,7 @@ so every AI call reaches Cloud Logging as a JSON line.
 """
 
 import logging
+import os
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -49,6 +52,9 @@ RATIONALE_MAX_CHARS = 4000
 # The largest legitimate body is a sign-off at both text limits with every character JSON-escaped as
 # \uXXXX (6 bytes each), plus the field names: about 36 KB. 64 KiB leaves room and nothing more.
 MAX_BODY_BYTES = 64 * 1024
+# The commit the image was built from, set at deploy time (--set-env-vars ARGUS_GIT_SHA=<sha>).
+GIT_SHA_ENV = "ARGUS_GIT_SHA"
+GIT_SHA_UNKNOWN = "unknown"
 
 configure_logging()
 
@@ -206,9 +212,26 @@ def current_uid(
     return current_uid_with(verify, authorization)
 
 
+def git_sha() -> str:
+    """ARGUS_GIT_SHA as deployed, or "unknown" when it is not set (a local server): never an error."""
+    return os.environ.get(GIT_SHA_ENV, "").strip() or GIT_SHA_UNKNOWN
+
+
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, str | None]:
+    """What this server is running. Settings and the corpus (with its hash) are loaded once at startup by the
+    lifespan, so this reads cached values and calls no other service. location is null in local mode."""
+    s = settings()
+    return {
+        "status": "ok",
+        "git_sha": git_sha(),
+        "mode": s.mode,
+        "provider": s.provider,
+        "agent_model": s.agent_model,
+        "monitor_model": s.monitor_model,
+        "location": s.location,
+        "corpus_hash": corpus().corpus_hash,
+    }
 
 
 @app.post("/api/smoke")

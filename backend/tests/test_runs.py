@@ -804,7 +804,7 @@ def test_cors_allows_only_configured_origins(api: TestClient) -> None:
     assert ok.status_code == 200 and ok.headers["access-control-allow-origin"] == allowed
     bad = api.options("/api/runs", headers={"Origin": "https://evil.example", **pre})
     assert "access-control-allow-origin" not in bad.headers
-    assert api.get("/health").json() == {"status": "ok"}
+    assert api.get("/health").json()["status"] == "ok"
 
 
 def test_startup_fails_loudly_without_the_corpus(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:

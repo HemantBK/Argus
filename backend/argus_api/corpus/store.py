@@ -7,8 +7,10 @@ The deterministic checks the step monitor needs live here:
   current_instrument(ref)       follow superseded_by to the instrument in force now
 """
 
+import hashlib
 import json
 import re
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 from typing import Any, Protocol
@@ -199,6 +201,17 @@ def load_supersession(path: Path = SUPERSESSION_PATH) -> list[SupersessionRow]:
     return [SupersessionRow.model_validate(row) for row in data["rows"]]
 
 
+def corpus_hash(paragraphs: Iterable[Paragraph]) -> str:
+    """One sha256 for the whole library: over "<paragraph id> <content_hash>" lines sorted by paragraph id.
+
+    The order is the ids', not the file's, so reordering paragraphs.json keeps the hash; changing any
+    paragraph's text, adding, dropping or renumbering one changes it. /health reports it and
+    scripts/corpus_hash.py prints it for a data/corpus directory, so a checker can tell which library a
+    deployed API serves."""
+    lines = sorted(f"{p.id} {p.content_hash}\n" for p in paragraphs)
+    return hashlib.sha256("".join(lines).encode("utf-8")).hexdigest()
+
+
 class Corpus:
     def __init__(
         self, instruments: list[Instrument], paragraphs: list[Paragraph], supersession: list[SupersessionRow]
@@ -225,6 +238,8 @@ class Corpus:
             self.paragraphs[key] = p
         self.supersession = supersession
         self._check_supersession()
+        # Computed once, when the library is loaded (at API startup); content hashes were checked above.
+        self.corpus_hash = corpus_hash(self.paragraphs.values())
 
     @classmethod
     def load(cls, directory: Path = DEFAULT_OUT_DIR, supersession_path: Path = SUPERSESSION_PATH) -> "Corpus":
