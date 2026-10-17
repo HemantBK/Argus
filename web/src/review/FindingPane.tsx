@@ -1,5 +1,6 @@
 // Middle pane (UI_SPEC 3.2): the clause text verbatim, then the finding card: type chip, rationale, citation chip,
 // monitor badge, the outdated-reference chain as three boxes with its "What changed" panel, and the officer's decision.
+// A finding the backup (fallback) model wrote says so, and why, under its heading.
 import type { ReactNode } from "react";
 import { FAILED_CHIP, chipFor, outdatedChain, type Badge, type ClauseRow, type InjectionCatch, type OutdatedChain } from "../data/selectors";
 import type { Citation, FindingDoc, StepDoc } from "../data/types";
@@ -7,7 +8,7 @@ import { DiffView } from "./DiffView";
 import { MonitorBadge } from "./MonitorBadge";
 import { SignoffActions, type SubmitSignoff } from "./SignoffActions";
 import { Spinner, StatusChip } from "./StatusChip";
-import { formatIsoDate, highlight, paraLabel, type SignoffAvailability } from "./view";
+import { fallbackNote, formatIsoDate, highlight, paraLabel, type SignoffAvailability } from "./view";
 
 export type CitationChoice = "current" | "replaced";
 
@@ -22,9 +23,22 @@ interface Props {
   onShowCitation: (which: CitationChoice) => void;
   /** The clause list is still loading (no row can be selected yet). */
   loading?: boolean;
+  /** The run's agent model; a finding another model wrote says which one and why. Null until the run is read. */
+  runAgentModel?: string | null;
 }
 
-export function FindingPane({ row, badge, injection, steps, availability, onSubmit, shown, onShowCitation, loading = false }: Props): ReactNode {
+export function FindingPane({
+  row,
+  badge,
+  injection,
+  steps,
+  availability,
+  onSubmit,
+  shown,
+  onShowCitation,
+  loading = false,
+  runAgentModel = null,
+}: Props): ReactNode {
   if (!row) {
     return (
       <section className="pane pane-finding" aria-labelledby="finding-heading">
@@ -65,6 +79,7 @@ export function FindingPane({ row, badge, injection, steps, availability, onSubm
           onSubmit={onSubmit}
           shown={shown}
           onShowCitation={onShowCitation}
+          runAgentModel={runAgentModel}
         />
       ) : (
         <PendingCard row={row} />
@@ -82,8 +97,10 @@ function FindingCard({
   onSubmit,
   shown,
   onShowCitation,
+  runAgentModel = null,
 }: Omit<Props, "row" | "loading"> & { finding: FindingDoc }): ReactNode {
   const chain = outdatedChain(finding);
+  const reviewedBy = runAgentModel === null ? null : fallbackNote(finding, runAgentModel);
   const edited = finding.signoff?.decision === "edit" ? (finding.signoff.edited_rationale ?? null) : null;
   return (
     <article className="finding-card" aria-labelledby="finding-card-title">
@@ -91,6 +108,8 @@ function FindingCard({
         <span className="finding-kicker">Finding</span>
         <StatusChip chip={chipFor(finding)} />
       </h3>
+
+      {reviewedBy && <p className="text-muted">{reviewedBy}</p>}
 
       {finding.error ? (
         <div className="failed-note">

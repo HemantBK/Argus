@@ -7,6 +7,7 @@ import {
   FAILED_CHIP,
   LABEL_CHIPS,
   actorLabel,
+  attemptSteps,
   badgeFor,
   chipFor,
   clauseRows,
@@ -15,6 +16,7 @@ import {
   outdatedChain,
   sortFindings,
   summarize,
+  verdictsFor,
 } from "./selectors";
 
 describe("chips", () => {
@@ -218,5 +220,54 @@ describe("audit helpers", () => {
   it("formats times in IST", () => {
     // 06:30 UTC is 12:00 IST (UTC+5:30).
     expect(formatIst(T0)).toBe("12:00:00 IST");
+  });
+});
+
+describe("a clause handed to the backup model", () => {
+  // The agent model's review: a revise and a stop verdict, then the hand-over; then the backup model's review.
+  const HAND_OFF = "Gemini 3.8 Flash is busy; handing this clause to Gemini 3.1 Flash-Lite.";
+  const abandoned = [
+    step(1, { kind: "plan", summary: "FAKE plan" }),
+    step(2, { verdict: verdict("revise", [check("supported", false)], "FAKE abandoned revise") }),
+    step(3, { verdict: verdict("stop", [check("no_injection", false, "x")], "FAKE abandoned stop") }),
+    step(4, { kind: "final", summary: HAND_OFF }),
+  ];
+  const backup = [
+    step(5, { kind: "plan", summary: "FAKE backup plan" }),
+    step(6, { verdict: verdict("continue", [check("paragraph_exists", true), check("supported", true)]) }),
+    step(7, { kind: "final", summary: "Final finding for clause c1" }),
+  ];
+  const all = [...backup, ...abandoned, step(8, { clause_id: "c2", verdict: verdict("stop", []) })];
+
+  it("reads only the steps after the last hand-over", () => {
+    expect(attemptSteps("c1", all).map((s) => s.seq)).toEqual([5, 6, 7]);
+    expect(verdictsFor("c1", all).map((v) => v.seq)).toEqual([6]);
+  });
+  it("the badge, its verdict list and its first revise come from the backup model's review only", () => {
+    const b = badgeFor(finding({ agent_model: "gemini-3.1-flash-lite" }), all);
+    expect(b.state).toBe("verified");
+    expect(b.verdicts.map((v) => v.seq)).toEqual([6]);
+    const revised = badgeFor(finding({ monitor_status: "revised" }), all);
+    expect(revised.reason).toBe("The monitor revised this finding; no revise verdict was recorded in the trace.");
+  });
+  it("an abandoned stop neither stops the badge nor counts as a stopped clause", () => {
+    const counts = summarize(run(), [finding()], all.filter((s) => s.clause_id === "c1"));
+    expect(counts.monitorStopped).toBe(0);
+    expect(injectionFor("c1", all)).toBeNull();
+  });
+  it("while the backup model has not written a step yet, the hand-over still ends the abandoned review", () => {
+    expect(attemptSteps("c1", abandoned)).toEqual([]);
+    expect(verdictsFor("c1", abandoned)).toEqual([]);
+  });
+  it("a hand-over for running out of time reads the same", () => {
+    const outOfTime = abandoned.map((s) =>
+      s.seq === 4 ? { ...s, summary: "Gemini 3.8 Flash ran out of time; handing this clause to Gemini 3.1 Flash-Lite." } : s,
+    );
+    expect(verdictsFor("c1", outOfTime)).toEqual([]);
+  });
+  it("a clause with no hand-over keeps every verdict, its final step included", () => {
+    const own = [...abandoned.slice(0, 3), step(4, { kind: "final", summary: "Review of clause c1 failed at the monitor step: LLMError." })];
+    expect(verdictsFor("c1", own).map((v) => v.seq)).toEqual([2, 3]);
+    expect(attemptSteps("c1", own).map((s) => s.seq)).toEqual([1, 2, 3, 4]);
   });
 });

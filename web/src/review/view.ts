@@ -131,3 +131,35 @@ export function highlight(text: string, span: string | null): TextPart[] {
     { text: text.slice(at + span.length), mark: false },
   ].filter((p) => p.text.length > 0);
 }
+
+// ---------------------------------------------------------------- which model reviewed
+
+/** How the screen names each model, in words; the same ids and names as MODEL_NAMES in backend config.py. */
+const MODEL_NAMES: Record<string, string> = {
+  "gemini-3.8-flash": "Gemini 3.8 Flash",
+  "gemini-3.5-flash-lite": "Gemini 3.5 Flash-Lite",
+  "gemini-3.1-flash-lite": "Gemini 3.1 Flash-Lite",
+};
+
+/** A model id in words ("Gemini 3.8 Flash"), with or without the OpenRouter "google/" prefix; else the id itself. */
+export function modelName(model: string): string {
+  return MODEL_NAMES[model.replace(/^google\//, "")] ?? model;
+}
+
+/**
+ * The line under a finding that the fallback model wrote: which model reviewed the clause and why, from the
+ * finding's recorded fallback_reason when present. Null when the run's agent model wrote it, or when the finding
+ * predates the record of which model wrote it.
+ */
+export function fallbackNote(finding: FindingDoc, runAgentModel: string): string | null {
+  const by = finding.agent_model ?? null;
+  if (by === null || by === runAgentModel) return null;
+  const reason = finding.fallback_reason?.trim().replace(/\.+$/, "") || `${modelName(runAgentModel)} was busy`;
+  return `Reviewed by ${modelName(by)} because ${reason}.`;
+}
+
+/** "2 clauses reviewed by the backup model", or null when the agent model reviewed every clause. */
+export function fallbackSummary(run: RunDoc): string | null {
+  const n = run.summary.fallback_clauses;
+  return n > 0 ? `${plural(n, "clause")} reviewed by the backup model` : null;
+}

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { FAILED_CHIP, LABEL_CHIPS, formatIst, type SummaryCounts } from "../data/selectors";
 import type { FindingLabel, RunDoc } from "../data/types";
 import { libraryLabel, runLibrary } from "../shell/format";
-import { plural } from "./view";
+import { fallbackSummary, plural } from "./view";
 
 /** Label order in the bar: what needs attention first. Gap and conflict share the red chip, each with its own label. */
 const ORDER: FindingLabel[] = ["outdated_reference", "gap", "conflict", "compliant", "insufficient_evidence"];
@@ -34,6 +34,7 @@ function Count({ n, ready }: { n: number; ready: boolean }): ReactNode {
 export function SummaryBar({ run, counts, progress, completeAt, monitorReady, findingsReady }: Props): ReactNode {
   // The clause total comes from run.clauses when recorded, else from the findings once they are read.
   const clausesKnown = run.clauses.length > 0 || findingsReady;
+  const backup = fallbackSummary(run);
   return (
     <header className="summary">
       <div className="summary-title">
@@ -48,6 +49,7 @@ export function SummaryBar({ run, counts, progress, completeAt, monitorReady, fi
           <span>
             Agent <span className="mono">{run.agent_model}</span> · Monitor <span className="mono">{run.monitor_model}</span>
           </span>
+          {backup && <span>{backup}</span>}
         </p>
       </div>
 

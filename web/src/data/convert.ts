@@ -173,6 +173,7 @@ const SUMMARY_KEYS = [
   "monitor_revisions",
   "monitor_stops",
   "failed",
+  "fallback_clauses",
 ] as const;
 
 export function parseRun(data: unknown, path: string): RunDoc {
@@ -244,6 +245,8 @@ export function parseFinding(data: unknown, path: string): FindingDoc {
     monitor_status: oneOf(o, "monitor_status", MONITOR_STATUS_VALUES, path),
     signoff: o.signoff === undefined || o.signoff === null ? null : parseSignoff(o.signoff, `${path}.signoff`),
     error: optStr(o, "error", path),
+    agent_model: optStr(o, "agent_model", path),
+    fallback_reason: optStr(o, "fallback_reason", path),
   };
 }
 

@@ -63,6 +63,10 @@ describe("parseRun", () => {
     expect([r.provider, r.seeded, r.rbi_as_on]).toEqual(["vertex", true, "2026-07-15"]);
     expect(() => parseRun({ ...v0, seeded: "yes" }, "runs/r")).toThrow(/runs\/r.seeded/);
   });
+  it("reads the count of clauses the fallback model reviewed, 0 for a run that predates it", () => {
+    expect(parseRun(v0, "runs/r").summary.fallback_clauses).toBe(0);
+    expect(parseRun({ ...v0, summary: { fallback_clauses: 2 } }, "runs/r").summary.fallback_clauses).toBe(2);
+  });
   it("rejects an unknown status loudly", () => {
     expect(() => parseRun({ ...v0, status: "paused" }, "runs/r")).toThrow(/runs\/r.status/);
   });
@@ -123,6 +127,12 @@ describe("parseFinding", () => {
     expect(f.citation?.withdrawn_by).toBeNull();
     expect(f.citation?.updated_as_on).toBeNull();
     expect(f.signoff).toBeNull();
+    expect([f.agent_model, f.fallback_reason]).toEqual([null, null]);
+  });
+  it("reads which model wrote the finding and why the fallback model did", () => {
+    const f = parseFinding({ ...base, agent_model: "FAKE-fallback", fallback_reason: "FAKE agent was busy" }, "p");
+    expect([f.agent_model, f.fallback_reason]).toEqual(["FAKE-fallback", "FAKE agent was busy"]);
+    expect(() => parseFinding({ ...base, agent_model: 3 }, "runs/r/findings/c1")).toThrow(/runs\/r\/findings\/c1.agent_model/);
   });
   it("refuses a withdrawn citation that does not record when and by what it was withdrawn", () => {
     const withdrawn = base.replaced_citation;

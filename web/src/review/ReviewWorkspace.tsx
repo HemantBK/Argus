@@ -140,6 +140,7 @@ export function ReviewWorkspace({ source, run, steps, findings, onSignoff, initi
             shown={which}
             onShowCitation={showCitation}
             loading={skeleton}
+            runAgentModel={runDoc?.agent_model ?? null}
           />
           <SourcePane
             finding={finding}

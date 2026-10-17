@@ -58,9 +58,8 @@ export function summarize(run: RunDoc | null, findings: readonly FindingDoc[], s
     if (f.monitor_status === "revised") revised += 1;
     if (f.signoff) signedOff += 1;
   }
-  const stoppedClauses = new Set(
-    steps.filter((s) => s.clause_id !== null && s.verdict?.action === "stop").map((s) => s.clause_id),
-  );
+  const clauseIds = new Set(steps.flatMap((s) => (s.clause_id === null ? [] : [s.clause_id])));
+  const stoppedClauses = new Set([...clauseIds].filter((id) => verdictsFor(id, steps).some((v) => v.verdict.action === "stop")));
   const clauses = run && run.clauses.length > 0 ? run.clauses.length : findings.length;
   if (run && run.status !== "running") {
     const seen = new Set(findings.map((f) => f.clause_id));
@@ -109,12 +108,36 @@ export interface Badge {
   verdicts: RecordedVerdict[];
 }
 
-/** Recorded monitor verdicts for one clause, in seq order. */
+/** The words the backend's hand-over step uses (runs.py: "... is busy; handing this clause to ..."). */
+const HAND_OFF = "; handing this clause to ";
+
+/**
+ * Whether `step` handed its clause to the backup model: a final step that says so, or any final step the clause
+ * has later steps after (the backup model's review). The agent model's review ends there, unfinished.
+ */
+function isHandOff(step: StepDoc, later: boolean): boolean {
+  return step.kind === "final" && (later || step.summary.includes(HAND_OFF));
+}
+
+/**
+ * One clause's steps in seq order, from the review that produced its finding: when the agent model handed the
+ * clause to the backup model, only the steps after the last hand-over, so verdicts on the abandoned review never
+ * mix with the backup model's.
+ */
+export function attemptSteps(clauseId: string, steps: readonly StepDoc[]): StepDoc[] {
+  const mine = steps.filter((s) => s.clause_id === clauseId).sort((a, b) => a.seq - b.seq);
+  let from = 0;
+  mine.forEach((s, i) => {
+    if (isHandOff(s, i < mine.length - 1)) from = i + 1;
+  });
+  return mine.slice(from);
+}
+
+/** Recorded monitor verdicts for one clause, in seq order, from the review that produced its finding. */
 export function verdictsFor(clauseId: string, steps: readonly StepDoc[]): RecordedVerdict[] {
-  return steps
-    .filter((s): s is StepDoc & { verdict: Verdict } => s.clause_id === clauseId && s.verdict !== null && s.verdict !== undefined)
-    .map((s) => ({ seq: s.seq, verdict: s.verdict }))
-    .sort((a, b) => a.seq - b.seq);
+  return attemptSteps(clauseId, steps)
+    .filter((s): s is StepDoc & { verdict: Verdict } => s.verdict !== null && s.verdict !== undefined)
+    .map((s) => ({ seq: s.seq, verdict: s.verdict }));
 }
 
 export function badgeFor(finding: FindingDoc, steps: readonly StepDoc[]): Badge {
