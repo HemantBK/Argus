@@ -1,0 +1,127 @@
+/* Evidence report (EvidenceReport.tsx). On screen it never shows: it is rendered only while printing. On paper, a
+   page that holds the report prints the report alone: no top bar, banners, panes or trace. A page printed without
+   it (any other screen) prints as it is. Black on white, no status colours: the words carry every state. */
+
+@media screen {
+  .evidence-report {
+    display: none;
+  }
+}
+
+@media print {
+  @page {
+    margin: 16mm 14mm;
+  }
+
+  body:has(.evidence-report) {
+    background: #FFFFFF;
+    color: #000000;
+    font-size: 11pt;
+    line-height: 1.4;
+  }
+  body:has(.evidence-report) .skip-link,
+  body:has(.evidence-report) .topbar,
+  body:has(.evidence-report) .shell-banners,
+  .review:has(> .evidence-report) > :not(.evidence-report) {
+    display: none !important;
+  }
+  #root:has(.evidence-report),
+  main:has(.evidence-report),
+  .review:has(> .evidence-report) {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .evidence-report {
+    display: block;
+    color: #000000;
+  }
+  .evidence-report h1 {
+    font-size: 16pt;
+    margin: 0 0 4pt;
+  }
+  .evidence-report h2 {
+    font-size: 13pt;
+    margin: 0 0 6pt;
+    break-after: avoid;
+  }
+  .evidence-report h3,
+  .evidence-report h4 {
+    font-size: 11pt;
+    margin: 8pt 0 4pt;
+    break-after: avoid;
+  }
+  .evidence-report .mono {
+    font-size: 10pt;
+  }
+
+  .report-header {
+    border-bottom: 2px solid #000000;
+    padding-bottom: 6pt;
+    margin-bottom: 10pt;
+  }
+  .report-policy {
+    font-size: 12pt;
+    font-weight: 600;
+    margin: 0 0 4pt;
+  }
+  .report-meta {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .report-clause {
+    border-top: 1px solid #000000;
+    padding-top: 8pt;
+    margin-top: 10pt;
+  }
+  .report-clause:first-of-type {
+    border-top: none;
+    margin-top: 0;
+  }
+  .report-clause-text {
+    border-left: 3px solid #000000;
+    padding-left: 6pt;
+    margin: 0 0 6pt;
+  }
+  .report-facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 2pt 10pt;
+    margin: 0 0 6pt;
+  }
+  .report-facts dt {
+    font-weight: 600;
+  }
+  .report-facts dd {
+    margin: 0;
+  }
+  .report-quote {
+    margin: 0;
+    font-style: italic;
+    break-inside: avoid;
+  }
+  .report-url {
+    overflow-wrap: anywhere;
+  }
+  .report-verdicts {
+    margin: 0 0 6pt;
+    padding-left: 16pt;
+  }
+  .report-verdicts li {
+    break-inside: avoid;
+  }
+  .report-decision {
+    margin: 6pt 0 0;
+  }
+  .report-summary {
+    border-top: 2px solid #000000;
+    margin-top: 12pt;
+    padding-top: 8pt;
+    break-inside: avoid;
+  }
+}

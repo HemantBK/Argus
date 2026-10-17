@@ -103,6 +103,13 @@
 .banner-actions {
   margin: var(--space) 0 0;
 }
+.banner-offer-list {
+  margin: calc(var(--space) / 2) 0 0;
+  padding-left: calc(var(--space) * 3);
+}
+.banner-offer-list li + li {
+  margin-top: calc(var(--space) / 2);
+}
 .run-notice {
   margin: calc(var(--space) * 2) 0 0;
   color: var(--text-muted);

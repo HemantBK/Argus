@@ -29,25 +29,34 @@ async function emulatorsUnreachable(): Promise<string | null> {
   return null;
 }
 
-type Failure = { name: string; title: RegExp; answer: (route: Route) => Promise<void> };
+/**
+ * `offer`: the saved-run link the banner must hold. A start that went wrong offers the saved run of the same policy;
+ * live review unavailable (the cap, the kill switch) offers the saved run of every sample policy, each named.
+ */
+type Failure = { name: string; title: RegExp; offer: RegExp; answer: (route: Route) => Promise<void> };
+const SAME_POLICY = /^Open the saved run recorded at /;
+const EVERY_POLICY = /^Open the saved run of .+, recorded at /;
 
 const FAILURES: Failure[] = [
-  { name: "the request is aborted (fetch rejects)", title: /Argus could not reach its review service/, answer: (r) => r.abort("failed") },
+  { name: "the request is aborted (fetch rejects)", title: /Argus could not reach its review service/, offer: SAME_POLICY, answer: (r) => r.abort("failed") },
   {
     name: "a 500 without CORS headers",
     // A real browser rejects this fetch (no CORS header: "could not reach"); a page.route answer may reach the
     // page as the HTTP 500 itself ("could not be started"). Either way the start failed and must say so.
     title: /Argus could not reach its review service|The live run could not be started/,
+    offer: SAME_POLICY,
     answer: (r) => r.fulfill({ status: 500, contentType: "text/plain", body: "Internal Server Error" }),
   },
   {
     name: "a 429 run cap",
     title: /Live review is temporarily unavailable/,
+    offer: EVERY_POLICY,
     answer: (r) => r.fulfill({ status: 429, headers: CORS, contentType: "application/json", body: JSON.stringify({ detail: "FAKE daily cap reached" }) }),
   },
   {
     name: "a 503 kill switch",
     title: /Live review is temporarily unavailable/,
+    offer: EVERY_POLICY,
     answer: (r) => r.fulfill({ status: 503, headers: CORS, contentType: "application/json", body: JSON.stringify({ detail: "FAKE kill switch" }) }),
   },
 ];
@@ -75,8 +84,9 @@ for (const failure of FAILURES) {
     await expect(banner.locator("strong")).toHaveText(failure.title, { timeout: BANNER_WITHIN_MS });
     await expect(page.getByText("Waiting for the run to start")).toHaveCount(0);
     await expect(page.locator(".topbar-run")).toHaveText("Live run not started");
-    // The newest saved run of the demo policy (the seeded FAKE FinFast run, or a newer one already in the emulator).
-    await expect(banner.getByRole("link", { name: /^Open the saved run recorded at / })).toHaveAttribute("href", /^#\/sample\/[0-9a-f]{32}$/);
+    // The newest saved run of the demo policy (the seeded FAKE FinFast run, or a newer one already in the emulator),
+    // or, when live review is unavailable, the newest saved run of every sample policy that has one.
+    await expect(banner.getByRole("link", { name: failure.offer }).first()).toHaveAttribute("href", /^#\/sample\/[0-9a-f]{32}$/);
 
     // Try again starts a fresh run (a new run id), which fails the same way and says so again.
     await banner.getByRole("button", { name: "Try again" }).click();

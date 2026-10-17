@@ -24,6 +24,15 @@ button.start-cta {
   font-size: 18px;
   font-weight: 600;
 }
+/* Gemini busy (the agent model's breaker open on /health): a quiet note under the button, not an alarm. */
+.start-busy {
+  margin: calc(var(--space) * 2) 0 0;
+  padding: var(--space) calc(var(--space) * 1.5);
+  max-width: 70ch;
+  border-left: 4px solid var(--status-outdated);
+  background: var(--status-outdated-bg);
+  color: var(--text);
+}
 
 .start-samples h2 {
   margin-bottom: calc(var(--space) * 2);
@@ -125,7 +134,8 @@ button.start-cta {
   min-height: 144px;
   resize: vertical;
   padding: var(--space);
-  border: 1px solid var(--border);
+  /* A form field's edge must stand out from the card (WCAG 1.4.11, 3:1): --border would be about 1.2:1. */
+  border: 1px solid var(--text-muted);
   border-radius: var(--radius);
   background: var(--bg);
   color: var(--text);

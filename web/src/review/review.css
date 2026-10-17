@@ -766,6 +766,14 @@ button.trace-line-button:hover {
   margin-bottom: var(--space);
 }
 
+/* ------------------------------------------------------------ evidence report action */
+
+.review-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: calc(var(--space) * -0.5);
+}
+
 /* ------------------------------------------------------------ responsive (UI_SPEC 8) */
 
 @media (min-width: 768px) {

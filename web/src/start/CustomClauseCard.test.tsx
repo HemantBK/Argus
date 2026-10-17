@@ -9,7 +9,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CustomStartProblemBanner } from "../shell/banners";
 import { href } from "../shell/route";
 import { live } from "../shell/screens.test-util";
-import { ATTEST_LABEL, CUSTOM_NOTICE, CustomClauseCard } from "./CustomClauseCard";
+import { run } from "../data/fixtures.test-util";
+import { savedRunOfferText } from "../shell/busy";
+import { ATTEST_LABEL, CUSTOM_CLOSED_NOTE, CUSTOM_NOTICE, CustomClauseCard } from "./CustomClauseCard";
 import { forgetSentDraft } from "./customDraft";
 import { CUSTOM_PREFILL, CUSTOM_PREFILL_SOURCE, sampleClauseText } from "./samplePolicies";
 import { StartScreen } from "./StartScreen";
@@ -52,7 +54,7 @@ async function refusedWith(status: number, body: unknown): Promise<InstanceType<
 
 function renderCard(prefill = FAKE_CLAUSE) {
   const onRun = vi.fn();
-  render(<CustomClauseCard prefill={prefill} onRun={onRun} />);
+  render(<CustomClauseCard prefill={prefill} onRun={onRun} open />);
   const box = screen.getByRole("textbox", { name: "One clause of a digital-lending policy" });
   const tick = screen.getByRole("checkbox", { name: ATTEST_LABEL });
   const review = screen.getByRole("button", { name: "Review" });
@@ -148,11 +150,21 @@ describe("CustomClauseCard", () => {
 
   it("sits on the Start screen as its own card and starts through the screen's onRun", () => {
     const onRun = vi.fn();
-    render(<StartScreen saved={live.ready({ runs: [], invalid: [] })} onRun={onRun} policies={{ policies: [], invalid: [] }} prefill={FAKE_CLAUSE} />);
+    render(<StartScreen saved={live.ready({ runs: [], invalid: [] })} onRun={onRun} policies={{ policies: [], invalid: [] }} prefill={FAKE_CLAUSE} customOpen />);
     const card = within(screen.getByRole("region", { name: "Try your own clause" }));
     fireEvent.click(card.getByRole("checkbox", { name: ATTEST_LABEL }));
     fireEvent.click(card.getByRole("button", { name: "Review" }));
     expect(onRun).toHaveBeenCalledWith(CUSTOM_POLICY_ID, { clauseText: FAKE_CLAUSE, attest: true });
+  });
+
+  it("closed (the default, as on a deployed build): says so plainly and offers no form to send", () => {
+    const onRun = vi.fn();
+    render(<StartScreen saved={live.ready({ runs: [], invalid: [] })} onRun={onRun} policies={{ policies: [], invalid: [] }} prefill={FAKE_CLAUSE} />);
+    const region = screen.getByRole("region", { name: "Try your own clause" });
+    expect(within(region).getByText(CUSTOM_CLOSED_NOTE)).toBeTruthy();
+    expect(within(region).queryByRole("textbox")).toBeNull();
+    expect(within(region).queryByRole("button")).toBeNull();
+    expect(region.textContent).not.toContain(CUSTOM_NOTICE);
   });
 });
 
@@ -189,10 +201,14 @@ describe("startCustomRun", () => {
 describe("CustomStartProblemBanner", () => {
   const banner = (error: Error) => {
     const onRetry = vi.fn();
-    render(<CustomStartProblemBanner error={error} onRetry={onRetry} />);
+    render(<CustomStartProblemBanner error={error} offers={OFFERS} onRetry={onRetry} />);
     const alert = within(screen.getByRole("alert"));
     return { onRetry, alert, title: alert.getByRole("strong").textContent, text: screen.getByRole("alert").textContent };
   };
+  const OFFERS = [
+    run({ run_id: "fake-saved-a", saved: true, policy_title: "FAKE FinFast NBFC (Synthetic)" }),
+    run({ run_id: "fake-saved-b", saved: true, policy_id: "policy_b", policy_title: "FAKE LendRight NBFC (Synthetic)" }),
+  ];
   const refusal = (code: (typeof CUSTOM_REFUSAL_CODES)[number], identifierType?: string) =>
     new ApiError("http", "FAKE", 400, "FAKE server message", { code, ...(identifierType ? { identifierType } : {}) });
 
@@ -222,11 +238,14 @@ describe("CustomStartProblemBanner", () => {
     }
   });
 
-  it.each(CASES)("$name: plain English, a way back to the clause, and Try again only when it could help", ({ error, title, body, retry }) => {
+  it.each(CASES)("$name: plain English, a way back to the clause, and Try again only when it could help", ({ name, error, title, body, retry }) => {
     const b = banner(error());
     expect(b.title).toMatch(title);
     expect(b.text).toMatch(body);
     expect(b.alert.getByRole("link", { name: "Edit your clause" }).getAttribute("href")).toBe(href.start());
+    // The limit reached or review switched off: the sample policies' saved runs are offered too; never otherwise.
+    const offered = b.alert.queryAllByRole("link").filter((a) => a.textContent !== "Edit your clause");
+    expect(offered.map((a) => a.textContent)).toEqual(name === "429 cap" || name === "503 switched off" ? OFFERS.map(savedRunOfferText) : []);
     const button = b.alert.queryByRole("button", { name: "Try again" });
     expect(button !== null).toBe(retry);
     if (button) {

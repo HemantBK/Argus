@@ -1,12 +1,16 @@
 // Start screen (UI_SPEC 3.1 as cut by 16.1, plus D-60): what Argus does in one line, one big Run demo button, the
-// sample policies with their saved runs, "Try your own clause" (one pasted clause, reviewed live), and the footer.
+// sample policies with their saved runs, "Try your own clause" (one pasted clause, reviewed live, when the build
+// opens it), and the footer. While /health shows Gemini busy (the agent model's breaker open), a short note under
+// the button says so and points to the saved runs.
 // No upload. Names and clause counts come from the sample policy files the API reviews; saved runs and dates
 // from Firestore.
 import type { ReactNode } from "react";
 import { ErrorBanner } from "../ErrorBoundary";
 import type { LiveRead, SavedRuns } from "../data/hooks";
 import type { CustomClause } from "../data/api";
+import type { BreakerState } from "../data/health";
 import type { RunDoc } from "../data/types";
+import { BREAKER_OPEN_NOTE } from "../shell/busy";
 import { libraryLabel, savedRunLabel } from "../shell/format";
 import { href } from "../shell/route";
 import { DEMO_POLICY_ID, latestLibrary, sampleCards, type SampleCard } from "./catalog";
@@ -26,6 +30,10 @@ export interface StartScreenProps {
   policies?: SamplePolicies;
   /** The text the "Try your own clause" box starts with (tests pass their own). */
   prefill?: string;
+  /** The agent model's breaker from /health; null when not read (or unreadable), which shows nothing. */
+  agentBreaker?: BreakerState | null;
+  /** Whether "Try your own clause" is open (env.ts customClauseOpen); closed unless the shell says so. */
+  customOpen?: boolean;
 }
 
 function SkeletonCards(): ReactNode {
@@ -162,7 +170,14 @@ function Footer({ saved }: { saved: LiveRead<SavedRuns> }): ReactNode {
   );
 }
 
-export function StartScreen({ saved, onRun, policies = SAMPLE_POLICIES, prefill = CUSTOM_PREFILL }: StartScreenProps): ReactNode {
+export function StartScreen({
+  saved,
+  onRun,
+  policies = SAMPLE_POLICIES,
+  prefill = CUSTOM_PREFILL,
+  agentBreaker = null,
+  customOpen = false,
+}: StartScreenProps): ReactNode {
   return (
     <div className="start">
       <section className="start-hero" aria-labelledby="start-title">
@@ -177,12 +192,17 @@ export function StartScreen({ saved, onRun, policies = SAMPLE_POLICIES, prefill 
         >
           Run demo on a sample NBFC policy
         </button>
+        {agentBreaker === "open" && (
+          <p className="start-busy" role="note">
+            {BREAKER_OPEN_NOTE}
+          </p>
+        )}
       </section>
       <section className="start-samples" aria-labelledby="samples-title">
         <h2 id="samples-title">Sample policies</h2>
         <Samples saved={saved} onRun={onRun} policies={policies} />
       </section>
-      <CustomClauseCard prefill={prefill} onRun={onRun} />
+      <CustomClauseCard prefill={prefill} onRun={onRun} open={customOpen} />
       <Footer saved={saved} />
     </div>
   );

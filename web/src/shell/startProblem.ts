@@ -21,7 +21,10 @@ export function startProblem(post: PostState): StartProblem | null {
   if (post.status !== "error") return null;
   const e: ApiError = post.error;
   if (e.kind === "http" && e.status !== undefined && UNAVAILABLE_STATUSES.has(e.status)) {
-    return { kind: "unavailable", message: e.message };
+    // The banner's heading already says live review is unavailable; the API's own reason (which says which limit,
+    // or that runs are switched off) is the detail, without the generic sentence messageForStatus puts before it.
+    const detail = e.detail?.trim();
+    return { kind: "unavailable", message: detail ? detail : e.message };
   }
   if (e.kind === "network") {
     return { kind: "error", title: "Argus could not reach its review service.", message: e.message };

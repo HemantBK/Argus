@@ -9,10 +9,15 @@ describe("startProblem", () => {
     expect(startProblem({ status: "posting" })).toBeNull();
     expect(startProblem({ status: "done" })).toBeNull();
   });
-  it("treats quota, model failure and the kill switch as 'live review unavailable'", () => {
+  it("treats quota, model failure and the kill switch as 'live review unavailable', with the API's own reason", () => {
     for (const status of [429, 502, 503]) {
       const message = messageForStatus(status, "FAKE detail");
-      expect(startProblem({ status: "error", error: new ApiError("http", message, status) })).toEqual({ kind: "unavailable", message });
+      expect(startProblem({ status: "error", error: new ApiError("http", message, status, "FAKE detail") })).toEqual({ kind: "unavailable", message: "FAKE detail" });
+      // No reason from the API: the plain-English sentence for the status.
+      expect(startProblem({ status: "error", error: new ApiError("http", messageForStatus(status, undefined), status) })).toEqual({
+        kind: "unavailable",
+        message: messageForStatus(status, undefined),
+      });
     }
   });
   it("names other failures in plain English and keeps the API's message", () => {

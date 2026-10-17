@@ -1,16 +1,24 @@
 // The Review screen (UI_SPEC 3.2, 6, 16), presentational: it takes the live reads and callbacks, so it renders
 // the same in tests as in the app. ReviewScreen wires it to Firestore and the API.
-import { useMemo, useState, type ReactNode } from "react";
+//
+// "Print evidence report" (once the run has finished and its findings, trace and audit log are read) prints the
+// evidence report (report.ts, EvidenceReport.tsx) through the browser's own print dialog, where "Save as PDF" makes
+// the file. The report is rendered only while printing, so the screen and its tests never hold a second copy of
+// the run; the browser's own print command (Ctrl+P) prints the same report.
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { ErrorBanner } from "../ErrorBoundary";
 import type { LiveRead } from "../data/hooks";
 import { badgeFor, clauseRows, injectionFor, summarize, type Badge } from "../data/selectors";
-import type { FindingDoc, RunDoc, RunSource, StepDoc } from "../data/types";
+import type { AuditDoc, FindingDoc, RunDoc, RunSource, StepDoc } from "../data/types";
 import { ClauseList } from "./ClauseList";
+import { EvidenceReport } from "./EvidenceReport";
 import { FindingPane, type CitationChoice } from "./FindingPane";
 import type { SubmitSignoff } from "./SignoffActions";
 import { SourcePane } from "./SourcePane";
 import { SummaryBar } from "./SummaryBar";
 import { TraceDrawer } from "./TraceDrawer";
+import { evidenceReport } from "./report";
 import { lastSignoffAt, progressText, signoffAvailability } from "./view";
 import "./review.css";
 
@@ -22,9 +30,15 @@ export interface ReviewWorkspaceProps {
   onSignoff: SubmitSignoff;
   /** Clause selected on first render (a deep link); the first clause otherwise. */
   initialClauseId?: string;
+  /** The audit log, for the evidence report's summary. Without it the report cannot be printed. */
+  audit?: LiveRead<AuditDoc[]>;
+  /** The run reviews a synthetic sample policy (its sample file says so); the report's title says so too. */
+  synthetic?: boolean;
 }
 
-export function ReviewWorkspace({ source, run, steps, findings, onSignoff, initialClauseId }: ReviewWorkspaceProps): ReactNode {
+export const PRINT_BUTTON = "Print evidence report";
+
+export function ReviewWorkspace({ source, run, steps, findings, onSignoff, initialClauseId, audit, synthetic = false }: ReviewWorkspaceProps): ReactNode {
   const runDoc = run.status === "ready" ? run.data : null;
   const stepList = useMemo(() => (steps.status === "ready" ? steps.data : []), [steps]);
   const findingList = useMemo(() => (findings.status === "ready" ? findings.data : []), [findings]);
@@ -65,6 +79,35 @@ export function ReviewWorkspace({ source, run, steps, findings, onSignoff, initi
   };
 
   const running = runDoc?.status === "running";
+  const auditList = audit?.status === "ready" ? audit.data : null;
+  const printable = runDoc !== null && !running && findingsReady && stepsReady && auditList !== null;
+  const [printedAt, setPrintedAt] = useState<Date | null>(null);
+  useEffect(() => {
+    if (!printable) return;
+    // beforeprint fires for the button (window.print) and for the browser's own print command alike; the report
+    // must be in the page before the browser lays the page out, hence flushSync.
+    const before = (): void => {
+      flushSync(() => {
+        setPrintedAt(new Date());
+      });
+    };
+    const after = (): void => {
+      setPrintedAt(null);
+    };
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+    };
+  }, [printable]);
+  const report = useMemo(
+    () =>
+      printable && printedAt !== null
+        ? evidenceReport({ run: runDoc, findings: findingList, steps: stepList, audit: auditList, synthetic, printedAt })
+        : null,
+    [printable, printedAt, runDoc, findingList, stepList, auditList, synthetic],
+  );
   const listenErrors = (
     [
       ["the run", run],
@@ -121,6 +164,19 @@ export function ReviewWorkspace({ source, run, steps, findings, onSignoff, initi
         </header>
       )}
 
+      {printable && (
+        <div className="review-actions">
+          <button
+            type="button"
+            onClick={() => {
+              window.print();
+            }}
+          >
+            {PRINT_BUTTON}
+          </button>
+        </div>
+      )}
+
       {(runDoc !== null || waiting) && (
         <div className="review-panes">
           <ClauseList
@@ -154,6 +210,8 @@ export function ReviewWorkspace({ source, run, steps, findings, onSignoff, initi
       )}
 
       {runDoc && <TraceDrawer steps={stepList} running={running} selectedClauseId={selectedId} onSelectClause={select} />}
+
+      {report && <EvidenceReport report={report} />}
     </div>
   );
 }

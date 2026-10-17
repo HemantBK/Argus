@@ -59,9 +59,14 @@ const VERDICT_TEXT: Record<MonitorAction, TraceVerdictText> = {
   stop: { tone: "stop", icon: "■", label: "Monitor stopped" },
 };
 
+/** How a monitor action is shown, on a trace line and in the evidence report. */
+export function verdictText(action: MonitorAction): TraceVerdictText {
+  return VERDICT_TEXT[action];
+}
+
 /** The verdict shown on a trace line, or null for a step the monitor did not judge. */
 export function traceVerdict(step: StepDoc): TraceVerdictText | null {
-  return step.verdict ? VERDICT_TEXT[step.verdict.action] : null;
+  return step.verdict ? verdictText(step.verdict.action) : null;
 }
 
 export const STEP_KIND_TEXT: Record<StepDoc["kind"], string> = {

@@ -118,7 +118,7 @@ describe("StartScreen", () => {
   });
 
   it("offers no upload, and one paste box for a single clause (D-27, D-60)", () => {
-    const { container } = render(<StartScreen saved={live.ready({ runs: [savedA], invalid: [] })} onRun={vi.fn()} />);
+    const { container } = render(<StartScreen saved={live.ready({ runs: [savedA], invalid: [] })} onRun={vi.fn()} customOpen />);
     expect(screen.getAllByRole("textbox")).toHaveLength(1);
     expect(within(screen.getByRole("region", { name: "Try your own clause" })).getByRole("textbox")).toBeTruthy();
     expect(container.querySelector("input[type=file]")).toBeNull();

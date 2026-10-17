@@ -18,6 +18,21 @@ export interface AppEnv {
   firebase: { apiKey: string; authDomain: string; projectId: string; appId: string };
   firestoreEmulatorHost: string; // "host:port"
   authEmulatorUrl: string; // "http://host:port"
+  /**
+   * Whether the Start screen offers "Try your own clause". The API's own switch (config/custom_limits) is not
+   * readable from the browser, so the build says it: VITE_CUSTOM_CLAUSE_OPEN "true" or "false"; when unset, open
+   * against the emulators (local development, where the local API's switch is set by hand) and closed otherwise,
+   * so a deployed build never invites a paste the API would refuse.
+   */
+  customClauseOpen: boolean;
+}
+
+function customClauseOpen(useEmulators: boolean): boolean {
+  const value = (import.meta.env as Record<string, string | undefined>).VITE_CUSTOM_CLAUSE_OPEN?.trim();
+  if (value === undefined || value === "") return useEmulators;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new ConfigError(`VITE_CUSTOM_CLAUSE_OPEN must be "true" or "false", not "${value}".`);
 }
 
 let cached: AppEnv | undefined;
@@ -36,6 +51,7 @@ export function appEnv(): AppEnv {
     },
     firestoreEmulatorHost: useEmulators ? required("VITE_FIRESTORE_EMULATOR_HOST") : "",
     authEmulatorUrl: useEmulators ? required("VITE_AUTH_EMULATOR_URL") : "",
+    customClauseOpen: customClauseOpen(useEmulators),
   };
   return cached;
 }

@@ -3,7 +3,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { run } from "../data/fixtures.test-util";
-import { RunFailedBanner, StartProblemBanner } from "./banners";
+import { BusyRunBanner, RunFailedBanner, StartProblemBanner } from "./banners";
+import { savedRunOfferText } from "./busy";
 import { libraryLabel, recordedAt, runLibrary, type LibraryDates } from "./format";
 import { href } from "./route";
 import { live } from "./screens.test-util";
@@ -18,6 +19,8 @@ function runName(): string | null | undefined {
 const ID = "0123456789ab4def8123456789abcdef";
 const saved = run({ run_id: ID, saved: true, policy_title: "FAKE FinFast NBFC (Synthetic)" });
 const savedLibrary = runLibrary(saved);
+const savedB = run({ run_id: "fedcba9876544321a123456789abcdef", saved: true, policy_id: "policy_b", policy_title: "FAKE LendRight NBFC (Synthetic)" });
+const offers = [saved, savedB];
 const legal = (dates: string): string => `Synthetic data only · Not legal advice · ${dates}`;
 
 describe("TopBar", () => {
@@ -68,16 +71,36 @@ describe("TopBar", () => {
 });
 
 describe("run banners", () => {
-  it("live review unavailable offers the saved run with its recording time", () => {
-    render(<StartProblemBanner problem={{ kind: "unavailable", message: "FAKE quota reached" }} saved={saved} onRetry={() => undefined} />);
+  it("live review unavailable offers the saved run of every sample policy, each named and dated", () => {
+    render(<StartProblemBanner problem={{ kind: "unavailable", message: "FAKE quota reached" }} saved={saved} offers={offers} onRetry={() => undefined} />);
     const alert = screen.getByRole("alert");
-    expect(alert.textContent).toMatch(`Live review is temporarily unavailable. Open the saved run recorded at ${recordedAt(saved)}?`);
+    expect(alert.querySelector("strong")?.textContent).toBe("Live review is temporarily unavailable.");
     expect(alert.textContent).toMatch(/FAKE quota reached/);
-    expect(screen.getByRole("link").getAttribute("href")).toBe(href.review({ source: "samples", runId: saved.run_id }));
+    const links = screen.getAllByRole("link");
+    expect(links.map((a) => a.textContent)).toEqual(offers.map(savedRunOfferText));
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(offers.map((r) => href.review({ source: "samples", runId: r.run_id })));
+    expect(savedRunOfferText(saved)).toBe(`Open the saved run of ${saved.policy_title}, recorded at ${recordedAt(saved)}`);
+  });
+
+  it("live review unavailable with no saved run says so", () => {
+    render(<StartProblemBanner problem={{ kind: "unavailable", message: "FAKE quota reached" }} saved={null} offers={[]} onRetry={() => undefined} />);
+    expect(screen.getByRole("alert").textContent).toMatch(/No saved run is available yet/);
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("a live run with clauses failed by busy Gemini says how many and offers every saved run", () => {
+    render(<BusyRunBanner busyClauses={2} offers={offers} />);
+    const status = screen.getByRole("status");
+    expect(status.querySelector("strong")?.textContent).toBe("Gemini capacity was busy, so 2 clauses of this run could not be completed.");
+    expect(status.textContent).toMatch(/Those clauses are marked/);
+    expect(screen.getAllByRole("link").map((a) => a.textContent)).toEqual(offers.map(savedRunOfferText));
+    cleanup();
+    render(<BusyRunBanner busyClauses={1} offers={[]} />);
+    expect(screen.getByRole("status").textContent).toMatch(/so 1 clause of this run.*That clause is marked.*No saved run is available yet/s);
   });
 
   it("a start error says what failed and that no saved run exists when none does", () => {
-    render(<StartProblemBanner problem={{ kind: "error", title: "FAKE title", message: "FAKE message" }} saved={null} onRetry={() => undefined} />);
+    render(<StartProblemBanner problem={{ kind: "error", title: "FAKE title", message: "FAKE message" }} saved={null} offers={offers} onRetry={() => undefined} />);
     expect(screen.getByRole("alert").textContent).toMatch(/FAKE title.*FAKE message.*No saved run of this policy is available yet/s);
   });
 
@@ -86,7 +109,7 @@ describe("run banners", () => {
     { kind: "unavailable", message: "FAKE quota reached" },
   ] as const)("every start problem ($kind) offers Try again", (problem) => {
     const onRetry = vi.fn();
-    render(<StartProblemBanner problem={problem} saved={saved} onRetry={onRetry} />);
+    render(<StartProblemBanner problem={problem} saved={saved} offers={offers} onRetry={onRetry} />);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });

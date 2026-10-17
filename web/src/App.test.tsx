@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 // App shell: routing, the live-run start order, and the run-level banners. Firebase, the listeners and the
 // Review screen (tested in src/review/) are replaced by FAKE stand-ins.
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { ApiError, CUSTOM_CLAUSE_MIN_CHARS, CUSTOM_POLICY_ID, messageForStatus, type CustomClause } from "./data/api";
-import { run, T0 } from "./data/fixtures.test-util";
+import { finding, run, T0 } from "./data/fixtures.test-util";
 import type { PostState } from "./data/useStartRun";
+import { BREAKER_OPEN_NOTE, PROVIDER_BUSY_PREFIX, savedRunOfferText } from "./shell/busy";
 import { libraryLabel, recordedAt } from "./shell/format";
 import { href } from "./shell/route";
 import { startProblem } from "./shell/startProblem";
@@ -53,6 +54,12 @@ interface Fake {
   liveRunId: string | null;
   start: (policyId: string, custom?: CustomClause) => string;
   signIn: () => Promise<{ uid: string }>;
+  /** env.ts customClauseOpen. */
+  customOpen: boolean;
+  /** What /health said about the agent model's breaker (data/health.ts). */
+  breaker: string | null;
+  /** The findings every useFindings call returns. */
+  findings: unknown;
 }
 
 const fake = vi.hoisted(
@@ -63,17 +70,21 @@ const fake = vi.hoisted(
     liveRunId: null,
     start: (policyId) => policyId,
     signIn: () => Promise.resolve({ uid: "FAKE-uid" }),
+    customOpen: true,
+    breaker: null,
+    findings: undefined,
   }),
 );
 
-vi.mock("./env", () => ({ appEnv: () => ({}) }));
+vi.mock("./env", () => ({ appEnv: () => ({ customClauseOpen: fake.customOpen }) }));
+vi.mock("./data/health", () => ({ useAgentBreaker: () => fake.breaker }));
 vi.mock("./firebase", () => ({ ensureSignedIn: () => fake.signIn() }));
 vi.mock("./data/hooks", () => ({
   useSavedRuns: () => fake.saved,
   useRun: (runId: string | null, source: string) =>
     runId === null ? { status: "idle", attached: false } : (fake.runs.get(`${source}/${runId}`) ?? { status: "loading", attached: false }),
   useAudit: () => ({ status: "ready", data: [], attached: true }),
-  useFindings: () => ({ status: "ready", data: [], attached: true }),
+  useFindings: (runId: string | null) => (runId === null ? { status: "idle", attached: false } : fake.findings),
   useEvalLatest: () => ({ status: "ready", data: null, attached: true }),
 }));
 vi.mock("./data/useStartRun", () => ({
@@ -86,6 +97,7 @@ vi.mock("./review/ReviewScreen", () => ({
 const { App } = await import("./App");
 
 const saved = run({ run_id: SAVED_ID, policy_id: DEMO_POLICY_ID, saved: true, policy_title: "FAKE FinFast NBFC (Synthetic)", started_at: T0 });
+const savedB = run({ run_id: "bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb", policy_id: "policy_b", saved: true, policy_title: "FAKE LendRight NBFC (Synthetic)", started_at: T0 });
 
 function go(hash: string): void {
   act(() => {
@@ -108,6 +120,9 @@ beforeEach(() => {
     return id;
   });
   fake.signIn = () => Promise.resolve({ uid: "FAKE-uid" });
+  fake.customOpen = true;
+  fake.breaker = null;
+  fake.findings = live.ready([]);
 });
 afterEach(() => {
   cleanup();
@@ -132,14 +147,48 @@ describe("App", () => {
     expect(screen.getByRole("status").textContent).toMatch(/Starting the live review/);
   });
 
-  it("shows 'live review unavailable' with the saved run when the API refuses the run", async () => {
+  it("shows 'live review unavailable' with the saved run of every sample policy when the API refuses the run", async () => {
+    fake.saved = live.ready({ runs: [saved, savedB], invalid: [] });
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Run demo on a sample NBFC policy" }));
     fake.post = { status: "error", error: new ApiError("http", messageForStatus(503, "FAKE kill switch"), 503) } satisfies PostState;
     go(window.location.hash);
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(`Live review is temporarily unavailable. Open the saved run recorded at ${recordedAt(saved)}?`);
+    expect(alert.querySelector("strong")?.textContent).toBe("Live review is temporarily unavailable.");
     expect(alert.textContent).toMatch(/FAKE kill switch/);
+    expect(within(alert).getAllByRole("link").map((a) => a.textContent)).toEqual([saved, savedB].map(savedRunOfferText));
+  });
+
+  it("says Gemini is busy on the Start screen only while /health shows the agent breaker open", async () => {
+    for (const breaker of [null, "closed", "half_open"]) {
+      fake.breaker = breaker;
+      render(<App />);
+      expect(screen.queryByText(BREAKER_OPEN_NOTE)).toBeNull();
+      cleanup();
+    }
+    fake.breaker = "open";
+    render(<App />);
+    expect(screen.getByRole("note").textContent).toBe(BREAKER_OPEN_NOTE);
+    await act(async () => {});
+  });
+
+  it("a live run whose clauses failed because Gemini was busy says so once and offers every saved run", async () => {
+    fake.saved = live.ready({ runs: [saved, savedB], invalid: [] });
+    const liveRun = run({ run_id: LIVE_ID, policy_id: DEMO_POLICY_ID, status: "done" });
+    fake.runs.set(`runs/${LIVE_ID}`, live.ready(liveRun));
+    fake.findings = live.ready([
+      finding({ clause_id: "c1", error: `${PROVIDER_BUSY_PREFIX}; try again shortly. FAKE: HTTP 429 on every try.` }),
+      finding({ clause_id: "c2", error: "FAKE: the reply was not usable." }),
+      finding({ clause_id: "c3" }),
+    ]);
+    render(<App />);
+    go(href.review({ source: "runs", runId: LIVE_ID }));
+    const banner = await screen.findByRole("status");
+    expect(banner.querySelector("strong")?.textContent).toBe("Gemini capacity was busy, so 1 clause of this run could not be completed.");
+    expect(within(banner).getAllByRole("link").map((a) => a.textContent)).toEqual([saved, savedB].map(savedRunOfferText));
+    // A saved run never shows it, whatever its findings say.
+    go(href.review({ source: "samples", runId: SAVED_ID }));
+    expect(screen.queryByText(/Gemini capacity was busy/)).toBeNull();
   });
 
   it("reports a run that was never started once, in the shell banner, not again in the Review screen", async () => {
@@ -168,10 +217,16 @@ describe("App", () => {
 
       const alert = await screen.findByRole("alert");
       expect(alert.querySelector("strong")?.textContent).toContain(bannerTitle(failure));
-      expect(alert.textContent).toContain(failure.status === "error" || failure.status === "blocked" ? failure.error.message : "");
-      expect(screen.getByRole("link", { name: `Open the saved run recorded at ${recordedAt(saved)}` }).getAttribute("href")).toBe(
-        href.review({ source: "samples", runId: SAVED_ID }),
-      );
+      expect(alert.textContent).toContain(startProblem(failure)?.message ?? "");
+      // The API's own reason is shown, whatever the failure.
+      if (failure.status === "error" && failure.error.detail) expect(alert.textContent).toContain(failure.error.detail);
+      // Live review unavailable (cap, kill switch, model failure) offers every sample policy's saved run; any other
+      // failure offers the saved run of the same policy.
+      const link =
+        startProblem(failure)?.kind === "unavailable"
+          ? screen.getByRole("link", { name: savedRunOfferText(saved) })
+          : screen.getByRole("link", { name: `Open the saved run recorded at ${recordedAt(saved)}` });
+      expect(link.getAttribute("href")).toBe(href.review({ source: "samples", runId: SAVED_ID }));
       // Nothing on the page still says the run is starting.
       expect(screen.queryByTestId("review")).toBeNull();
       expect(document.body.textContent).not.toMatch(/Waiting for the run to start|Live run starting|Starting the live review/);

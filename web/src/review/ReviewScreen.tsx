@@ -5,6 +5,7 @@ import { useCallback, type ReactNode } from "react";
 import { signoff, type SignoffBody } from "../data/api";
 import { useRunData } from "../data/hooks";
 import type { RunSource } from "../data/types";
+import { SAMPLE_POLICIES } from "../start/samplePolicies";
 import { ReviewWorkspace } from "./ReviewWorkspace";
 
 export function ReviewScreen({ runId, source }: { runId: string; source: RunSource }): ReactNode {
@@ -15,5 +16,19 @@ export function ReviewScreen({ runId, source }: { runId: string; source: RunSour
     },
     [runId],
   );
-  return <ReviewWorkspace source={source} run={data.run} steps={data.steps} findings={data.findings} onSignoff={onSignoff} />;
+  const policyId = data.run.status === "ready" ? (data.run.data?.policy_id ?? null) : null;
+  // A pasted clause (source custom) is the officer's own text, never a sample: only a sample file can say synthetic.
+  const custom = data.run.status === "ready" && data.run.data?.source === "custom";
+  const synthetic = !custom && SAMPLE_POLICIES.policies.some((p) => p.policyId === policyId && p.synthetic);
+  return (
+    <ReviewWorkspace
+      source={source}
+      run={data.run}
+      steps={data.steps}
+      findings={data.findings}
+      audit={data.audit}
+      synthetic={synthetic}
+      onSignoff={onSignoff}
+    />
+  );
 }

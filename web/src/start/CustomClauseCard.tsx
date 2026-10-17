@@ -2,6 +2,8 @@
 // starts from sample policy A clause c2 (read from the bundled sample file, never a second copy here). The
 // officer must tick that the text is synthetic or anonymised; the API rejects obvious identifiers, keeps the run
 // private to its owner and deletes it within 48 hours. Length is measured as the API measures it (clauseLength).
+// Until the build opens it (env.ts customClauseOpen), the card says plainly that pasting is switched off and
+// shows no form, rather than a form the API would refuse with "switched off".
 import { useId, useState, type ReactNode } from "react";
 import { CUSTOM_CLAUSE_MAX_CHARS, CUSTOM_CLAUSE_MIN_CHARS, CUSTOM_POLICY_ID, clauseLength, type CustomClause } from "../data/api";
 import { rememberSentDraft, sentDraft } from "./customDraft";
@@ -9,6 +11,7 @@ import { rememberSentDraft, sentDraft } from "./customDraft";
 export const CUSTOM_NOTICE =
   "Synthetic or anonymised text only. Obvious identifiers are rejected. Kept in your private run and deleted within 48 hours. Not legal advice.";
 export const ATTEST_LABEL = "This text is synthetic or anonymised and contains no personal data";
+export const CUSTOM_CLOSED_NOTE = "Pasting your own clause is switched off in this version.";
 
 const fmt = (n: number): string => n.toLocaleString("en-IN");
 
@@ -26,12 +29,26 @@ export interface CustomClauseCardProps {
   /** The text the box starts with (sample policy A clause c2 in the app). */
   prefill: string;
   onRun: (policyId: string, custom: CustomClause) => void;
+  /** Whether pasting is open in this build; closed shows only the heading and CUSTOM_CLOSED_NOTE. */
+  open: boolean;
 }
 
-export function CustomClauseCard({ prefill, onRun }: CustomClauseCardProps): ReactNode {
+export function CustomClauseCard({ prefill, onRun, open }: CustomClauseCardProps): ReactNode {
+  const id = useId();
+  if (!open) {
+    return (
+      <section className="custom-clause custom-clause-closed" aria-labelledby={`${id}-title`}>
+        <h2 id={`${id}-title`}>Try your own clause</h2>
+        <p className="custom-clause-notice">{CUSTOM_CLOSED_NOTE}</p>
+      </section>
+    );
+  }
+  return <CustomClauseForm id={id} prefill={prefill} onRun={onRun} />;
+}
+
+function CustomClauseForm({ id, prefill, onRun }: Omit<CustomClauseCardProps, "open"> & { id: string }): ReactNode {
   const [text, setText] = useState<string>(() => sentDraft() ?? prefill);
   const [attested, setAttested] = useState(false);
-  const id = useId();
   const length = clauseLength(text);
   const problem = blocker(length, attested);
   const lengthOk = length >= CUSTOM_CLAUSE_MIN_CHARS && length <= CUSTOM_CLAUSE_MAX_CHARS;

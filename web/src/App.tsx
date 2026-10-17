@@ -2,26 +2,30 @@
 // log, Evaluation). A live run is started here, not inside the Start screen, so its listeners and its open POST
 // outlive the navigation to the Review screen (UI_SPEC 16.4: listeners first, then POST /api/runs).
 //
-// Run-level banners (live run blocked or not started, live review unavailable, run failed, each offering the
-// saved run of the same policy) belong to the shell and show above both the Review and the Audit log screens;
-// the screens show only what is inside the run.
+// Run-level banners (live run blocked or not started, live review unavailable, Gemini busy, run failed, each
+// offering saved runs) belong to the shell and show above both the Review and the Audit log screens; the screens
+// show only what is inside the run. The shell also reads /health once on load, so the Start screen can say when
+// Gemini is busy (data/health.ts).
 import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { ErrorBanner } from "./ErrorBoundary";
 import { AuditScreen } from "./audit/AuditScreen";
 import { CUSTOM_POLICY_ID, type CustomClause } from "./data/api";
-import { useRun, useSavedRuns, type LiveRead, type SavedRuns } from "./data/hooks";
+import { useAgentBreaker, type BreakerState } from "./data/health";
+import { useFindings, useRun, useSavedRuns, type LiveRead, type SavedRuns } from "./data/hooks";
 import type { RunDoc } from "./data/types";
 import { useStartRun, type StartRun } from "./data/useStartRun";
 import { EvalScreen } from "./eval/EvalScreen";
 import { appEnv } from "./env";
 import { ensureSignedIn } from "./firebase";
 import { ReviewScreen } from "./review/ReviewScreen";
-import { CustomStartProblemBanner, RunFailedBanner, StartingNotice, StartProblemBanner } from "./shell/banners";
+import { BusyRunBanner, CustomStartProblemBanner, RunFailedBanner, StartingNotice, StartProblemBanner } from "./shell/banners";
+import { busyClauseIds, savedRunOffers } from "./shell/busy";
 import { startProblem } from "./shell/startProblem";
 import { href, navigate, runRefOf, useNavigation, type Route, type RunRef } from "./shell/route";
 import { runLibrary } from "./shell/format";
 import { TopBar } from "./shell/TopBar";
 import { latestCorpusAsOn, latestLibrary, savedRunFor } from "./start/catalog";
+import { SAMPLE_POLICIES } from "./start/samplePolicies";
 import { StartScreen } from "./start/StartScreen";
 import "./shell/shell.css";
 
@@ -75,6 +79,10 @@ interface ScreenProps {
   saved: LiveRead<SavedRuns>;
   onRun: (policyId: string, custom?: CustomClause) => void;
   fallbackAsOn: string | null;
+  /** The agent model's breaker from /health, read once on load; null until read or when it cannot be read. */
+  agentBreaker: BreakerState | null;
+  /** Whether "Try your own clause" is open in this build (env.ts customClauseOpen). */
+  customOpen: boolean;
   /**
    * The live run on screen could not be started and its run document does not exist: its listeners were refused
    * (useStartRun "blocked") or POST /api/runs failed before the API created the run (network error, 4xx, 5xx,
@@ -85,11 +93,11 @@ interface ScreenProps {
   runNotStarted: boolean;
 }
 
-function Screen({ route, saved, onRun, fallbackAsOn, runNotStarted }: ScreenProps): ReactNode {
+function Screen({ route, saved, onRun, fallbackAsOn, agentBreaker, customOpen, runNotStarted }: ScreenProps): ReactNode {
   if (runNotStarted && (route.screen === "review" || route.screen === "audit")) return null;
   switch (route.screen) {
     case "start":
-      return <StartScreen saved={saved} onRun={onRun} />;
+      return <StartScreen saved={saved} onRun={onRun} agentBreaker={agentBreaker} customOpen={customOpen} />;
     case "review":
       return <ReviewScreen key={`${route.source}/${route.runId}`} source={route.source} runId={route.runId} />;
     case "audit":
@@ -101,13 +109,18 @@ function Screen({ route, saved, onRun, fallbackAsOn, runNotStarted }: ScreenProp
   }
 }
 
-function RunBanners({ runDoc, live, isStartedRun, isCustom, offer, onRetry }: {
+function RunBanners({ runDoc, live, isStartedRun, isCustom, offer, offers, busyClauses, onRetry }: {
   runDoc: RunDoc | null;
   live: StartRun;
   isStartedRun: boolean;
   /** The started run reviews a pasted clause: no saved run to offer, and its refusals lead back to the clause. */
   isCustom: boolean;
+  /** The newest saved run of the same policy. */
   offer: RunDoc | null;
+  /** The newest saved run of every sample policy (busy.ts savedRunOffers). */
+  offers: readonly RunDoc[];
+  /** Clauses of this live run that failed because Gemini was busy (busy.ts busyClauseIds). */
+  busyClauses: number;
   onRetry: () => void;
 }): ReactNode {
   const problem = isStartedRun ? startProblem(live.post) : null;
@@ -116,11 +129,12 @@ function RunBanners({ runDoc, live, isStartedRun, isCustom, offer, onRetry }: {
     <>
       {problem &&
         (isCustom && startError ? (
-          <CustomStartProblemBanner error={startError} onRetry={onRetry} />
+          <CustomStartProblemBanner error={startError} offers={offers} onRetry={onRetry} />
         ) : (
-          <StartProblemBanner problem={problem} saved={offer} onRetry={onRetry} />
+          <StartProblemBanner problem={problem} saved={offer} offers={offers} onRetry={onRetry} />
         ))}
       {isStartedRun && live.post.status === "waiting_for_listeners" && <StartingNotice />}
+      {!problem && busyClauses > 0 && <BusyRunBanner busyClauses={busyClauses} offers={offers} />}
       {!problem && runDoc?.status === "failed" && <RunFailedBanner run={runDoc} saved={offer} />}
     </>
   );
@@ -132,12 +146,17 @@ export function App(): ReactNode {
   const { route, lastRun } = useNavigation();
   const saved = useSavedRuns(SAVED_RUNS_LISTED);
   const live = useStartRun();
+  const agentBreaker = useAgentBreaker();
   const [started, setStarted] = useState<StartedRun | null>(null);
 
   const routeRun = runRefOf(route);
   const tabsRun: RunRef | null = routeRun ?? (route.screen === "eval" ? lastRun : null);
   const run = useRun(tabsRun?.runId ?? null, tabsRun?.source ?? "samples");
   const runDoc: RunDoc | null = run.status === "ready" ? run.data : null;
+  // A live run's findings, for the Gemini-busy banner. The same query as the Review screen's, so Firestore serves
+  // both from one listener. Saved runs are not read here: they are what the banner offers.
+  const liveRun = routeRun?.source === "runs" ? routeRun : null;
+  const liveFindings = useFindings(liveRun?.runId ?? null, "runs", run);
   const savedRuns = saved.status === "ready" ? saved.data.runs : [];
   const savedAsOn = latestCorpusAsOn(savedRuns);
   const library = (runDoc && runLibrary(runDoc)) ?? latestLibrary(savedRuns);
@@ -156,6 +175,8 @@ export function App(): ReactNode {
     routeRun !== null && routeRun.source === "runs" && started !== null && routeRun.runId === started.runId && live.runId === started.runId;
   const policyId = runDoc?.policy_id ?? (isStartedRun ? started.policyId : null);
   const offer = policyId === null ? null : savedRunFor(policyId, savedRuns, routeRun?.runId ?? null);
+  const offers = savedRunOffers(savedRuns, SAMPLE_POLICIES.policies, routeRun?.runId ?? null);
+  const busyClauses = liveFindings.status === "ready" ? busyClauseIds(liveFindings.data).length : 0;
   // The start failed (startProblem) and the API never created the run. A run the API created before failing
   // (for example a 500 mid-review) still has content to show, so its screens stay, under the banner.
   const runNotStarted = isStartedRun && startProblem(live.post) !== null && runDoc === null;
@@ -174,10 +195,18 @@ export function App(): ReactNode {
         {signIn.status === "error" && (
           <ErrorBanner title="Could not sign in. Live runs cannot start until sign-in works." error={signIn.error} />
         )}
-        {routeRun && <RunBanners runDoc={runDoc} live={live} isStartedRun={isStartedRun} isCustom={isStartedRun && started.policyId === CUSTOM_POLICY_ID} offer={offer} onRetry={retry} />}
+        {routeRun && <RunBanners runDoc={runDoc} live={live} isStartedRun={isStartedRun} isCustom={isStartedRun && started.policyId === CUSTOM_POLICY_ID} offer={offer} offers={offers} busyClauses={busyClauses} onRetry={retry} />}
       </div>
       <main id="main" tabIndex={-1}>
-        <Screen route={route} saved={saved} onRun={onRun} fallbackAsOn={savedAsOn} runNotStarted={runNotStarted} />
+        <Screen
+          route={route}
+          saved={saved}
+          onRun={onRun}
+          fallbackAsOn={savedAsOn}
+          agentBreaker={agentBreaker}
+          customOpen={appEnv().customClauseOpen}
+          runNotStarted={runNotStarted}
+        />
       </main>
     </>
   );
