@@ -11,6 +11,32 @@ Team Argus · Google Cloud AI Builder Cup 2026 · BFSI theme · Synthetic polici
 **[Evaluation](docs/evaluation.md)** · **[Architecture](docs/architecture.md)** ·
 **[RBI sources](docs/data-and-rbi-sources.md)**
 
+## Proof in 60 seconds
+
+Each line links to its record in this repository. The evaluation ran on the deployed build (`7c3072d`) through
+Vertex AI, pre-registered; a review that failed because Vertex AI was busy counts against Argus.
+
+1. **Checkable citations.** Gemini 3.8 Flash without the library: 0/46 correct citations (expected by
+   construction; no library-in-prompt baseline). Argus: 39/46 with the monitor off, 35/46 with it on; 4/48 and
+   8/48 reviews failed on Vertex AI capacity and count as wrong. → [results](evidence/2026-10-17/eval-official/OFFICIAL_RESULTS.md) (run `5dc6b4`)
+2. **The monitor as a fail-safe.** With the cheaper Gemini 3.1 Flash-Lite agent, attacks that got through fell
+   from 7/16 to 0/16 (base) and from 8/20 to 4/20 (pre-registered hard set), with 0/32 false stops.
+   → [results](evidence/2026-10-17/eval-official/OFFICIAL_RESULTS.md) (runs `f694fd`, `a52f4e`)
+3. **No improvement shown on the main model.** With Gemini 3.8 Flash the monitor did not raise accuracy; we say
+   so. → [results](evidence/2026-10-17/eval-official/OFFICIAL_RESULTS.md)
+4. **Pre-registered, and the deviations disclosed.** Written before the first result; two protocol deviations
+   and one ambiguous point are listed, and no record was dropped. Recomputed three times by this team, not
+   independently reproduced.
+   → [pre-registration](evidence/2026-10-17/eval-official/PREREG.md) · [driver log](evidence/2026-10-17/eval-official/logs/)
+5. **The deployed security rules hold.** 29/29 checks with real sign-in tokens against production.
+   → [evidence/2026-10-17/release/PROMOTED-RULES.json](evidence/2026-10-17/release/PROMOTED-RULES.json)
+6. **The tests catch broken citation checks.** Three citation guarantees broken on purpose; the tests failed for
+   each. There is no CI yet: a clean-checkout dry run failed, and why is written down.
+   → [mutation record](evidence/2026-10-17/mutation.md) · [CI dry run](evidence/2026-10-17/ci-dry-run.md)
+7. **Not proven.** Gold labels are our own, samples are small, and the backup model's hand-over is not
+   evaluated. → [evidence index](evidence/2026-10-17/README.md) · [engineering quality](docs/engineering-quality.md) ·
+   [security](docs/security.md)
+
 ![Review workspace on the live app: clause c2 of sample policy A cites para 10 of the withdrawn 2025 Directions; Argus shows the withdrawing circular and the rule in force, para 11(1), with RBI's text and dates](docs/screenshots/review-workspace.png)
 
 *Saved run of sample policy A on the live app, reviewed through Gemini on Vertex AI on 17 Oct 2026 (run
@@ -171,14 +197,6 @@ flowchart LR
 - **Accessibility:** the app's text and status colours reach a 4.5:1 contrast ratio on their backgrounds, checked
   by a unit test ([web/src/styles/contrast.test.ts](web/src/styles/contrast.test.ts)); no full accessibility
   audit has been run.
-
-### Engineering quality and evidence
-
-- [docs/engineering-quality.md](docs/engineering-quality.md): how Argus is engineered, with the file or record
-  behind each point.
-- [docs/security.md](docs/security.md): security and data handling.
-- [evidence/2026-10-17/README.md](evidence/2026-10-17/README.md): the deployment check records and the official
-  evaluation (pre-registration, results, driver and log) from 17 Oct 2026.
 
 ## What is real and what is not
 
