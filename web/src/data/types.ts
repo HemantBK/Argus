@@ -31,7 +31,8 @@ export type RunDoc = Omit<Run, "started_at" | "finished_at" | "clauses" | "summa
   started_at: Date;
   finished_at: Date | null;
   clauses: RunClause[];
-  summary: Required<RunSummary>;
+  /** fallback_clauses is null when the run doc does not record it (runs saved before the backup model existed). */
+  summary: Required<Omit<RunSummary, "fallback_clauses">> & { fallback_clauses: number | null };
   saved: boolean;
 };
 

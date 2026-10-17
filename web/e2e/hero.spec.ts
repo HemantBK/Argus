@@ -1,7 +1,7 @@
 // The five hero moments of UI_SPEC section 10, each on one 1920x1080 screen without scrolling, reached from the
 // Start screen on the seeded FAKE FinFast saved run. Screenshots go to e2e/screenshots/ for the video and README.
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { SCREENSHOTS, apiBase, apiUnreachable, openSeededSampleFromStart, watchConsole } from "./helpers";
+import { SCREENSHOTS, apiBase, apiUnreachable, liveRunsBlocked, openSeededSampleFromStart, watchConsole } from "./helpers";
 
 test.use({ viewport: { width: 1920, height: 1080 } });
 
@@ -115,6 +115,11 @@ test("5. officer accepts a finding and the audit log row appears (live run)", as
     `BLOCKED: the Argus API at VITE_API_BASE=${base} is unreachable (${unreachable ?? ""}). Saved runs are read-only ` +
       "(UI_SPEC 16.3), so sign-off needs a live run from a running backend (BACKEND_REQUESTS.md item 8; the web side is covered by e2e/live-stub.spec.ts).",
   );
+  const blocked = await liveRunsBlocked();
+  test.skip(blocked !== null, `BLOCKED: the local API would refuse a live run: ${blocked ?? ""}. The web side is covered by e2e/live-stub.spec.ts.`);
+  // A real live review takes up to the API's 90 s run budget, then the sign-off and the audit log: the test's
+  // own limit must outlast the waits below, or the default 30 s cuts it short whatever the run does.
+  test.setTimeout(300_000);
   const errors = watchConsole(page);
   await page.goto("/");
   await page.getByRole("button", { name: "Run demo on a sample NBFC policy" }).click();

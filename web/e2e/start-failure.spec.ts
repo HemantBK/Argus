@@ -33,7 +33,7 @@ async function emulatorsUnreachable(): Promise<string | null> {
  * `offer`: the saved-run link the banner must hold. A start that went wrong offers the saved run of the same policy;
  * live review unavailable (the cap, the kill switch) offers the saved run of every sample policy, each named.
  */
-type Failure = { name: string; title: RegExp; offer: RegExp; answer: (route: Route) => Promise<void> };
+type Failure = { name: string; title: RegExp; offer: RegExp; answer: (route: Route) => Promise<void>; detail?: string; hidden?: string };
 const SAME_POLICY = /^Open the saved run recorded at /;
 const EVERY_POLICY = /^Open the saved run of .+, recorded at /;
 
@@ -51,13 +51,32 @@ const FAILURES: Failure[] = [
     name: "a 429 run cap",
     title: /Live review is temporarily unavailable/,
     offer: EVERY_POLICY,
-    answer: (r) => r.fulfill({ status: 429, headers: CORS, contentType: "application/json", body: JSON.stringify({ detail: "FAKE daily cap reached" }) }),
+    // The API's own sentence (backend runs.py admit_counted), said again in plain words without its saved-run offer.
+    answer: (r) =>
+      r.fulfill({
+        status: 429,
+        headers: CORS,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Today's limit of 100 live runs is used up. Open a saved run, or try again tomorrow (India time)." }),
+      }),
+    detail: "Today's limit of 100 live runs is used up. Try again tomorrow (India time).",
   },
   {
     name: "a 503 kill switch",
     title: /Live review is temporarily unavailable/,
     offer: EVERY_POLICY,
-    answer: (r) => r.fulfill({ status: 503, headers: CORS, contentType: "application/json", body: JSON.stringify({ detail: "FAKE kill switch" }) }),
+    answer: (r) =>
+      r.fulfill({ status: 503, headers: CORS, contentType: "application/json", body: JSON.stringify({ detail: "Argus is paused: new runs are switched off. Open a saved run instead." }) }),
+    detail: "New live runs are switched off right now.",
+    hidden: "Argus is paused",
+  },
+  {
+    name: "a 502 HTML error page from a proxy",
+    title: /Live review is temporarily unavailable/,
+    offer: EVERY_POLICY,
+    answer: (r) => r.fulfill({ status: 502, headers: CORS, contentType: "text/html", body: "<html><body><h1>502 Bad Gateway</h1>FAKE_PROXY_CODE</body></html>" }),
+    detail: "The review service did not answer properly. Try again shortly.",
+    hidden: "FAKE_PROXY_CODE",
   },
 ];
 
@@ -84,6 +103,8 @@ for (const failure of FAILURES) {
     await expect(banner.locator("strong")).toHaveText(failure.title, { timeout: BANNER_WITHIN_MS });
     await expect(page.getByText("Waiting for the run to start")).toHaveCount(0);
     await expect(page.locator(".topbar-run")).toHaveText("Live run not started");
+    if (failure.detail !== undefined) await expect(banner.locator(".banner-detail")).toHaveText(failure.detail);
+    if (failure.hidden !== undefined) await expect(banner).not.toContainText(failure.hidden);
     // The newest saved run of the demo policy (the seeded FAKE FinFast run, or a newer one already in the emulator),
     // or, when live review is unavailable, the newest saved run of every sample policy that has one.
     await expect(banner.getByRole("link", { name: failure.offer }).first()).toHaveAttribute("href", /^#\/sample\/[0-9a-f]{32}$/);

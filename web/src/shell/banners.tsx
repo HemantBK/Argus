@@ -12,7 +12,7 @@ import type { RunDoc } from "../data/types";
 import { savedRunOfferText } from "./busy";
 import { recordedAt } from "./format";
 import { href } from "./route";
-import type { StartProblem } from "./startProblem";
+import { unavailableReason, type StartProblem } from "./startProblem";
 
 function SavedRunOffer({ saved }: { saved: RunDoc | null }): ReactNode {
   if (!saved) return <p className="banner-offer">No saved run of this policy is available yet.</p>;
@@ -111,7 +111,8 @@ export function BusyRunBanner({ busyClauses, offers }: { busyClauses: number; of
       <strong>Gemini capacity was busy, so {clauses} of this run could not be completed.</strong>
       <p className="banner-detail">
         {busyClauses === 1 ? "That clause is" : "Those clauses are"} marked “Couldn't complete” for a person to review.
-        Start a new live run later, or open a saved run now.
+        {/* Offer a saved run only when there is one: otherwise the next line says none is available. */}
+        {offers.length > 0 ? " Start a new live run later, or open a saved run now." : " Start a new live run later."}
       </p>
       <SavedRunsOffer runs={offers} />
     </div>
@@ -187,17 +188,15 @@ function customProblem(error: Error): CustomProblem {
   }
   if (error.kind === "network") return { title: "Argus could not reach its review service.", message: error.message, retry: true };
   if (error.kind === "auth") return { title: "Your session could not be verified.", message: error.message, retry: true };
+  // A limit or an outage: why, in our own words (never the API's raw text, which can name internal paths), as the
+  // sample-policy start banner says it (startProblem.ts unavailableReason).
   if (error.status === 429) {
-    return {
-      title: "The live review limit has been reached for now.",
-      message: `${error.detail ? `${error.detail} ` : ""}Try again later, or run one of the sample policies.`,
-      retry: true,
-    };
+    return { title: "The live review limit has been reached for now.", message: unavailableReason(429, error.detail), retry: true };
   }
   if (error.status === 503) {
     return {
       title: "Custom clause review is not available right now.",
-      message: `${error.detail ? `${error.detail} ` : ""}The sample policies and their saved runs are still on the start screen.`,
+      message: `${unavailableReason(503, error.detail)} The sample policies and their saved runs are still on the start screen.`,
       retry: true,
     };
   }

@@ -116,7 +116,18 @@ describe("evidenceReport: each clause", () => {
     expect(clause("c1", fs)).toMatchObject({ writtenBy: `${modelName(AGENT)} (the run's agent model)`, backup: false });
     expect(clause("c2", fs)).toMatchObject({ writtenBy: `${modelName(BACKUP)} (backup model), because FAKE: Gemini 3.8 Flash was busy (HTTP 429)`, backup: true });
     expect(clause("c4", fs)).toMatchObject({ writtenBy: `${modelName(BACKUP)} (backup model), because ${modelName(AGENT)} was busy`, backup: true });
-    expect(clause("c3", fs)).toMatchObject({ writtenBy: `Not recorded on this finding (the run's agent model is ${modelName(AGENT)})`, backup: false });
+    // A saved run's finding from before findings named their model: the run's agent model, said to be the run's.
+    expect(clause("c3", fs)).toMatchObject({ writtenBy: `${modelName(AGENT)} (run's agent model; recorded before per-finding labels)`, backup: false });
+  });
+
+  it("prints 'Gemini 3.8 Flash (run's agent model; recorded before per-finding labels)' on a saved run's unlabelled finding", () => {
+    expect(clause("c3").writtenBy).toBe("Gemini 3.8 Flash (run's agent model; recorded before per-finding labels)");
+  });
+
+  it("says 'not recorded' for an unlabelled finding of a live run, and for a saved run's clause that did not complete", () => {
+    const live = build(findings(), { saved: false }).clauses.find((c) => c.clauseId === "c3");
+    expect(live?.writtenBy).toBe(`Not recorded on this finding (the run's agent model is ${modelName(AGENT)})`);
+    expect(clause("c5").writtenBy).toBe(`Not recorded on this finding (the run's agent model is ${modelName(AGENT)})`);
   });
 
   it("prints the officer's decision, with Argus's rationale kept beside an officer's edit", () => {
@@ -148,13 +159,14 @@ describe("evidenceReport: audit summary", () => {
       run: sampleRun({ summary: { ...sampleRun().summary, fallback_clauses: 2 } }),
       findings: fs,
       steps: steps(),
-      audit: [auditEvent(2), auditEvent(1), auditEvent(3, { actor: "officer:FAKE-uid" })],
+      // The officer's own run start (as the API records it) is an event, but not an officer decision.
+      audit: [auditEvent(2), auditEvent(1, { actor: "officer:FAKE-uid", event: "run_started" }), auditEvent(3, { actor: "officer:FAKE-uid", event: "signoff_accept" })],
       synthetic: true,
       printedAt: PRINTED,
     });
     expect(r.summary.lines).toEqual([
       `${CLAUSES.length} clauses: 1 Outdated reference · 0 Gap · 1 Conflict · 0 Compliant · 2 Needs review · 1 ${FAILED_CHIP.label}`,
-      "Monitor: 1 citation revised · 1 stopped for human review",
+      "Monitor: 1 finding revised · 1 stopped for human review",
       "2 clauses reviewed by the backup model",
       `Officer decisions: 1 accepted · 0 rejected · 0 edited · ${CLAUSES.length - 1} without a decision`,
       `Audit log: 3 recorded events (1 by the officer), from ${formatIst(auditEvent(1).at, true)} to ${formatIst(auditEvent(3).at, true)}`,
@@ -166,6 +178,29 @@ describe("evidenceReport: audit summary", () => {
     const r = evidenceReport({ run: sampleRun({ agent_model: AGENT }), findings: fs, steps: steps(), audit: [], synthetic: true, printedAt: PRINTED });
     expect(r.summary.lines).toContain("1 clause reviewed by the backup model");
     expect(r.clauses.filter((c) => c.backup)).toHaveLength(1);
+  });
+
+  it("never claims no backup use when the run's summary does not record it", () => {
+    const old = sampleRun({ agent_model: AGENT, summary: { ...sampleRun().summary, fallback_clauses: null } });
+    const r = evidenceReport({ run: old, findings: findings(), steps: steps(), audit: [], synthetic: true, printedAt: PRINTED });
+    expect(r.summary.lines).toContain("Backup model use is not recorded for this run");
+    expect(r.summary.lines).not.toContain("No clause was reviewed by the backup model");
+    const zero = sampleRun({ agent_model: AGENT, summary: { ...sampleRun().summary, fallback_clauses: 0 } });
+    expect(evidenceReport({ run: zero, findings: findings(), steps: steps(), audit: [], synthetic: true, printedAt: PRINTED }).summary.lines).toContain(
+      "No clause was reviewed by the backup model",
+    );
+  });
+
+  it("counts the run start in the audit log but not as an officer event", () => {
+    const r = evidenceReport({
+      run: sampleRun(),
+      findings: findings(),
+      steps: steps(),
+      audit: [auditEvent(1, { actor: "officer:FAKE-uid", event: "run_started" }), auditEvent(2)],
+      synthetic: true,
+      printedAt: PRINTED,
+    });
+    expect(r.summary.lines.at(-1)).toBe(`Audit log: 2 recorded events (0 by the officer), from ${formatIst(auditEvent(1).at, true)} to ${formatIst(auditEvent(2).at, true)}`);
   });
 
   it("says so when no clause went to the backup model and no audit event was recorded", () => {

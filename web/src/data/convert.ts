@@ -176,13 +176,22 @@ const SUMMARY_KEYS = [
   "fallback_clauses",
 ] as const;
 
+/** Run.source: "custom" for a pasted clause, absent or null for a sample policy. Anything else is a loud error. */
+function runSource(o: Obj, path: string): "custom" | null {
+  const v = optStr(o, "source", path);
+  if (v === null || v === "custom") return v;
+  throw new DataError(`${path}.source`, `expected "custom" or null, got ${describe(v)}`);
+}
+
 export function parseRun(data: unknown, path: string): RunDoc {
   const o = obj(data, path);
   const rawClauses = o.clauses ?? [];
   if (!Array.isArray(rawClauses)) throw new DataError(`${path}.clauses`, "expected a list");
   const s = o.summary === undefined ? {} : obj(o.summary, `${path}.summary`);
+  // A count the doc does not hold is 0, except fallback_clauses: a run written before that field existed says
+  // nothing about the backup model, and null keeps "not recorded" apart from "none" (report.ts backupLine).
   const summary = Object.fromEntries(
-    SUMMARY_KEYS.map((k) => [k, s[k] === undefined ? 0 : num(s, k, `${path}.summary`)]),
+    SUMMARY_KEYS.map((k) => [k, s[k] === undefined ? (k === "fallback_clauses" ? null : 0) : num(s, k, `${path}.summary`)]),
   ) as RunDoc["summary"];
   return {
     schema_version: optStr(o, "schema_version", path) ?? "v0",
@@ -201,6 +210,7 @@ export function parseRun(data: unknown, path: string): RunDoc {
     rbi_as_on: optStr(o, "rbi_as_on", path),
     provider: optStr(o, "provider", path),
     seeded: bool(o, "seeded", path, false),
+    source: runSource(o, path),
     clauses: rawClauses.map((c, i) => parseClause(c, `${path}.clauses[${i}]`)),
     summary,
     latency_ms: optNum(o, "latency_ms", path),

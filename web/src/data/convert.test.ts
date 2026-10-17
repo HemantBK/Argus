@@ -63,8 +63,10 @@ describe("parseRun", () => {
     expect([r.provider, r.seeded, r.rbi_as_on]).toEqual(["vertex", true, "2026-07-15"]);
     expect(() => parseRun({ ...v0, seeded: "yes" }, "runs/r")).toThrow(/runs\/r.seeded/);
   });
-  it("reads the count of clauses the fallback model reviewed, 0 for a run that predates it", () => {
-    expect(parseRun(v0, "runs/r").summary.fallback_clauses).toBe(0);
+  it("reads the count of clauses the fallback model reviewed, null (not recorded, never 0) for a run that predates it", () => {
+    expect(parseRun(v0, "runs/r").summary.fallback_clauses).toBeNull();
+    expect(parseRun({ ...v0, summary: { clauses: 8 } }, "runs/r").summary.fallback_clauses).toBeNull();
+    expect(parseRun({ ...v0, summary: { fallback_clauses: 0 } }, "runs/r").summary.fallback_clauses).toBe(0);
     expect(parseRun({ ...v0, summary: { fallback_clauses: 2 } }, "runs/r").summary.fallback_clauses).toBe(2);
   });
   it("rejects an unknown status loudly", () => {

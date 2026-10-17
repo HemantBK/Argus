@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { withdrawalOf } from "../data/convert";
 import type { Citation, FindingDoc } from "../data/types";
 import { citationLibrary, libraryLabel } from "../shell/format";
-import { HASH_EXPLAINED, formatIsoDate, paraLabel, shortHash, sourceLinkLabel } from "./view";
+import { HASH_EXPLAINED, NO_VERIFIED_CITATION, formatIsoDate, paraLabel, shortHash, sourceLinkLabel } from "./view";
 
 interface Props {
   finding: FindingDoc | null;
@@ -34,7 +34,7 @@ export function SourcePane({ finding, citation, replacement, onShowReplacement }
 function emptyText(finding: FindingDoc | null): string {
   if (!finding) return "The RBI text appears here once the clause has a finding.";
   if (finding.error) return "No RBI paragraph: the review of this clause did not complete.";
-  return "No RBI paragraph supports a conclusion for this clause. Argus does not guess; a person must review it.";
+  return NO_VERIFIED_CITATION;
 }
 
 function SourceBody({ citation, replacement, onShowReplacement }: Omit<Props, "finding" | "citation"> & { citation: Citation }): ReactNode {

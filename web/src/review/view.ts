@@ -2,6 +2,7 @@
 // Everything shown is derived from recorded fields; nothing is estimated or implied.
 import type { SummaryCounts } from "../data/selectors";
 import type { Citation, FindingDoc, MonitorAction, RunDoc, RunSource, SignoffDecision, StepDoc } from "../data/types";
+import type { SamplePolicy } from "../start/samplePolicies";
 
 /** "1 citation" / "2 citations". */
 export function plural(n: number, one: string, many = `${one}s`): string {
@@ -23,6 +24,13 @@ export function formatIsoDate(value: string): string {
 export function shortHash(hash: string): string {
   return hash.length > 8 ? `${hash.slice(0, 8)}…` : hash;
 }
+
+/**
+ * A finished finding with no citation. Argus did not verify one, which is not proof that no RBI paragraph applies,
+ * so it says only the former (Source pane and evidence report).
+ */
+export const NO_VERIFIED_CITATION =
+  "Argus could not verify a supporting RBI citation for this clause. Argus does not guess; a person must review it.";
 
 export const HASH_EXPLAINED =
   "SHA-256 of the paragraph text in the dated RBI library. If even one character of the text changed, this hash would change, so it proves which exact text Argus checked.";
@@ -163,8 +171,18 @@ export function fallbackNote(finding: FindingDoc, runAgentModel: string): string
   return `Reviewed by ${modelName(by)} because ${reason}.`;
 }
 
-/** "2 clauses reviewed by the backup model", or null when the agent model reviewed every clause. */
+/** "2 clauses reviewed by the backup model", or null when the run records none (or does not record the count). */
 export function fallbackSummary(run: RunDoc): string | null {
   const n = run.summary.fallback_clauses;
-  return n > 0 ? `${plural(n, "clause")} reviewed by the backup model` : null;
+  return n !== null && n > 0 ? `${plural(n, "clause")} reviewed by the backup model` : null;
+}
+
+/**
+ * Whether the run reviews a sample policy whose sample file says it is synthetic, which picks the evidence report's
+ * "synthetic policy" title. A pasted clause (source custom) is the officer's own text, never a sample, whatever its
+ * policy id; a run not loaded yet, or of a policy no sample file lists, is not called synthetic.
+ */
+export function isSyntheticSample(run: Pick<RunDoc, "policy_id" | "source"> | null, policies: readonly SamplePolicy[]): boolean {
+  if (run === null || run.source === "custom") return false;
+  return policies.some((p) => p.policyId === run.policy_id && p.synthetic);
 }

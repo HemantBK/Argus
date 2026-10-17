@@ -52,7 +52,7 @@ describe("ReviewWorkspace: summary bar (the 5-second answer)", () => {
 
   it("shows the monitor summary and sign-off progress from the data", () => {
     const t = text(render());
-    expect(t).toContain("Monitor: 1 citation revised · 1 stopped for human review");
+    expect(t).toContain("Monitor: 1 finding revised · 1 stopped for human review");
     expect(t).toContain(`Signed off 0 / ${CLAUSES.length}`);
   });
 
@@ -68,7 +68,7 @@ describe("ReviewWorkspace: summary bar (the 5-second answer)", () => {
   it("does not show monitor figures until the trace has loaded", () => {
     const t = text(render({ steps: LOADING }));
     expect(t).toContain("Monitor: loading recorded verdicts…");
-    expect(t).not.toContain("citation revised");
+    expect(t).not.toContain("finding revised");
   });
 });
 
@@ -278,9 +278,13 @@ describe("ReviewWorkspace: outdated reference chain and RBI source", () => {
     expect(t).toContain(`Replaced by ${CURRENT_CITATION.instrument}, para ${CURRENT_CITATION.para}`);
   });
 
-  it("no citation: says Argus does not guess instead of showing an empty pane", () => {
+  it("no citation: says Argus could not verify one (the approved wording, word for word) instead of showing an empty pane", () => {
     const t = text(html(<SourcePane finding={finding({ citation: null })} citation={null} replacement={null} onShowReplacement={() => undefined} />));
-    expect(t).toContain("Argus does not guess");
+    // Written out, not imported: a change to the shared constant must fail here until the approved wording is changed here too.
+    expect(t).toContain("Argus could not verify a supporting RBI citation for this clause. Argus does not guess; a person must review it.");
+    // The retired wording claimed that no RBI paragraph supports the clause; a failed check shows only that Argus
+    // did not verify one.
+    expect(t).not.toMatch(/No RBI paragraph supports/i);
   });
 
   it("the citation chip names the paragraph and is a button that loads the source pane", () => {

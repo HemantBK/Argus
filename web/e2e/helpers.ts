@@ -71,3 +71,51 @@ export async function expectNoHorizontalOverflow(page: Page, where: string): Pro
   }));
   expect(scrollWidth, `${where}: page is ${scrollWidth}px wide in a ${clientWidth}px viewport`).toBeLessThanOrEqual(clientWidth);
 }
+
+const EMULATOR_DOCS = `http://${process.env.FIRESTORE_EMULATOR_HOST ?? "localhost:8081"}/v1/projects/argus-local/databases/(default)/documents`;
+
+/** One integer field of an emulator document read with the emulator's admin token, or null when it is absent. */
+async function emulatorInt(path: string, field: string): Promise<number | null> {
+  const res = await fetch(`${EMULATOR_DOCS}/${path}`, { headers: { Authorization: "Bearer owner" }, signal: AbortSignal.timeout(3000) });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Emulator GET ${path} failed: ${res.status}`);
+  const doc = (await res.json()) as { fields?: Record<string, { integerValue?: string; booleanValue?: boolean }> };
+  const v = doc.fields?.[field];
+  if (v?.integerValue !== undefined) return Number(v.integerValue);
+  if (v?.booleanValue !== undefined) return v.booleanValue ? 1 : 0;
+  return null;
+}
+
+/**
+ * Why the local API would refuse a new live run before it starts, read (never written) from the emulator the API
+ * counts in: runs switched off in config/limits, or today's or this hour's run cap used up (backend runs.py admit:
+ * usage/{IST date} and usage/{IST date}/hours/{HH}). Null when a run would be admitted as far as these show.
+ * A spec that needs a real live run skips with this reason instead of failing on a refusal it did not cause.
+ */
+export async function liveRunsBlocked(): Promise<string | null> {
+  const enabled = await emulatorInt("config/limits", "enabled");
+  if (enabled === 0) return "live runs are switched off in the emulator's config/limits";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const part = (t: string): string => parts.find((p) => p.type === t)?.value ?? "";
+  const day = `${part("year")}-${part("month")}-${part("day")}`;
+  const hour = part("hour");
+  const caps: [string, string, string][] = [
+    ["daily_run_cap", `usage/${day}`, `today's (${day} IST)`],
+    ["hourly_run_cap", `usage/${day}/hours/${hour}`, `this hour's (${hour}:00 IST)`],
+  ];
+  for (const [capField, usagePath, which] of caps) {
+    const cap = await emulatorInt("config/limits", capField);
+    const used = await emulatorInt(usagePath, "runs");
+    if (cap !== null && used !== null && used >= cap) {
+      return `${which} live-run cap in the emulator is used up (${used} counted at ${usagePath}, cap ${cap} in config/limits)`;
+    }
+  }
+  return null;
+}

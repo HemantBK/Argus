@@ -533,10 +533,15 @@ mark,
     flex-direction: column;
     gap: 0;
   }
+  /* A 16 px square, centred, before it turns: a stretched (full-width) arrow would, once rotated, stand as a
+     16 px wide strip as tall as the pane is wide, lying over the boxes, the "What changed" panel and the
+     citation chip below it and taking their clicks. */
   .chain-arrow {
+    align-self: center;
     justify-content: center;
     font-size: 15px;
     line-height: 16px;
+    width: 16px;
     height: 16px;
     transform: rotate(90deg);
   }

@@ -34,8 +34,9 @@ const FAILED_STARTS: [string, PostState][] = [
   ["HTTP 400", httpError(400, "FAKE unknown policy")],
   ["HTTP 401", httpError(401, "FAKE invalid token")],
   ["HTTP 500", httpError(500, "FAKE Internal Server Error")],
-  ["HTTP 429 run cap", httpError(429, "FAKE daily cap reached")],
-  ["HTTP 503 kill switch", httpError(503, "FAKE kill switch")],
+  // The API's own sentences for its daily cap and kill switch (backend runs.py), which the banner says in our words.
+  ["HTTP 429 run cap", httpError(429, "Today's limit of 100 live runs is used up. Open a saved run, or try again tomorrow (India time).")],
+  ["HTTP 503 kill switch", httpError(503, "Argus is paused: new runs are switched off. Open a saved run instead.")],
   ["listeners refused", { status: "blocked", error: new Error("FAKE permission-denied") }],
 ];
 
@@ -151,11 +152,13 @@ describe("App", () => {
     fake.saved = live.ready({ runs: [saved, savedB], invalid: [] });
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Run demo on a sample NBFC policy" }));
-    fake.post = { status: "error", error: new ApiError("http", messageForStatus(503, "FAKE kill switch"), 503) } satisfies PostState;
+    const paused = "Argus is paused: new runs are switched off. Open a saved run instead.";
+    fake.post = { status: "error", error: new ApiError("http", messageForStatus(503, paused), 503, paused) } satisfies PostState;
     go(window.location.hash);
     const alert = await screen.findByRole("alert");
     expect(alert.querySelector("strong")?.textContent).toBe("Live review is temporarily unavailable.");
-    expect(alert.textContent).toMatch(/FAKE kill switch/);
+    expect(alert.textContent).toContain("New live runs are switched off right now.");
+    expect(alert.textContent).not.toContain(paused);
     expect(within(alert).getAllByRole("link").map((a) => a.textContent)).toEqual([saved, savedB].map(savedRunOfferText));
   });
 
@@ -218,8 +221,10 @@ describe("App", () => {
       const alert = await screen.findByRole("alert");
       expect(alert.querySelector("strong")?.textContent).toContain(bannerTitle(failure));
       expect(alert.textContent).toContain(startProblem(failure)?.message ?? "");
-      // The API's own reason is shown, whatever the failure.
-      if (failure.status === "error" && failure.error.detail) expect(alert.textContent).toContain(failure.error.detail);
+      // Any other failure keeps the API's own reason; live review unavailable says it in our words (startProblem.ts).
+      if (failure.status === "error" && failure.error.detail && startProblem(failure)?.kind !== "unavailable") {
+        expect(alert.textContent).toContain(failure.error.detail);
+      }
       // Live review unavailable (cap, kill switch, model failure) offers every sample policy's saved run; any other
       // failure offers the saved run of the same policy.
       const link =

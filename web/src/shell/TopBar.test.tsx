@@ -93,10 +93,19 @@ describe("run banners", () => {
     const status = screen.getByRole("status");
     expect(status.querySelector("strong")?.textContent).toBe("Gemini capacity was busy, so 2 clauses of this run could not be completed.");
     expect(status.textContent).toMatch(/Those clauses are marked/);
+    expect(status.textContent).toContain("Start a new live run later, or open a saved run now.");
     expect(screen.getAllByRole("link").map((a) => a.textContent)).toEqual(offers.map(savedRunOfferText));
     cleanup();
     render(<BusyRunBanner busyClauses={1} offers={[]} />);
     expect(screen.getByRole("status").textContent).toMatch(/so 1 clause of this run.*That clause is marked.*No saved run is available yet/s);
+  });
+
+  it("with no saved run, the busy banner does not tell the officer to open one", () => {
+    render(<BusyRunBanner busyClauses={1} offers={[]} />);
+    const text = screen.getByRole("status").textContent;
+    expect(text).toContain("Start a new live run later.");
+    expect(text).not.toMatch(/open a saved run/i);
+    expect(screen.queryByRole("link")).toBeNull();
   });
 
   it("a start error says what failed and that no saved run exists when none does", () => {

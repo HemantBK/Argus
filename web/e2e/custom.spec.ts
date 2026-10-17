@@ -191,12 +191,15 @@ test("a clause refused for an identifier says so in plain English, offers no Try
 });
 
 test("custom review switched off (503) says so, and Try again resends the same clause as a new run", async ({ page }) => {
-  const posts = await stubRuns(page, (route) => json(route, 503, { detail: "FAKE custom clause review is switched off." }));
+  // The API's own sentence at the deployed build (runs.py CUSTOM_OFF); the banner says it in its own words.
+  const posts = await stubRuns(page, (route) => json(route, 503, { detail: "Custom clause review is switched off right now." }));
   await reviewClause(page, FAKE_CLAUSE);
 
   const banner = page.getByRole("alert");
   await expect(banner.locator("strong")).toHaveText("Custom clause review is not available right now.", { timeout: 15_000 });
-  await expect(banner).toContainText("FAKE custom clause review is switched off.");
+  await expect(banner.locator(".banner-detail")).toHaveText(
+    "Pasting your own clause is switched off right now. The sample policies and their saved runs are still on the start screen.",
+  );
   await banner.getByRole("button", { name: "Try again" }).click();
   await expect.poll(() => posts.length, { message: "Try again sent a second POST /api/runs", timeout: 15_000 }).toBe(2);
   expect(posts[1]?.run_id).not.toBe(posts[0]?.run_id);
@@ -204,6 +207,11 @@ test("custom review switched off (503) says so, and Try again resends the same c
 });
 
 test("an accepted clause streams onto the normal Review screen as 'Your clause'", async ({ page }) => {
+  // The stand-in copies its review content from the seeded FAKE saved run. Without it (an emulator run with
+  // ARGUS_E2E_NO_SEED=1 that was never seeded) the copy fails inside the route handler, the POST never answers,
+  // and the test would only time out waiting for the summary bar; so check the seed first and name the cause.
+  const seeded = await fetch(`${DOCS}/samples/${SEEDED_SAMPLE_ID}`, { headers: ADMIN });
+  expect(seeded.status, `samples/${SEEDED_SAMPLE_ID} is in the emulator (run \`npm run seed-demo\`, or drop ARGUS_E2E_NO_SEED=1)`).toBe(200);
   const errors = watchConsole(page);
   const created: string[] = [];
   await stubRuns(page, async (route, body) => {

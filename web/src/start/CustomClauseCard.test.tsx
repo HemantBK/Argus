@@ -219,8 +219,42 @@ describe("CustomStartProblemBanner", () => {
     { name: "identifier_found (PAN)", error: () => refusal("identifier_found", "PAN"), title: /seems to contain a PAN\.$/, body: /was not reviewed/, retry: false },
     { name: "identifier_found (unknown type)", error: () => refusal("identifier_found", "FAKE_TYPE"), title: /personal identifier \(FAKE_TYPE\)/, body: /placeholder/, retry: false },
     { name: "identifier_found (no type)", error: () => refusal("identifier_found"), title: /seems to contain a personal identifier\.$/, body: /placeholder/, retry: false },
-    { name: "429 cap", error: () => new ApiError("http", "FAKE", 429, "FAKE cap reached"), title: /limit has been reached/, body: /FAKE cap reached .*sample policies/, retry: true },
-    { name: "503 switched off", error: () => new ApiError("http", "FAKE", 503, "FAKE switched off"), title: /not available right now/, body: /FAKE switched off .*sample policies/, retry: true },
+    // Limits and outages: the API's sentences at the deployed build (runs.py), said in our words, never as sent.
+    {
+      name: "429 cap",
+      error: () => new ApiError("http", "FAKE", 429, "Today's limit of 5 custom clause reviews is used up. Try a sample policy, or paste a clause again tomorrow (India time)."),
+      title: /limit has been reached/,
+      body: /^[^.]*limit has been reached for now\.Today's limit of 5 pasted-clause reviews is used up\. Try a sample policy, or paste a clause again tomorrow \(India time\)\.Edit your clause/,
+      retry: true,
+    },
+    {
+      name: "429 daily cap",
+      error: () => new ApiError("http", "FAKE", 429, "Today's limit of 100 live runs is used up. Open a saved run, or try again tomorrow (India time)."),
+      title: /limit has been reached/,
+      body: /for now\.Today's limit of 100 live runs is used up\. Try again tomorrow \(India time\)\.Edit your clause/,
+      retry: true,
+    },
+    {
+      name: "429 unknown reason",
+      error: () => new ApiError("http", "FAKE", 429, "FAKE cap reached"),
+      title: /limit has been reached/,
+      body: /for now\.The live run limit has been reached for now\. Try again later\.Edit your clause/,
+      retry: true,
+    },
+    {
+      name: "503 switched off",
+      error: () => new ApiError("http", "FAKE", 503, "Custom clause review is switched off right now."),
+      title: /not available right now/,
+      body: /right now\.Pasting your own clause is switched off right now\. The sample policies and their saved runs are still on the start screen\./,
+      retry: true,
+    },
+    {
+      name: "503 limits missing",
+      error: () => new ApiError("http", "FAKE", 503, "Run limits are not configured: config/limits is missing"),
+      title: /not available right now/,
+      body: /right now\.Live runs are not set up on the server right now\. The sample policies/,
+      retry: true,
+    },
     { name: "network", error: () => new ApiError("network", "FAKE unreachable"), title: /could not reach/, body: /FAKE unreachable/, retry: true },
     { name: "listener refused", error: () => new Error("FAKE permission denied"), title: /could not watch it/, body: /FAKE permission denied/, retry: true },
     { name: "other 4xx", error: () => new ApiError("http", "FAKE refused", 422), title: /could not be started/, body: /FAKE refused/, retry: false },
@@ -245,7 +279,9 @@ describe("CustomStartProblemBanner", () => {
     expect(b.alert.getByRole("link", { name: "Edit your clause" }).getAttribute("href")).toBe(href.start());
     // The limit reached or review switched off: the sample policies' saved runs are offered too; never otherwise.
     const offered = b.alert.queryAllByRole("link").filter((a) => a.textContent !== "Edit your clause");
-    expect(offered.map((a) => a.textContent)).toEqual(name === "429 cap" || name === "503 switched off" ? OFFERS.map(savedRunOfferText) : []);
+    expect(offered.map((a) => a.textContent)).toEqual(/^(429|503) /.test(name) ? OFFERS.map(savedRunOfferText) : []);
+    // Never the API's raw sentence: no internal path, no code, no "FAKE" detail.
+    expect(b.text).not.toMatch(/config\/|FAKE cap reached|custom clause reviews|Open a saved run, or/);
     const button = b.alert.queryByRole("button", { name: "Try again" });
     expect(button !== null).toBe(retry);
     if (button) {

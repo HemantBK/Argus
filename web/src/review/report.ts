@@ -52,6 +52,8 @@ export interface ReportClause {
   chain: ReportChain | null;
   /** Which model wrote the finding, in words; null when no finding was saved. */
   writtenBy: string | null;
+  /** The finding itself records which model wrote it (Finding.agent_model). */
+  modelRecorded: boolean;
   /** The backup (fallback) model wrote it. */
   backup: boolean;
   /** The monitor badge's label, and every verdict recorded for the review that produced the finding. */
@@ -88,13 +90,21 @@ function reportCitation(c: Citation): ReportCitation {
   };
 }
 
-/** Who wrote the finding: the run's agent model, or the backup model and why (FindingPane fallbackNote's reason). */
-function writtenBy(finding: FindingDoc, runAgentModel: string): { text: string; backup: boolean } {
+/**
+ * Who wrote the finding: the run's agent model, or the backup model and why (FindingPane fallbackNote's reason).
+ * A saved run's finished finding with no agent_model was recorded before findings named their model (the API
+ * sets it on every finished finding since); it prints the run's agent model and says so, never more.
+ */
+function writtenBy(finding: FindingDoc, run: RunDoc): { text: string; backup: boolean; recorded: boolean } {
+  const runAgentModel = run.agent_model;
   const by = finding.agent_model ?? null;
-  if (by === null) return { text: `Not recorded on this finding (the run's agent model is ${modelName(runAgentModel)})`, backup: false };
-  if (by === runAgentModel) return { text: `${modelName(by)} (the run's agent model)`, backup: false };
+  if (by === null && run.saved && !finding.error) {
+    return { text: `${modelName(runAgentModel)} (run's agent model; recorded before per-finding labels)`, backup: false, recorded: false };
+  }
+  if (by === null) return { text: `Not recorded on this finding (the run's agent model is ${modelName(runAgentModel)})`, backup: false, recorded: false };
+  if (by === runAgentModel) return { text: `${modelName(by)} (the run's agent model)`, backup: false, recorded: true };
   const reason = finding.fallback_reason?.trim().replace(/\.+$/, "") || `${modelName(runAgentModel)} was busy`;
-  return { text: `${modelName(by)} (backup model), because ${reason}`, backup: true };
+  return { text: `${modelName(by)} (backup model), because ${reason}`, backup: true, recorded: true };
 }
 
 function decisionText(finding: FindingDoc | null, saved: boolean): string {
@@ -116,13 +126,14 @@ function clauseOf(row: ClauseRow, run: RunDoc, steps: readonly StepDoc[]): Repor
       citation: null,
       chain: null,
       writtenBy: null,
+      modelRecorded: false,
       backup: false,
       monitor: null,
     };
   }
   const chain = outdatedChain(f);
   const badge = badgeFor(f, steps);
-  const model = writtenBy(f, run.agent_model);
+  const model = writtenBy(f, run);
   return {
     ...base,
     label: chipFor(f).label,
@@ -140,6 +151,7 @@ function clauseOf(row: ClauseRow, run: RunDoc, steps: readonly StepDoc[]): Repor
         }
       : null,
     writtenBy: model.text,
+    modelRecorded: model.recorded,
     backup: model.backup,
     monitor: {
       badge: badge.label,
@@ -171,11 +183,13 @@ function summaryOf(
   const sorted = [...audit].sort((a, b) => a.seq - b.seq);
   const first = sorted[0];
   const last = sorted.at(-1);
-  const officerEvents = sorted.filter((e) => actorLabel(e.actor) === "Officer").length;
+  // The API records the run's start under the officer who pressed Run (runs.py execute, "run_started"); that is
+  // not something the officer decided on a finding, so "by the officer" counts every other officer event only.
+  const officerEvents = sorted.filter((e) => actorLabel(e.actor) === "Officer" && e.event !== "run_started").length;
   return {
     lines: [
       `${plural(counts.clauses, "clause")}: ${byLabel}${counts.failed > 0 ? ` · ${counts.failed} ${FAILED_CHIP.label}` : ""}`,
-      `Monitor: ${plural(counts.monitorRevised, "citation")} revised · ${counts.monitorStopped} stopped for human review`,
+      `Monitor: ${plural(counts.monitorRevised, "finding")} revised · ${counts.monitorStopped} stopped for human review`,
       backupLine(run, clauses),
       `Officer decisions: ${decisions.accept} ${DECISION_TEXT.accept.toLowerCase()} · ${decisions.reject} ${DECISION_TEXT.reject.toLowerCase()} · ${decisions.edit} ${DECISION_TEXT.edit.toLowerCase()} · ${counts.clauses - counts.signedOff} without a decision`,
       first && last
@@ -188,11 +202,13 @@ function summaryOf(
 /**
  * How many clauses the backup model reviewed. Counted from the findings themselves when any of them records its
  * model, so the summary always agrees with the "(backup model)" label printed on each clause; otherwise from the
- * run's summary, as the summary bar does.
+ * run's summary, as the summary bar does. "None" only when that count is recorded and 0: a run whose summary does
+ * not record it (saved before the backup model existed) says so instead of claiming none.
  */
 function backupLine(run: RunDoc, clauses: readonly ReportClause[]): string {
-  const recorded = clauses.some((c) => c.writtenBy !== null && !c.writtenBy.startsWith("Not recorded"));
+  const recorded = clauses.some((c) => c.modelRecorded);
   const n = recorded ? clauses.filter((c) => c.backup).length : run.summary.fallback_clauses;
+  if (n === null) return "Backup model use is not recorded for this run";
   if (n === 0) return "No clause was reviewed by the backup model";
   return fallbackSummary({ ...run, summary: { ...run.summary, fallback_clauses: n } }) ?? "";
 }

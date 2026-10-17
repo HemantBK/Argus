@@ -2,7 +2,7 @@
 // POST /api/runs {run_id, policy_id} with the Firebase ID token, after which the listeners stream the run.
 // Needs the real API at VITE_API_BASE; skipped with a BLOCKED reason when it cannot be reached.
 import { expect, test, type Request } from "@playwright/test";
-import { apiBase, apiUnreachable, watchConsole } from "./helpers";
+import { apiBase, apiUnreachable, liveRunsBlocked, watchConsole } from "./helpers";
 
 test("Run demo signs in, attaches listeners, then POSTs /api/runs and streams the run", async ({ page }) => {
   const base = apiBase();
@@ -12,6 +12,10 @@ test("Run demo signs in, attaches listeners, then POSTs /api/runs and streams th
     `BLOCKED: the Argus API at VITE_API_BASE=${base} is unreachable (${unreachable ?? ""}). Start the backend ` +
       "(with ARGUS_ALLOWED_ORIGINS=http://localhost:5173, BACKEND_REQUESTS.md item 4) and rerun.",
   );
+  const blocked = await liveRunsBlocked();
+  test.skip(blocked !== null, `BLOCKED: the local API would refuse a live run: ${blocked ?? ""}. The web side is covered by e2e/live-stub.spec.ts.`);
+  // The waits below add up to 105 s (POST 15 s, summary 30 s, first steps 60 s); the default 30 s would cut them short.
+  test.setTimeout(150_000);
   const errors = watchConsole(page);
   const order: string[] = [];
   let post: Request | null = null;

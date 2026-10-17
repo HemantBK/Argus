@@ -3,6 +3,7 @@
 // screen. Plain markup, so it prints the same in every browser and reads in order to a screen reader.
 import type { ReactNode } from "react";
 import type { EvidenceReport as Report, ReportCitation, ReportClause } from "./report";
+import { NO_VERIFIED_CITATION } from "./view";
 import "./print.css";
 
 function CitationFacts({ c }: { c: ReportCitation }): ReactNode {
@@ -77,7 +78,7 @@ function Clause({ clause }: { clause: ReportClause }): ReactNode {
         clause.writtenBy !== null &&
         clause.error === null &&
         clause.chain === null && (
-          <p className="report-none">No RBI paragraph supports a conclusion for this clause. Argus does not guess; a person must review it.</p>
+          <p className="report-none">{NO_VERIFIED_CITATION}</p>
         )
       )}
 

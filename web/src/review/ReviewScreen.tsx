@@ -7,6 +7,7 @@ import { useRunData } from "../data/hooks";
 import type { RunSource } from "../data/types";
 import { SAMPLE_POLICIES } from "../start/samplePolicies";
 import { ReviewWorkspace } from "./ReviewWorkspace";
+import { isSyntheticSample } from "./view";
 
 export function ReviewScreen({ runId, source }: { runId: string; source: RunSource }): ReactNode {
   const data = useRunData(runId, source);
@@ -16,10 +17,7 @@ export function ReviewScreen({ runId, source }: { runId: string; source: RunSour
     },
     [runId],
   );
-  const policyId = data.run.status === "ready" ? (data.run.data?.policy_id ?? null) : null;
-  // A pasted clause (source custom) is the officer's own text, never a sample: only a sample file can say synthetic.
-  const custom = data.run.status === "ready" && data.run.data?.source === "custom";
-  const synthetic = !custom && SAMPLE_POLICIES.policies.some((p) => p.policyId === policyId && p.synthetic);
+  const synthetic = isSyntheticSample(data.run.status === "ready" ? data.run.data : null, SAMPLE_POLICIES.policies);
   return (
     <ReviewWorkspace
       source={source}

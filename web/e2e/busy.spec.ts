@@ -61,6 +61,9 @@ test("a saved run prints its evidence report, and only while printing", async ({
   await expect(report).toBeVisible();
   await expect(report.getByRole("heading", { level: 1 })).toHaveText(/^Argus evidence report: not legal advice/);
   await expect(report.getByRole("heading", { level: 2, name: "Audit summary" })).toBeVisible();
+  // The seeded saved run's findings predate per-finding model labels: each names the run's agent model and says so.
+  await expect(report.getByText("(run's agent model; recorded before per-finding labels)").first()).toBeVisible();
+  await expect(report.getByText(/^Monitor: \d+ findings? revised · \d+ stopped for human review$/)).toBeVisible();
   // On paper the report stands alone: the top bar and the panes are not printed.
   await expect(page.locator(".topbar")).toBeHidden();
   await expect(page.locator(".review-panes")).toBeHidden();

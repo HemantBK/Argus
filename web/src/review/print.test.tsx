@@ -99,6 +99,18 @@ describe("EvidenceReport markup", () => {
     for (const line of r.summary.lines) expect(text).toContain(line);
   });
 
+  it("says Argus could not verify a citation (the approved wording, word for word) on each finished clause without one, never that none exists", () => {
+    const r = evidenceReport({ run: sampleRun(), findings: findings(), steps: steps(), audit: AUDIT, synthetic: true, printedAt: new Date() });
+    render(<EvidenceReport report={r} />);
+    // Written out, not imported: a change to the shared constant must fail here until the approved wording is changed here too.
+    // c3 and c4 finished with no citation; c5 failed, so it prints its recorded error instead.
+    const none = screen.getAllByText(
+      "Argus could not verify a supporting RBI citation for this clause. Argus does not guess; a person must review it.",
+    );
+    expect(none).toHaveLength(2);
+    expect(report()?.textContent ?? "").not.toMatch(/No RBI paragraph supports/i);
+  });
+
   it("labels a finding the backup model wrote", () => {
     const fs = findings().map((f) => (f.clause_id === "c2" ? { ...f, agent_model: "gemini-3.1-flash-lite", fallback_reason: "FAKE busy" } : f));
     const r = evidenceReport({ run: sampleRun({ agent_model: "gemini-3.8-flash" }), findings: fs, steps: steps(), audit: AUDIT, synthetic: true, printedAt: new Date() });

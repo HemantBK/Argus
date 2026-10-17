@@ -81,7 +81,7 @@ export function SummaryBar({ run, counts, progress, completeAt, monitorReady, fi
 
         <p className="summary-monitor">
           {monitorReady
-            ? `Monitor: ${plural(counts.monitorRevised, "citation")} revised · ${counts.monitorStopped} stopped for human review`
+            ? `Monitor: ${plural(counts.monitorRevised, "finding")} revised · ${counts.monitorStopped} stopped for human review`
             : "Monitor: loading recorded verdicts…"}
         </p>
 
