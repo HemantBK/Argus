@@ -5,7 +5,8 @@ Run. The uid in the verified token becomes the run's `owner_uid`, which the Fire
 compare with `request.auth.uid`, so a run is readable only by the person who started it.
 
 Failures are loud and closed: a missing, malformed, expired, revoked or forged token is 401; when Google's
-signing keys cannot be fetched the request is refused with 503, never let through.
+signing keys cannot be fetched or the Auth backend refuses the check, the request is refused with 503,
+never let through.
 """
 
 from collections.abc import Callable
@@ -14,7 +15,7 @@ from typing import Any
 
 import firebase_admin
 from fastapi import HTTPException, status
-from firebase_admin import auth
+from firebase_admin import auth, exceptions
 
 from argus_api.config import Settings
 
@@ -61,6 +62,13 @@ def uid_from_token(token: str, verify: TokenVerifier) -> str:
     except auth.CertificateFetchError as e:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, f"Cannot fetch Firebase signing keys: {e}"
+        ) from e
+    except exceptions.FirebaseError as e:
+        # Any other Firebase Auth backend failure (for example the revocation lookup being refused, as
+        # happened live on 2026-10-17 before the service account had firebaseauth.viewer): the token could
+        # not be checked, so the request is refused as unavailable (503), never let through, never a raw 500.
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, f"Sign-in check is unavailable right now: {type(e).__name__}"
         ) from e
     uid = claims.get("uid")
     if not isinstance(uid, str) or not uid:

@@ -56,6 +56,18 @@ def test_unreachable_signing_keys_fail_closed_with_503() -> None:
     assert e.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
 
 
+def test_auth_backend_refusals_fail_closed_with_503() -> None:
+    """The live failure of 2026-10-17: the revocation lookup was refused for lack of a role."""
+    from firebase_admin import _auth_utils
+
+    refused = _auth_utils.InsufficientPermissionError(
+        "no firebaseauth.viewer", cause=None, http_response=None
+    )
+    with pytest.raises(HTTPException) as e:
+        uid_from_token("t", _raises(refused))
+    assert e.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+
 @pytest.mark.parametrize("claims", [{}, {"uid": ""}, {"uid": 7}])
 def test_token_without_a_uid_is_401(claims: dict[str, Any]) -> None:
     with pytest.raises(HTTPException) as e:
