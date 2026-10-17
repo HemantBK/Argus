@@ -797,17 +797,18 @@ def test_purge_command_prints_paths_and_counts_never_the_clause(
     assert run_paths(store, run.run_id) == set()
 
 
-# ---- the plan's boundary: no change to the agent or the monitor -------------------------------------------
+# ---- the plan's boundary: no change to the agent's prompts and tools or to the monitor --------------------
+# (agent/loop.py may change: the fallback agent model, runs.py, passes its model in and words the hand-over.)
 
 
-def test_agent_and_monitor_code_is_untouched() -> None:
+def test_agent_prompts_tools_and_monitor_code_are_untouched() -> None:
     try:
         top = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"], cwd=BACKEND, capture_output=True, text=True, check=True
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         pytest.skip("not a git checkout")
-    paths = [str(BACKEND / "argus_api" / d) for d in ("agent", "monitor")]
+    paths = [str(BACKEND / "argus_api" / d) for d in ("agent/prompts.py", "agent/tools.py", "monitor")]
     diff = subprocess.run(
         ["git", "diff", "--stat", "HEAD", "--", *paths], cwd=top, capture_output=True, text=True, check=True
     )

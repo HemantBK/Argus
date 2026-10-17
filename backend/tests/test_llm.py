@@ -11,7 +11,14 @@ from google.genai import errors as genai_errors
 from google.genai import types as gt
 from openai.types.chat import ChatCompletion
 
-from argus_api.config import AGENT_THINKING, MONITOR_THINKING, PINNED_MODELS, ConfigError, Settings
+from argus_api.config import (
+    AGENT_THINKING,
+    FALLBACK_MODELS,
+    MONITOR_THINKING,
+    PINNED_MODELS,
+    ConfigError,
+    Settings,
+)
 from argus_api.llm import (
     BACKOFF_BASE_S,
     CHAT_TIMEOUT_S,
@@ -631,3 +638,248 @@ def test_google_a_note_after_tool_results_gets_its_own_turn() -> None:
             "function_response" if p.function_response else "text" for p in c.parts if not p.function_call
         }
         assert len(kinds) <= 1, f"a {c.role} turn mixes {kinds}"
+
+
+# ------------------------------------------------------------------- error kinds (runs.py's fallback trigger)
+
+
+@pytest.mark.parametrize(
+    ("replies", "kind"),
+    [
+        ([genai_errors.ClientError(429, {}) for _ in range(THROTTLED_ATTEMPTS)], "throttled"),
+        ([genai_errors.ServerError(504, {}) for _ in range(MAX_ATTEMPTS)], "transient"),
+        ([httpx.ReadTimeout("slow") for _ in range(MAX_ATTEMPTS)], "transient"),
+        ([genai_errors.ClientError(400, {})], "fatal"),
+    ],
+    ids=["429", "504", "timeout", "400"],
+)
+def test_a_provider_failure_says_its_kind_and_model(replies: list[Any], kind: str) -> None:
+    llm, _, _ = google(replies)
+    with pytest.raises(LLMError) as raised:
+        llm.complete(MODEL, "hi")
+    assert (raised.value.kind, raised.value.model) == (kind, MODEL)
+    assert raised.value.capacity == (kind != "fatal")
+
+
+def test_a_try_cut_short_by_the_deadline_is_a_deadline_failure() -> None:
+    llm, _, clock = openrouter_clocked([openai.APITimeoutError(request=REQ), or_reply("ok")])
+    with call_scope(clock() + BACKOFF_BASE_S + MIN_ATTEMPT_S / 2), pytest.raises(LLMError) as raised:
+        llm.complete(OR_MODEL, "hi")
+    assert (raised.value.kind, raised.value.model, raised.value.capacity) == ("deadline", OR_MODEL, True)
+    with call_scope(clock() + MIN_ATTEMPT_S / 2), pytest.raises(LLMError) as not_started:
+        llm.complete(OR_MODEL, "hi")
+    assert (not_started.value.kind, not_started.value.model) == ("deadline", OR_MODEL)
+
+
+def test_an_unusable_reply_is_not_a_provider_failure() -> None:
+    llm, _, _ = openrouter([or_reply("not json"), or_reply("still not json")])
+    with pytest.raises(LLMError, match="invalid JSON") as raised:
+        llm.complete_json(OR_MODEL, "judge", SCHEMA)
+    assert (raised.value.kind, raised.value.model, raised.value.capacity) == (None, None, False)
+
+
+def test_the_fallback_agent_model_runs_at_the_agents_thinking_level() -> None:
+    agent, monitor = PINNED_MODELS["vertex"]
+    s = Settings(
+        mode="cloud",
+        provider="vertex",
+        project="p",
+        location="global",
+        api_key=None,
+        agent_model=agent,
+        monitor_model=monitor,
+        fallback_model=FALLBACK_MODELS["vertex"],
+    )
+    assert thinking_levels(s) == {
+        agent: AGENT_THINKING,
+        FALLBACK_MODELS["vertex"]: AGENT_THINKING,
+        monitor: MONITOR_THINKING,
+    }
+    if AGENT_THINKING != MONITOR_THINKING:
+        with pytest.raises(ConfigError, match="two thinking levels"):
+            thinking_levels(Settings(**{**s.__dict__, "fallback_model": monitor}))
+
+
+# ------------------------------------------------- per-model deadlines and the cause behind a deadline error
+
+
+def test_a_model_deadline_cuts_only_that_models_calls() -> None:
+    other = OR_MODEL + "-monitor"
+    llm, api, clock = openrouter_clocked([or_reply("ok"), or_reply("ok"), or_reply("ok")])
+    own = REQUEST_TIMEOUT_S / 3
+    with call_scope(clock() + REQUEST_TIMEOUT_S * 10, model_deadlines={OR_MODEL: clock() + own}):
+        llm.complete(OR_MODEL, "hi")
+        llm.complete(other, "hi")
+        # An inner scope cannot extend a model's own deadline either.
+        with call_scope(clock() + REQUEST_TIMEOUT_S * 10, model_deadlines={OR_MODEL: clock() + 100.0}):
+            llm.complete(OR_MODEL, "hi")
+    assert [r["timeout"] for r in api.requests] == [own, REQUEST_TIMEOUT_S, own]
+
+
+def test_a_model_deadline_is_never_later_than_the_scope_deadline() -> None:
+    llm, api, clock = openrouter_clocked([or_reply("ok")])
+    with call_scope(clock() + MIN_ATTEMPT_S * 2, model_deadlines={OR_MODEL: clock() + 100.0}):
+        llm.complete(OR_MODEL, "hi")
+    assert api.requests[0]["timeout"] == MIN_ATTEMPT_S * 2
+
+
+class _TimedClient:
+    """Each request takes `took` seconds on the fake clock (capped at its timeout) and then raises `error`."""
+
+    def __init__(self, clock: Clock, took: float, error: Any) -> None:
+        self.clock, self.took, self.error = clock, took, error
+        self.chat = self
+        self.completions = self
+
+    def create(self, **kwargs: Any) -> Any:
+        self.clock.now += min(self.took, kwargs["timeout"])
+        raise self.error()
+
+
+def timed(took: float, error: Any) -> tuple[OpenRouterLLM, Clock]:
+    clock = Clock()
+    client = _TimedClient(clock, took, error)
+    return OpenRouterLLM(None, client=client, sleep=clock.sleep, clock=clock), clock  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("took", "error", "cause"),
+    [
+        # The try ran to the timeout our deadline had shortened: our budget ended it, not the provider.
+        (100.0, lambda: openai.APITimeoutError(request=REQ), None),
+        # A 504 that came back inside the shortened timeout: the provider failed, and no retry fitted.
+        (3.0, lambda: status_error(openai.InternalServerError, 504), "transient"),
+        # A 429: the provider was busy, and no retry fitted.
+        (3.0, lambda: status_error(openai.RateLimitError, 429), "throttled"),
+    ],
+    ids=["cut_by_our_deadline", "504", "429"],
+)
+def test_a_deadline_error_carries_the_providers_failure_behind_it(
+    took: float, error: Any, cause: Any
+) -> None:
+    llm, clock = timed(took, error)
+    with call_scope(clock() + 4.0), pytest.raises(LLMError) as raised:
+        llm.complete(OR_MODEL, "hi")
+    e = raised.value
+    assert (e.kind, e.model, e.cause, e.out_of_time) == ("deadline", OR_MODEL, cause, True)
+    assert e.capacity == (cause is not None)
+
+
+def test_a_try_that_timed_out_on_its_own_limit_is_the_providers_failure() -> None:
+    """With the whole timeout available, a timeout is a stalled provider, even if no retry then fits."""
+    llm, clock = timed(100.0, lambda: openai.APITimeoutError(request=REQ))
+    with call_scope(clock() + REQUEST_TIMEOUT_S + 1.0), pytest.raises(LLMError) as raised:
+        llm.complete(OR_MODEL, "hi")
+    assert (raised.value.kind, raised.value.cause, raised.value.capacity) == ("deadline", "transient", True)
+
+
+def test_a_give_up_is_the_providers_failure_by_its_kind() -> None:
+    for kind in ("throttled", "transient"):
+        e = LLMError("x", kind=kind, model=OR_MODEL)  # type: ignore[arg-type]
+        assert (e.cause, e.capacity, e.out_of_time) == (kind, True, False)
+    fatal = LLMError("x", kind="fatal", model=OR_MODEL)
+    assert (fatal.cause, fatal.capacity) == (None, False)
+
+
+def test_an_ended_model_deadline_gives_the_models_next_calls_the_scope_deadline() -> None:
+    """runs.py ends the agent model's own deadline once its draft is written: from the next call on, the
+    model's calls end by the scope's deadline, and an outer scope's deadline for it still holds."""
+    llm, api, clock = openrouter_clocked([or_reply("ok") for _ in range(4)])
+    own = REQUEST_TIMEOUT_S / 3
+    with call_scope(clock() + REQUEST_TIMEOUT_S * 10, model_deadlines={OR_MODEL: clock() + own}) as scope:
+        llm.complete(OR_MODEL, "hi")
+        scope.end_model_deadline(OR_MODEL)
+        llm.complete(OR_MODEL, "hi")
+    with call_scope(clock() + REQUEST_TIMEOUT_S * 10, model_deadlines={OR_MODEL: clock() + own}):
+        with call_scope(clock() + REQUEST_TIMEOUT_S * 10) as inner:
+            inner.end_model_deadline(OR_MODEL)  # ends nothing of the outer scope's
+            llm.complete(OR_MODEL, "hi")
+    with call_scope(clock() + REQUEST_TIMEOUT_S * 10, model_deadlines={OR_MODEL: clock() + own}) as outer:
+        with call_scope(clock() + REQUEST_TIMEOUT_S * 10):
+            outer.end_model_deadline(OR_MODEL)  # an inner scope already open follows the outer one
+            llm.complete(OR_MODEL, "hi")
+    assert [r["timeout"] for r in api.requests] == [own, REQUEST_TIMEOUT_S, own, REQUEST_TIMEOUT_S]
+
+
+def test_a_deadline_error_names_the_deadline_that_ended_the_call() -> None:
+    llm, _, clock = openrouter_clocked([or_reply("ok"), or_reply("ok")])
+    with (
+        call_scope(clock() + 100.0, model_deadlines={OR_MODEL: clock() + MIN_ATTEMPT_S / 2}),
+        pytest.raises(LLMError, match="left before the model's own deadline"),
+    ):
+        llm.complete(OR_MODEL, "hi")
+    with call_scope(clock() + MIN_ATTEMPT_S / 2), pytest.raises(LLMError, match="left before the deadline$"):
+        llm.complete(OR_MODEL, "hi")
+
+
+@pytest.mark.parametrize(
+    ("replies", "kind", "failures"),
+    [
+        # Two 429s, then a timeout: the timeout's limit (MAX_ATTEMPTS) has passed, so it gives up as transient
+        # after 3 tries, and says what each try met.
+        (
+            [genai_errors.ClientError(429, {}), genai_errors.ClientError(429, {}), httpx.ReadTimeout("slow")],
+            "transient",
+            ("throttled", "throttled", "transient"),
+        ),
+        (
+            [genai_errors.ClientError(429, {}) for _ in range(THROTTLED_ATTEMPTS)],
+            "throttled",
+            ("throttled",) * 5,
+        ),
+        ([genai_errors.ServerError(504, {}) for _ in range(MAX_ATTEMPTS)], "transient", ("transient",) * 2),
+        ([genai_errors.ClientError(429, {}), genai_errors.ClientError(400, {})], "fatal", ("throttled",)),
+    ],
+    ids=["429_429_timeout", "429s", "504s", "429_then_400"],
+)
+def test_a_provider_failure_carries_its_tries(
+    replies: list[Any], kind: str, failures: tuple[str, ...]
+) -> None:
+    llm, _, _ = google(replies)
+    with pytest.raises(LLMError) as raised:
+        llm.complete(MODEL, "hi")
+    e = raised.value
+    assert (e.kind, e.attempts, e.failures) == (kind, len(replies), failures)
+    if kind != "fatal":
+        assert f"after {len(replies)} tries" in str(e)
+
+
+def test_a_deadline_error_carries_the_tries_made() -> None:
+    llm, clock = timed(3.0, lambda: status_error(openai.RateLimitError, 429))
+    with call_scope(clock() + 4.0), pytest.raises(LLMError) as raised:
+        llm.complete(OR_MODEL, "hi")
+    assert (raised.value.attempts, raised.value.failures) == (1, ("throttled",))
+    llm, _, clock = openrouter_clocked([or_reply("ok")])
+    with call_scope(clock() + MIN_ATTEMPT_S / 2), pytest.raises(LLMError) as not_started:
+        llm.complete(OR_MODEL, "hi")
+    assert (not_started.value.attempts, not_started.value.failures) == (0, ())
+
+
+class _ScriptedTimedClient(_TimedClient):
+    """Request n takes script[n][0] s on the fake clock (capped at its timeout), then raises script[n][1]."""
+
+    def __init__(self, clock: Clock, script: list[tuple[float, Any]]) -> None:
+        super().__init__(clock, 0.0, None)
+        self.script = list(script)
+
+    def create(self, **kwargs: Any) -> Any:
+        self.took, self.error = self.script.pop(0)
+        return super().create(**kwargs)
+
+
+def test_a_last_try_cut_by_our_deadline_is_our_deadline_not_the_providers_give_up() -> None:
+    # A 429, then a try that stalls until the deadline we set cuts it: the second try is ours, so the call
+    # ends as "deadline", and only the 429 before it makes the provider the cause.
+    clock = Clock()
+    client = _ScriptedTimedClient(
+        clock,
+        [
+            (0.5, lambda: status_error(openai.RateLimitError, 429)),
+            (100.0, lambda: openai.APITimeoutError(request=REQ)),
+        ],
+    )
+    llm = OpenRouterLLM(None, client=client, sleep=clock.sleep, clock=clock)  # type: ignore[arg-type]
+    with call_scope(clock() + 15.0), pytest.raises(LLMError) as raised:
+        llm.complete(OR_MODEL, "hi")
+    e = raised.value
+    assert (e.kind, e.cause, e.attempts, e.failures) == ("deadline", "throttled", 2, ("throttled",))

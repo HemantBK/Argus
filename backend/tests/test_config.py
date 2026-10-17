@@ -4,6 +4,8 @@ from argus_api.config import (
     AGENT_MODEL_ENV,
     AGENT_THINKING,
     AUTH_EMULATOR_ENV,
+    FALLBACK_MODEL_ENV,
+    FALLBACK_MODELS,
     LOCAL_PROVIDER_KEYS,
     MONITOR_MODEL_ENV,
     MONITOR_THINKING,
@@ -11,6 +13,7 @@ from argus_api.config import (
     PINNED_MODELS,
     ConfigError,
     Settings,
+    model_name,
     parse_origins,
 )
 
@@ -33,7 +36,12 @@ CLOUD = {
     "GOOGLE_CLOUD_LOCATION": "asia-south1",
     ORIGINS_ENV: "https://argus-test.web.app,https://argus-test.firebaseapp.com",
 }
-ALL_NAMES = set(LOCAL_OPENROUTER) | set(LOCAL_AISTUDIO) | set(CLOUD) | {AGENT_MODEL_ENV, MONITOR_MODEL_ENV}
+ALL_NAMES = (
+    set(LOCAL_OPENROUTER)
+    | set(LOCAL_AISTUDIO)
+    | set(CLOUD)
+    | {AGENT_MODEL_ENV, MONITOR_MODEL_ENV, FALLBACK_MODEL_ENV}
+)
 
 
 def _set(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> None:
@@ -118,3 +126,43 @@ def test_local_mode_may_override_a_model_for_an_experiment(monkeypatch: pytest.M
     s = Settings.from_env()
     assert s.agent_model == "google/other-model"
     assert s.monitor_model == PINNED_MODELS["openrouter"][1]
+
+
+# ---- the fallback agent model ------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "env", [LOCAL_OPENROUTER, LOCAL_AISTUDIO, CLOUD], ids=["openrouter", "aistudio", "cloud"]
+)
+def test_the_fallback_model_is_on_and_pinned_by_default(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, str]
+) -> None:
+    _set(monkeypatch, env)
+    s = Settings.from_env()
+    assert s.fallback_model == FALLBACK_MODELS[s.provider] != s.agent_model
+
+
+@pytest.mark.parametrize("value", ["", "other-model"])
+def test_cloud_mode_refuses_a_fallback_override(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    _set(monkeypatch, {**CLOUD, FALLBACK_MODEL_ENV: value})
+    with pytest.raises(ConfigError, match=FALLBACK_MODEL_ENV):
+        Settings.from_env()
+
+
+def test_local_mode_may_change_or_switch_off_the_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set(monkeypatch, {**LOCAL_OPENROUTER, FALLBACK_MODEL_ENV: "google/other-model"})
+    assert Settings.from_env().fallback_model == "google/other-model"
+    _set(monkeypatch, {**LOCAL_OPENROUTER, FALLBACK_MODEL_ENV: ""})
+    assert Settings.from_env().fallback_model is None
+
+
+def test_the_fallback_cannot_be_the_agent_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set(monkeypatch, {**LOCAL_OPENROUTER, AGENT_MODEL_ENV: FALLBACK_MODELS["openrouter"]})
+    with pytest.raises(ConfigError, match=FALLBACK_MODEL_ENV):
+        Settings.from_env()
+
+
+def test_models_are_named_in_words() -> None:
+    assert model_name(PINNED_MODELS["vertex"][0]) == "Gemini 3.8 Flash"
+    assert model_name(FALLBACK_MODELS["openrouter"]) == "Gemini 3.1 Flash-Lite"
+    assert model_name("some-unknown-model") == "some-unknown-model"

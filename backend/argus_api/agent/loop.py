@@ -37,7 +37,12 @@ Every step is passed to `emit` as it happens, as an AgentStep (a schema.Step wit
 estimate of the model call the step made). Summaries are one line of plain English describing what was done;
 no model reasoning text is shown. Failures (LLMError, MonitorError, CorpusError, an unusable draft) are
 raised as ClauseReviewError after a final step saying the review failed, for the caller to save as a failed
-clause.
+clause. When the caller will review the clause again with another agent model (runs.py, when the agent model
+is busy), its hand_off callback gives the final step's words instead ("... is busy; handing this clause to
+..."): the clause is handed over, not failed.
+
+The agent model is settings.agent_model, read at every call: the caller reviews a clause with the fallback
+model by passing Settings whose agent_model is the fallback. Each Finding records it (Finding.agent_model).
 """
 
 import hashlib
@@ -128,6 +133,9 @@ class AgentStep(Step):
 
 
 Emit = Callable[[AgentStep], None]
+# Asked with the LLMError that ended a review: the final step's summary when the caller will review the
+# clause again with another model, or None when the clause fails.
+HandOff = Callable[[LLMError], str | None]
 
 
 class AgentError(RuntimeError):
@@ -708,6 +716,7 @@ def review_clause(
     today: date | None = None,
     run_id: str | None = None,
     monitor_enabled: bool = True,
+    hand_off: HandOff | None = None,
 ) -> ReviewOutcome:
     """Review one clause: research with tools, draft, monitor, at most one revision, final finding.
 
@@ -716,7 +725,7 @@ def review_clause(
 
     `next_seq` numbers the steps (pass one SeqCounter per run); by default the clause numbers its own from 1.
     `today` defaults to the date in India. Raises ClauseReviewError on any failure, after emitting a final
-    step that says so.
+    step that says so: in the words `hand_off` gives for an LLMError, when it gives any.
     """
     started = time.perf_counter()
     review = _Review(
@@ -734,11 +743,14 @@ def review_clause(
         finding, verdicts, revised = review.run()
     except (LLMError, MonitorError, CorpusError, AgentError) as e:
         stage = review.stage
+        handed_off = hand_off(e) if hand_off is not None and isinstance(e, LLMError) else None
         review.emit(
             StepKind.FINAL,
-            f"Review of clause {clause.id} failed at the {stage.value} step: {type(e).__name__}.",
+            handed_off
+            or f"Review of clause {clause.id} failed at the {stage.value} step: {type(e).__name__}.",
         )
         raise ClauseReviewError(clause.id, stage, f"{type(e).__name__}: {e}") from e
+    finding = finding.model_copy(update={"agent_model": settings.agent_model})
     costs = [u.cost_usd_estimate for u in review.usage]
     return ReviewOutcome(
         finding=finding,

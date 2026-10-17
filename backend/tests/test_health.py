@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from argus_api import main
+from argus_api import breaker, main
 from argus_api.config import PINNED_MODELS, Settings
 from argus_api.corpus import store as store_module
 from argus_api.corpus.common import DEFAULT_OUT_DIR
@@ -47,6 +47,7 @@ def vertex_settings() -> Settings:
 @pytest.fixture()
 def health_api(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     corpus = fixture_corpus()
+    monkeypatch.setattr(breaker, "_breakers", {})  # a fresh process: every breaker starts closed
     monkeypatch.setattr(main, "settings", settings)
     monkeypatch.setattr(main, "corpus", lambda: corpus)
     monkeypatch.delenv(main.GIT_SHA_ENV, raising=False)
@@ -72,6 +73,7 @@ def test_health_reports_what_is_running_without_calling_any_service(
         "monitor_model": s.monitor_model,
         "location": s.location,
         "corpus_hash": independent_hash(FIXTURE_DIR),
+        "agent_breaker": "closed",
     }
 
 
@@ -153,3 +155,40 @@ def test_corpus_hash_script_refuses_a_missing_library(tmp_path: Path) -> None:
     out = subprocess.run([sys.executable, str(SCRIPT), str(tmp_path)], capture_output=True, text=True)
     assert out.returncode != 0
     assert "not found" in out.stderr
+
+
+class Ticks:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_health_shows_the_agent_models_breaker_state_read_only(health_api: TestClient) -> None:
+    """A release smoke that opened the breaker shows in /health before a demo run is sent to the backup."""
+    s = settings()
+    ticks = Ticks()
+    b = breaker.Breaker(s.agent_model, clock=ticks)
+    breaker._breakers[s.agent_model] = b
+    assert breaker.process_breaker(s.agent_model) is b
+    assert health_api.get("/health").json()["agent_breaker"] == "closed"
+    for _ in range(breaker.OPEN_AFTER):
+        b.report("primary", "busy")
+    body = health_api.get("/health").json()
+    assert body["agent_breaker"] == "open"
+    assert set(body) == {
+        "status",
+        "git_sha",
+        "mode",
+        "provider",
+        "agent_model",
+        "monitor_model",
+        "location",
+        "corpus_hash",
+        "agent_breaker",
+    }  # the state, and nothing else about the breaker
+    ticks.now += breaker.OPEN_S
+    assert health_api.get("/health").json()["agent_breaker"] == "half_open"
+    health_api.get("/health")
+    assert b.route() == "trial"  # reading /health took no trial slot: the next clause still gets it

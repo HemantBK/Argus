@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from argus_api import main, runs
-from argus_api.agent import AgentStep, Clause, ClauseReviewError, ReviewOutcome
+from argus_api.agent import AgentStep, Clause, ClauseReviewError, HandOff, ReviewOutcome
 from argus_api.agent.loop import IST
 from argus_api.config import PINNED_MODELS, Settings
 from argus_api.corpus.store import Corpus
@@ -246,6 +246,7 @@ def scripted_reviewer(
         *,
         next_seq: Callable[[], int] | None = None,
         run_id: str | None = None,
+        hand_off: HandOff | None = None,
     ) -> ReviewOutcome:
         assert next_seq is not None
         if started is not None:
@@ -699,6 +700,7 @@ def _pinned_vertex() -> dict[str, Any]:
         ({"monitor_model": PINNED_MODELS["openrouter"][1]}, "pinned"),
         ({"agent_model": _pinned_vertex()["monitor_model"]}, "pinned"),  # both ids pinned, wrong roles
         ({"rbi_as_on": None}, "rbi_as_on"),
+        ({"summary": RunSummary(clauses=8, compliant=8, fallback_clauses=1)}, "fallback model"),
     ],
 )
 def test_save_sample_refuses_anything_but_a_real_vertex_review(

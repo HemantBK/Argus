@@ -19,6 +19,30 @@ A run, from POST /api/runs:
   4. finish    Run.summary, status (done, or failed when any clause failed, with the reasons in Run.error),
                latency and the cost estimate summed from the recorded model calls.
 
+Fallback agent model (Settings.fallback_model; on in the deployed app): when the agent model gives up busy on
+a clause (HTTP 429 on every try, timeouts or 5xx on every try) or runs out of its share of the time, and at
+least MIN_FALLBACK_S of the run budget is left, the clause is reviewed again from the start, with a fresh
+conversation, by the fallback model. The monitor model and every citation check stay the same. So that time
+is left, the agent model's calls for a clause end PRIMARY_PHASE_S after the clause started
+(llm.call_scope's model_deadlines), until its first draft is written; the monitor model's calls keep the run
+deadline, so a slow but correct draft is still judged, and the run budget itself does not change. Once a
+draft exists the agent model's calls (the revise step) keep the run deadline too: a finished draft is worth
+more than a fresh start on the fallback model. (A monitor model that is also the agent model shares the
+agent's cut.) The agent model's steps stay in the trace, the last one saying the clause was
+handed over; the finding records the model that wrote it (Finding.agent_model) and why (fallback_reason),
+and RunSummary.fallback_clauses counts such clauses. Never on other failures: a refused request, an unusable
+reply, a busy monitor model (it has no fallback), a monitor or library error. If the fallback review fails
+too, the clause fails as it would have. A per-process circuit breaker (breaker.py) sends clauses straight to
+the fallback model while the agent model keeps giving up busy; GET /health shows its state.
+
+A failed clause's error says whose fault it was. When the provider failed the review (llm.LLMError.capacity:
+a 429, a 5xx or a timeout, on the agent or the monitor model) it starts with PROVIDER_BUSY, so it reads as
+the provider's state, not a fault of the review. When our own deadline ended the review with no provider
+failure behind it, it starts with OUT_OF_TIME: the review was too slow. One exception: when the provider's
+failure on the agent model sent the clause to the fallback model, running out of time there is still the
+provider's doing (PROVIDER_BUSY). Only the agent model's provider failures count as busy give-ups for the
+breaker.
+
 A failed clause is an explicit state: a Finding with `error` set, label insufficient_evidence, no citation
 and monitor_status needs_review, so it goes to a person. Anything unexpected (a bug, Firestore down) marks
 the run failed with the error and is re-raised.
@@ -40,20 +64,30 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from argus_api.agent import AgentStep, Clause, ClauseReviewError, ReviewOutcome, SeqCounter, review_clause
+from argus_api.agent import (
+    AgentStep,
+    Clause,
+    ClauseReviewError,
+    HandOff,
+    ReviewOutcome,
+    SeqCounter,
+    review_clause,
+)
 from argus_api.agent.loop import IST
 from argus_api.agent.prompts import corpus_as_on
-from argus_api.config import PINNED_MODELS, Provider, Settings
+from argus_api.breaker import Breaker, Outcome, process_breaker
+from argus_api.config import PINNED_MODELS, Provider, Settings, model_name
 from argus_api.corpus.store import Corpus
 from argus_api.docstore import AlreadyExists, Counter, CreateResult, DocumentStore, StoreError, Write
-from argus_api.llm import LLM, call_scope
+from argus_api.llm import LLM, LLMError, call_scope
+from argus_api.logs import log_event
 from argus_api.schema import (
     CUSTOM_SOURCE,
     AuditEvent,
@@ -74,6 +108,21 @@ from argus_api.schema import (
 MAX_CLAUSES = 10  # PLAN section 6: sample policies have 8-10 clauses
 PARALLEL_CLAUSES = MAX_CLAUSES
 RUN_BUDGET_S = 90.0  # well under the Cloud Run request timeout (300 s); see llm.CHAT_TIMEOUT_S
+# With a fallback model: the agent model's calls for a clause, up to its first draft, end this long after the
+# clause started, which leaves about 55 s of the run budget for the fallback review. A 504 stall takes about
+# 27 s, so the agent model still gets one stalled try and a short second one, or all five tries at a 429 (15 s
+# of waits at most).
+PRIMARY_PHASE_S = 35.0
+# A clause is handed to the fallback model only with at least this much of the run budget left: a complete
+# review on the fallback model took 5-15 s in the probe of 2026-10-17, and a hand-over that cannot finish
+# would only turn a clear failure into a timeout.
+MIN_FALLBACK_S = 30.0
+# The start of a failed clause's error when the provider failed (llm.LLMError.capacity): the provider's
+# state, not a fault in the review. scripts/cloud_e2e.py reads it.
+PROVIDER_BUSY = "Gemini capacity was busy; try again shortly."
+# The start of a failed clause's error when the run budget (or the agent model's share of it) ran out and no
+# provider failure was behind it: the review itself was too slow.
+OUT_OF_TIME = "The review ran out of time within the run budget."
 SAMPLES_DIR = Path(__file__).resolve().parent / "samples"
 POLICY_IDS = ("policy_a", "policy_b")
 CUSTOM_POLICY_ID = "custom"  # POST /api/runs with a pasted clause (custom.py)
@@ -358,6 +407,44 @@ def read_custom_limits(store: DocumentStore) -> CustomLimits | None:
         return None
 
 
+def llm_cause(e: ClauseReviewError) -> LLMError | None:
+    """The model call failure that ended a review (loop.py raises ClauseReviewError from it), else None. A
+    monitor model call's LLMError reaches here bare too: monitor/core.py lets it propagate unwrapped."""
+    cause = e.__cause__
+    return cause if isinstance(cause, LLMError) else None
+
+
+def busy_cause(e: ClauseReviewError) -> LLMError | None:
+    """The provider failure behind a failed review (a 429, 5xx or timeout, on any model), else None."""
+    cause = llm_cause(e)
+    return cause if cause is not None and cause.capacity else None
+
+
+def hands_over(e: LLMError) -> bool:
+    """A failure the fallback model can help with: the model gave up busy, or ran out of its time."""
+    return e.kind in ("throttled", "transient", "deadline")
+
+
+def fallback_reason(e: LLMError) -> str:
+    """Why the fallback model reviewed a clause, in plain English, from the agent model's failure: what the
+    provider did on the tries it failed (LLMError.failures) and how many tries were made."""
+    name = model_name(e.model or "the agent model")
+    share = f"its {PRIMARY_PHASE_S:g} s share of the run budget"
+    seen = set(e.failures) or ({e.cause} if e.cause is not None else set())
+    if seen == {"throttled"}:
+        what = f"{name} was busy (HTTP 429)"
+    elif seen == {"transient"}:
+        what = f"{name} did not answer (timeouts or HTTP 5xx)"
+    elif seen:
+        what = f"{name} was busy (HTTP 429) and did not answer (timeouts or HTTP 5xx)"
+    else:
+        return f"{name} was too slow to finish within {share}"
+    if e.kind in ("throttled", "transient"):
+        tries = f" after {e.attempts} {'try' if e.attempts == 1 else 'tries'}" if e.attempts else ""
+        return what + tries
+    return f"{what}{',' if len(seen) > 1 else ''} and no retry fitted in {share}"
+
+
 def failed_finding(clause: Clause, reason: str) -> Finding:
     return Finding(
         clause_id=clause.id,
@@ -384,6 +471,7 @@ class Reviewer(Protocol):
         *,
         next_seq: Callable[[], int] | None = None,
         run_id: str | None = None,
+        hand_off: HandOff | None = None,
     ) -> ReviewOutcome: ...
 
 
@@ -396,6 +484,11 @@ class ClauseResult:
     @property
     def failed(self) -> bool:
         return self.finding.error is not None
+
+    @property
+    def fallback(self) -> bool:
+        """Reviewed by the fallback agent model."""
+        return not self.failed and self.finding.fallback_reason is not None
 
 
 class _RunContext:
@@ -444,9 +537,14 @@ class _RunContext:
             audit = self.audit_write(
                 "agent",
                 "finding_recorded",
-                f"{f.label.value}, monitor {f.monitor_status.value}",
+                f"{f.label.value}, monitor {f.monitor_status.value}"
+                + (
+                    f"; reviewed by {model_name(f.agent_model or '')}: {f.fallback_reason}"
+                    if result.fallback
+                    else ""
+                ),
                 f.clause_id,
-                self.run.agent_model,
+                f.agent_model,
             )
         return [Write("set", finding_path(self.run.run_id, f.clause_id), child_doc(self.run, f)), audit]
 
@@ -490,6 +588,7 @@ def _summary(clauses: list[Clause], results: dict[str, ClauseResult]) -> RunSumm
         setattr(s, r.finding.label.value, getattr(s, r.finding.label.value) + 1)
         s.monitor_revisions += int(r.revised)
         s.monitor_stops += int(r.stopped)
+        s.fallback_clauses += int(r.fallback)
     return s
 
 
@@ -513,7 +612,11 @@ class Runner:
         budget_s: float = RUN_BUDGET_S,
         parallel: int = PARALLEL_CLAUSES,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        clock: Callable[[], float] = time.perf_counter,
+        breaker: Breaker | None = None,
     ) -> None:
+        """`clock` is the deadline clock (llm.call_scope's, time.perf_counter); `breaker` defaults to this
+        process's breaker for the agent model, used only when Settings.fallback_model is set."""
         self.store = store
         self.llm = llm
         self.settings = settings
@@ -522,6 +625,8 @@ class Runner:
         self.budget_s = budget_s
         self.parallel = parallel
         self.now = now
+        self.clock = clock
+        self.breaker = breaker if breaker is not None else process_breaker(settings.agent_model)
 
     def run_review(self, run_id: str, owner_uid: str, policy: Policy, *, enforce_cap: bool = True) -> Run:
         """Admit the run (or raise a Rejected subclass, writing nothing), review it, return the final Run."""
@@ -574,7 +679,9 @@ class Runner:
 
     def execute(self, run: Run, policy: Policy) -> Run:
         ctx = _RunContext(self.store, run, self.now)
-        started = time.perf_counter()
+        # One instant on the deadline clock for the model calls' deadline, the wait and the latency.
+        started = self.clock()
+        deadline = started + self.budget_s
         try:
             self.store.commit(
                 [
@@ -587,11 +694,10 @@ class Runner:
                 ]
             )
             pool = ThreadPoolExecutor(max_workers=self.parallel, thread_name_prefix=f"run-{run.run_id[:8]}")
-            deadline = started + self.budget_s
             futures: list[Future[None]] = [
                 pool.submit(self._review_one, ctx, c, deadline) for c in policy.clauses
             ]
-            wait(futures, timeout=max(0.0, self.budget_s - (time.perf_counter() - started)))
+            wait(futures, timeout=max(0.0, deadline - self.clock()))
             ctx.close()
             # Queued clauses are cancelled; one still waiting on the model ends at its next step (RunClosed).
             pool.shutdown(wait=False, cancel_futures=True)
@@ -607,26 +713,151 @@ class Runner:
             raise
 
     def _review_one(self, ctx: _RunContext, clause: Clause, deadline: float) -> None:
-        """Review one clause on a worker thread. Its model calls end by the run's deadline (call_scope): a
-        stalled call is cut, or not retried, rather than running past the budget."""
+        """Review one clause on a worker thread and save its finding (or its failure)."""
         try:
-            try:
-                with call_scope(deadline, run_id=ctx.run.run_id, clause_id=clause.id):
-                    outcome = self.reviewer(
-                        self.llm,
-                        self.settings,
-                        self.corpus,
-                        clause,
-                        ctx.emit_step,
-                        next_seq=ctx.step_seq,
-                        run_id=ctx.run.run_id,
-                    )
-            except ClauseReviewError as e:
-                ctx.finish_clause(ClauseResult(failed_finding(clause, f"{e}.")))
-                return
-            ctx.finish_clause(ClauseResult(outcome.finding, revised=outcome.revised, stopped=outcome.stopped))
+            ctx.finish_clause(self._review_clause(ctx, clause, deadline))
         except RunClosed:
             return
+
+    def _review(
+        self,
+        ctx: _RunContext,
+        clause: Clause,
+        settings: Settings,
+        deadline: float,
+        hand_off: HandOff | None = None,
+        agent_deadline: float | None = None,
+    ) -> ReviewOutcome:
+        """One review of `clause` with settings.agent_model. Its model calls end by `deadline` (call_scope): a
+        stalled call is cut, or not retried, rather than running past it. The agent model's calls also end by
+        `agent_deadline` when given, until its draft is written; the monitor model's do not. Raises
+        ClauseReviewError."""
+        own = {settings.agent_model: agent_deadline} if agent_deadline is not None else None
+        with call_scope(deadline, model_deadlines=own, run_id=ctx.run.run_id, clause_id=clause.id) as scope:
+
+            def emit(step: AgentStep) -> None:
+                ctx.emit_step(step)
+                # The draft is written: a hand-over would now throw it away, so the agent model's own
+                # deadline ends here and the revise step, if the monitor asks for one, keeps the run's.
+                if step.kind == StepKind.DRAFT:
+                    scope.end_model_deadline(settings.agent_model)
+
+            return self.reviewer(
+                self.llm,
+                settings,
+                self.corpus,
+                clause,
+                emit,
+                next_seq=ctx.step_seq,
+                run_id=ctx.run.run_id,
+                hand_off=hand_off,
+            )
+
+    def _review_clause(self, ctx: _RunContext, clause: Clause, deadline: float) -> ClauseResult:
+        """The clause's result: reviewed by the agent model, or by the fallback model when the agent model
+        gives up busy or runs out of its share of the time (see the module docstring), or failed."""
+        primary, fallback = self.settings.agent_model, self.settings.fallback_model
+        if fallback is None:
+            try:
+                outcome = self._review(ctx, clause, self.settings, deadline)
+            except ClauseReviewError as e:
+                return ClauseResult(failed_finding(clause, self._failure(e)))
+            return ClauseResult(outcome.finding, revised=outcome.revised, stopped=outcome.stopped)
+
+        route = self.breaker.route()
+        if route == "fallback":
+            busy, backup = model_name(primary), model_name(fallback)
+            reason = f"{busy} was busy on recent clauses"  # the web line names the backup model itself
+            ctx.emit_step(
+                AgentStep(
+                    seq=ctx.step_seq(),
+                    clause_id=clause.id,
+                    kind=StepKind.PLAN,
+                    summary=f"{busy} is busy; reviewing this clause with {backup}.",
+                    at=self.now(),
+                )
+            )
+            return self._fallback_review(ctx, clause, deadline, reason, provider_failed=False)
+
+        handed_over: list[LLMError] = []  # the agent model's failure, once its review hands over
+
+        def hand_off(e: LLMError) -> str | None:
+            if e.model != primary or not hands_over(e) or deadline - self.clock() < MIN_FALLBACK_S:
+                return None
+            handed_over.append(e)
+            what = "is busy" if e.capacity else "ran out of time"
+            return f"{model_name(primary)} {what}; handing this clause to {model_name(fallback)}."
+
+        outcome_on_primary: Outcome = None
+        try:
+            try:
+                outcome = self._review(
+                    ctx,
+                    clause,
+                    self.settings,
+                    deadline,
+                    hand_off,
+                    agent_deadline=min(deadline, self.clock() + PRIMARY_PHASE_S),
+                )
+            except ClauseReviewError as e:
+                cause = busy_cause(e)
+                outcome_on_primary = "busy" if cause is not None and cause.model == primary else "ok"
+                self.breaker.report(route, outcome_on_primary)
+                if not handed_over:
+                    return ClauseResult(failed_finding(clause, self._failure(e)))
+                reason = fallback_reason(handed_over[0])
+                log_event(
+                    log,
+                    "clause_fallback",
+                    run_id=ctx.run.run_id,
+                    clause_id=clause.id,
+                    model=primary,
+                    fallback_model=fallback,
+                    reason=reason,
+                )
+                return self._fallback_review(
+                    ctx, clause, deadline, reason, provider_failed=handed_over[0].capacity
+                )
+            outcome_on_primary = "ok"
+            self.breaker.report(route, outcome_on_primary)
+            return ClauseResult(outcome.finding, revised=outcome.revised, stopped=outcome.stopped)
+        finally:
+            if outcome_on_primary is None:  # ended some other way (the run closed): outcome unknown
+                self.breaker.report(route, None)
+
+    def _fallback_review(
+        self, ctx: _RunContext, clause: Clause, deadline: float, reason: str, *, provider_failed: bool
+    ) -> ClauseResult:
+        """Review `clause` again from the start with the fallback agent model, labelled with `reason`.
+        `provider_failed`: the provider failed this clause on the agent model before the hand-over."""
+        assert self.settings.fallback_model is not None
+        settings = replace(self.settings, agent_model=self.settings.fallback_model, fallback_model=None)
+        try:
+            outcome = self._review(ctx, clause, settings, deadline)
+        except ClauseReviewError as e:
+            return ClauseResult(failed_finding(clause, self._failure(e, reason, provider_failed)))
+        finding = outcome.finding.model_copy(update={"fallback_reason": reason})
+        return ClauseResult(finding, revised=outcome.revised, stopped=outcome.stopped)
+
+    def _failure(
+        self, e: ClauseReviewError, fallback_reason: str | None = None, provider_failed: bool = False
+    ) -> str:
+        """A failed clause's error: what failed, after why the fallback model reviewed it when it did. It
+        starts with PROVIDER_BUSY when the provider failed the review, or when our deadline ended a review
+        that the provider's failure on the agent model had sent to the fallback model (`provider_failed`);
+        else with OUT_OF_TIME when our deadline ended it. Any other failure (a refused request, an unusable
+        reply) is stated as it is."""
+        text = f"{e}."
+        if fallback_reason is not None:
+            text = (
+                f"{fallback_reason}, so {model_name(self.settings.fallback_model or '')} reviewed it again, "
+                f"and that review failed: {text}"
+            )
+        cause = llm_cause(e)
+        out_of_time = cause is not None and cause.out_of_time
+        if busy_cause(e) is not None or (out_of_time and provider_failed):
+            return f"{PROVIDER_BUSY} {text}"
+        return f"{OUT_OF_TIME} {text}" if out_of_time else text
 
     def _finish(self, ctx: _RunContext, policy: Policy, started: float) -> Run:
         results = [ctx.results[c.id] for c in policy.clauses]
@@ -643,7 +874,7 @@ class Runner:
                 "error": error,
                 "finished_at": self.now(),
                 "summary": _summary(policy.clauses, ctx.results),
-                "latency_ms": round((time.perf_counter() - started) * 1000),
+                "latency_ms": round((self.clock() - started) * 1000),
                 "cost_usd_estimate": _cost(ctx.steps),
             }
         )
@@ -664,7 +895,7 @@ class Runner:
                 "status": RunStatus.FAILED,
                 "error": f"The run stopped on an internal error: {type(e).__name__}: {e}",
                 "finished_at": self.now(),
-                "latency_ms": round((time.perf_counter() - started) * 1000),
+                "latency_ms": round((self.clock() - started) * 1000),
                 "cost_usd_estimate": _cost(ctx.steps),
             }
         )
@@ -756,8 +987,9 @@ class NotASample(Conflict):
 def sample_refusal(run: Run) -> str | None:
     """Why `run` may not be shown publicly as a saved run, or None when it may. A saved run is presented as
     a real review, so it must be one: finished, recorded on Vertex AI with the pinned model ids, not written
-    by a seed script, and dated with the RBI as-on date of its library. A pasted clause (source custom) is
-    the user's own text, kept only until its private run expires (CUSTOM_TTL): never published. No override.
+    by a seed script, reviewed wholly by the pinned agent model (no clause handed to the fallback model), and
+    dated with the RBI as-on date of its library. A pasted clause (source custom) is the user's own text,
+    kept only until its private run expires (CUSTOM_TTL): never published. No override.
     """
     if run.source == CUSTOM_SOURCE:
         return "it reviews a clause a user pasted (source custom); only a sample policy run can be saved"
@@ -775,6 +1007,11 @@ def sample_refusal(run: Run) -> str | None:
         )
     if run.rbi_as_on is None:
         return "it has no rbi_as_on date, so the app could not say how current its RBI rules are"
+    if run.summary.fallback_clauses > 0:
+        return (
+            f"{run.summary.fallback_clauses} of its clauses were reviewed by the fallback model because "
+            f"{model_name(run.agent_model)} was busy; a saved run shows the pinned models only"
+        )
     return None
 
 

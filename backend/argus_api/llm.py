@@ -9,12 +9,18 @@ against a JSON Schema) and chat (one model turn with function calling). Provider
 transient ones (HTTP 429, 5xx, timeouts) are retried with exponential backoff first. A 429 (the shared
 Gemini capacity is busy) is answered at once, so it gets more tries (THROTTLED_ATTEMPTS) than a 5xx or a
 timeout, which can stall for the whole attempt (MAX_ATTEMPTS). Every failed attempt is
-logged (llm_attempt_failed, WARNING) with what happens next, so retries are visible in Cloud Logging.
+logged (llm_attempt_failed, WARNING) with what happens next, so retries are visible in Cloud Logging. The
+LLMError of a provider failure carries its kind (ErrorKind) and model, so a caller can tell a busy model
+(LLMError.capacity; runs.py then hands the clause to the fallback model) from a request that cannot succeed,
+and both from a call our own deadline cut with no provider failure (kind "deadline", cause None).
 
 Each attempt has its own timeout, sized to the call: a chat turn returns a few dozen tokens, so it is cut
 sooner than a structured call that writes a whole finding. Inside call_scope(deadline) every call also ends by
 the deadline: an attempt's timeout never runs past it, and no retry starts without time to finish, so one
-stalled call cannot carry a clause past the run budget; it fails as LLMError saying so.
+stalled call cannot carry a clause past the run budget; it fails as LLMError saying so. A scope may also
+give one model an earlier deadline of its own (model_deadlines), which the caller can end early
+(_Scope.end_model_deadline): runs.py cuts the agent model's calls at its share of the run budget until its
+first draft is written, while the monitor model's calls keep the run deadline.
 
 A model may be given a pinned thinking level (config.AGENT_THINKING, config.MONITOR_THINKING): Gemini's
 thinking_level on google-genai, reasoning effort on OpenRouter. Models without one use the provider default.
@@ -103,27 +109,55 @@ Sleep = Callable[[float], None]
 Clock = Callable[[], float]
 
 
-@dataclass(frozen=True)
+@dataclass
 class _Scope:
-    deadline: float | None  # on the time.perf_counter clock
+    deadline: float | None  # on the time.perf_counter clock, never later than the outer scope's
     fields: dict[str, Any]
+    outer: "_Scope | None" = None
+    # Model id -> an earlier deadline for that model's calls only (same clock), set by this scope.
+    model_deadlines: dict[str, float] = field(default_factory=dict)
+
+    def deadline_for(self, model: str) -> float | None:
+        """When a call to `model` must end: the earliest of this scope's deadline, the model's own deadline
+        here, and what every outer scope says for it. Read at each call, so an ended model deadline counts
+        from the next call on."""
+        d = _earliest(self.model_deadlines.get(model), self.deadline)
+        return d if self.outer is None else _earliest(d, self.outer.deadline_for(model))
+
+    def own_deadline(self, model: str) -> bool:
+        """Whether a model deadline, not the scope's own, is what ends a call to `model` first."""
+        d = self.deadline_for(model)
+        return d is not None and (self.deadline is None or d < self.deadline)
+
+    def end_model_deadline(self, model: str) -> None:
+        """From the next call on, calls to `model` in this scope end by the scope's deadline only (and by any
+        outer scope's deadline for it): this scope's earlier deadline for the model no longer applies."""
+        self.model_deadlines.pop(model, None)
 
 
 _scope: ContextVar[_Scope | None] = ContextVar("argus_llm_scope", default=None)
 
 
+def _earliest(a: float | None, b: float | None) -> float | None:
+    return b if a is None else a if b is None else min(a, b)
+
+
 @contextmanager
-def call_scope(deadline: float | None, **log_fields: Any) -> Iterator[None]:
+def call_scope(
+    deadline: float | None, *, model_deadlines: dict[str, float] | None = None, **log_fields: Any
+) -> Iterator[_Scope]:
     """Every LLM call made inside (in this context) ends by `deadline` (a time.perf_counter() value; None
-    for no deadline), and its retry logs carry `log_fields` (run_id, clause_id). An inner scope cannot
-    extend an outer deadline."""
+    for no deadline), and a call to a model named in `model_deadlines` ends by that model's own deadline
+    too, until the yielded scope's end_model_deadline(model). Retry logs carry `log_fields` (run_id,
+    clause_id). An inner scope cannot extend an outer deadline, for any model."""
     outer = _scope.get()
-    if outer is not None and outer.deadline is not None:
-        deadline = outer.deadline if deadline is None else min(deadline, outer.deadline)
+    if outer is not None:
+        deadline = _earliest(deadline, outer.deadline)
     fields = {**(outer.fields if outer is not None else {}), **log_fields}
-    token = _scope.set(_Scope(deadline, fields))
+    scope = _Scope(deadline, fields, outer, dict(model_deadlines or {}))
+    token = _scope.set(scope)
     try:
-        yield
+        yield scope
     finally:
         _scope.reset(token)
 
@@ -168,8 +202,52 @@ class Turn:
     latency_ms: int  # wall time of the call, retries included
 
 
+# How a model call failed, on LLMError.kind: "throttled" (gave up after a 429 on the last try), "transient"
+# (gave up after a 5xx or a timeout on the last try), "deadline" (the call_scope deadline came first: a try
+# failed and no retry fitted, or no try could start), "fatal" (an error retrying cannot fix, such as HTTP
+# 400). None: not a provider failure (an unusable reply, invalid JSON). The tries before the last may have
+# failed differently (a 429, then a timeout): LLMError.failures has each.
+ErrorKind = Literal["throttled", "transient", "fatal", "deadline"]
+# The provider's own failure behind an LLMError, on LLMError.cause: "throttled" (an HTTP 429) or "transient"
+# (a 5xx, or a try that timed out on its own limit). None when the provider did not fail: a "fatal" error,
+# or a "deadline" error where our deadline was all that ended the call (no try failed, or the only failures
+# were tries cut short by the deadline itself).
+BusyCause = Literal["throttled", "transient"]
+
+
 class LLMError(RuntimeError):
-    pass
+    """A model call failed. `kind`, `cause` and `model` are set on provider failures (_with_retries); see
+    ErrorKind and BusyCause. `attempts` is the number of tries made, and `failures` the provider's failure on
+    each try that it failed, in order (a try our deadline cut short is not one)."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        kind: ErrorKind | None = None,
+        model: str | None = None,
+        cause: BusyCause | None = None,
+        attempts: int | None = None,
+        failures: tuple[BusyCause, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.model = model
+        # A give-up on 429s or on 5xx/timeouts is the provider's failure by its kind.
+        self.cause: BusyCause | None = kind if kind in ("throttled", "transient") else cause
+        self.attempts = attempts
+        self.failures = failures
+
+    @property
+    def capacity(self) -> bool:
+        """The provider was busy or slow: a 429, 5xx or timeout ended the call, or came before our deadline
+        did. Not a call that only ran out of our time budget."""
+        return self.cause is not None
+
+    @property
+    def out_of_time(self) -> bool:
+        """The call_scope deadline ended the call (kind "deadline"), whether or not the provider failed."""
+        return self.kind == "deadline"
 
 
 class LLM(Protocol):
@@ -216,14 +294,29 @@ def _jitter() -> float:
     return random.random()
 
 
-def _attempt_timeout(timeout_s: float, scope: _Scope | None, clock: Clock, what: str, attempt: int) -> float:
-    """This attempt's timeout: the call's own limit, cut to the time left before the scope's deadline."""
-    if scope is None or scope.deadline is None:
+def _attempt_timeout(
+    timeout_s: float,
+    deadline: float | None,
+    which: str,
+    clock: Clock,
+    what: str,
+    attempt: int,
+    model: str,
+    failures: tuple[BusyCause, ...],
+) -> float:
+    """This attempt's timeout: the call's own limit, cut to the time left before the deadline (named
+    `which`). `failures` are the provider's failures on earlier tries of this call."""
+    if deadline is None:
         return timeout_s
-    left = scope.deadline - clock()
+    left = deadline - clock()
     if left < MIN_ATTEMPT_S:
         raise LLMError(
-            f"{what}: attempt {attempt} not started, {max(left, 0.0):.1f} s left before the run deadline"
+            f"{what}: attempt {attempt} not started, {max(left, 0.0):.1f} s left before {which}",
+            kind="deadline",
+            model=model,
+            cause=failures[-1] if failures else None,
+            attempts=attempt - 1,
+            failures=failures,
         )
     return min(timeout_s, left)
 
@@ -235,12 +328,18 @@ def _with_retries(
     what: str,
     timeout_s: float,
     clock: Clock,
+    model: str,
 ) -> T:
-    """Run `call(timeout)` with retries on transient failures. Each failed attempt is logged."""
+    """Run `call(timeout)` with retries on transient failures. Each failed attempt is logged. A provider
+    failure is raised as LLMError with its kind, its cause and `model`."""
     scope = _scope.get()
     fields = scope.fields if scope is not None else {}
+    deadline = scope.deadline_for(model) if scope is not None else None
+    # Errors name the deadline that applies: the model's own (runs.py: its share of the run) or the scope's.
+    which = "the model's own deadline" if scope is not None and scope.own_deadline(model) else "the deadline"
+    failures: tuple[BusyCause, ...] = ()  # the provider's failure on each try of this call it failed
     for attempt in range(1, max(MAX_ATTEMPTS, THROTTLED_ATTEMPTS) + 1):
-        timeout = _attempt_timeout(timeout_s, scope, clock, what, attempt)
+        timeout = _attempt_timeout(timeout_s, deadline, which, clock, what, attempt, model, failures)
         started = clock()
         try:
             return call(timeout)
@@ -256,6 +355,11 @@ def _with_retries(
             if kind is None:
                 raise  # not a provider failure: a bug, let it surface as is
             limit = THROTTLED_ATTEMPTS if kind == "throttled" else MAX_ATTEMPTS
+            # A try that ran to a timeout our deadline had shortened was cut by our budget, not failed by the
+            # provider; any other 429, 5xx or timeout is the provider's.
+            cut_by_deadline = kind == "transient" and timeout < timeout_s and clock() - started >= timeout
+            if kind in ("throttled", "transient") and not cut_by_deadline:
+                failures = (*failures, kind)
             failure = {
                 **fields,
                 "call": what,
@@ -270,18 +374,32 @@ def _with_retries(
             if kind == "throttled":
                 backoff *= 0.5 + 0.5 * _jitter()
             if kind == "fatal":
-                outcome, error = "fatal", LLMError(f"{what} failed: {e}")
-            elif attempt >= limit:
-                outcome, error = "gave_up", LLMError(f"{what} failed after {attempt} tries: {e}")
-            elif (
-                scope is not None
-                and scope.deadline is not None
-                and (left := scope.deadline - clock() - backoff) < MIN_ATTEMPT_S
-            ):
+                outcome = "fatal"
+                error = LLMError(
+                    f"{what} failed: {e}", kind="fatal", model=model, attempts=attempt, failures=failures
+                )
+            elif attempt >= limit and not cut_by_deadline:
+                outcome = "gave_up"
+                error = LLMError(
+                    f"{what} failed after {attempt} tries: {e}",
+                    kind=kind,
+                    model=model,
+                    attempts=attempt,
+                    failures=failures,
+                )
+            elif cut_by_deadline or (deadline is not None and deadline - clock() - backoff < MIN_ATTEMPT_S):
+                # Our deadline cut this try short, or leaves no room for another: the call ends on our budget,
+                # and only earlier tries the provider itself failed make it the provider's (cause).
+                left = deadline - clock() - backoff if deadline is not None else 0.0
                 outcome = "deadline"
                 error = LLMError(
                     f"{what} failed on try {attempt}: {e}; not retried, {max(left, 0.0):.1f} s would be left "
-                    "before the run deadline"
+                    f"before {which}",
+                    kind="deadline",
+                    model=model,
+                    cause=failures[-1] if failures else None,
+                    attempts=attempt,
+                    failures=failures,
                 )
             else:
                 log_event(
@@ -456,7 +574,9 @@ class GoogleLLM:
             )
             return self._client.models.generate_content(model=model, contents=contents, config=attempt_config)
 
-        r = _with_retries(once, _classify_google, self._sleep, f"Gemini {model}", timeout_s, self._clock)
+        r = _with_retries(
+            once, _classify_google, self._sleep, f"Gemini {model}", timeout_s, self._clock, model
+        )
         if not r.candidates:
             block = r.prompt_feedback.block_reason if r.prompt_feedback else None
             raise LLMError(f"Gemini {model} returned no candidates (block reason: {block})")
@@ -641,7 +761,9 @@ class OpenRouterLLM:
                 raise LLMError(f"OpenRouter returned no choices for {model}: {err or 'no error given'}")
             return r
 
-        r = _with_retries(once, _classify_openai, self._sleep, f"OpenRouter {model}", timeout_s, self._clock)
+        r = _with_retries(
+            once, _classify_openai, self._sleep, f"OpenRouter {model}", timeout_s, self._clock, model
+        )
         finish = r.choices[0].finish_reason
         if finish not in _OPENROUTER_OK_FINISH:
             raise LLMError(f"OpenRouter {model} stopped with finish reason {finish!r}")
@@ -751,13 +873,16 @@ class OpenRouterLLM:
 
 
 def thinking_levels(s: Settings) -> dict[str, ThinkingLevel]:
-    """Model id -> pinned thinking level. One model cannot serve both roles at different levels."""
-    if s.agent_model == s.monitor_model and s.agent_thinking != s.monitor_thinking:
-        raise ConfigError(
-            f"{s.agent_model} is both the agent and the monitor model but has two thinking levels "
-            f"({s.agent_thinking}, {s.monitor_thinking})"
-        )
-    return {s.agent_model: s.agent_thinking, s.monitor_model: s.monitor_thinking}
+    """Model id -> pinned thinking level; the fallback agent model runs at the agent's level. One model
+    cannot serve two roles at different levels."""
+    agents = [s.agent_model] + ([s.fallback_model] if s.fallback_model is not None else [])
+    for agent in agents:
+        if agent == s.monitor_model and s.agent_thinking != s.monitor_thinking:
+            raise ConfigError(
+                f"{agent} is both an agent and the monitor model but has two thinking levels "
+                f"({s.agent_thinking}, {s.monitor_thinking})"
+            )
+    return {**{a: s.agent_thinking for a in agents}, s.monitor_model: s.monitor_thinking}
 
 
 def build_llm(s: Settings) -> LLM:

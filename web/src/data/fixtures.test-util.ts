@@ -86,6 +86,7 @@ export function run(over: Partial<RunDoc> = {}): RunDoc {
       monitor_revisions: 0,
       monitor_stops: 0,
       failed: 0,
+      fallback_clauses: 0,
     },
     latency_ms: null,
     cost_usd_estimate: null,

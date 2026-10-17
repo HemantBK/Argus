@@ -105,6 +105,7 @@ export interface RunSummary {
   compliant?: number;
   conflict?: number;
   failed?: number;
+  fallback_clauses?: number;
   gap?: number;
   insufficient_evidence?: number;
   monitor_revisions?: number;
@@ -148,10 +149,12 @@ export interface Check {
  * via the `definition` "Finding".
  */
 export interface Finding {
+  agent_model?: string | null;
   citation: Citation | null;
   clause_id: string;
   clause_text: string;
   error?: string | null;
+  fallback_reason?: string | null;
   label: FindingLabel;
   monitor_status: MonitorStatus;
   rationale: string;

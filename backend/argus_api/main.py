@@ -1,8 +1,10 @@
 """Argus API on Cloud Run.
 
   GET  /health                                          liveness and what is deployed: git sha, mode,
-                                                        provider, pinned models, location, corpus hash;
-                                                        no calls to Firestore, Auth or the model
+                                                        provider, pinned models, location, corpus hash,
+                                                        and the agent model's circuit breaker state
+                                                        (breaker.py); no calls to Firestore, Auth or the
+                                                        model
   POST /api/smoke                                       Firebase Auth -> Gemini -> Firestore round trip; one
                                                         model call, admitted like a run (kill switch, caps)
   POST /api/runs {run_id, policy_id}                    review a sample policy; the work is done inside the
@@ -45,6 +47,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from argus_api import custom, runs
 from argus_api.auth import TokenVerifier, current_uid_with, firebase_verifier
+from argus_api.breaker import process_breaker
 from argus_api.config import Settings
 from argus_api.corpus.common import DEFAULT_OUT_DIR
 from argus_api.corpus.store import Corpus
@@ -226,7 +229,9 @@ def git_sha() -> str:
 @app.get("/health")
 def health() -> dict[str, str | None]:
     """What this server is running. Settings and the corpus (with its hash) are loaded once at startup by the
-    lifespan, so this reads cached values and calls no other service. location is null in local mode."""
+    lifespan, so this reads cached values and calls no other service. location is null in local mode.
+    agent_breaker is this process's circuit breaker for the agent model (closed, open or half_open), read
+    only: while it is not closed, new clauses go to the fallback model."""
     s = settings()
     return {
         "status": "ok",
@@ -237,6 +242,7 @@ def health() -> dict[str, str | None]:
         "monitor_model": s.monitor_model,
         "location": s.location,
         "corpus_hash": corpus().corpus_hash,
+        "agent_breaker": process_breaker(s.agent_model).state,
     }
 
 

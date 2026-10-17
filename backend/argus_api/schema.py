@@ -21,7 +21,9 @@ AuditEvent.clause_id / model and Signoff.edited_rationale; also Finding.error an
 clause whose review failed is an explicit state rather than a missing document.
 
 Later additive fields, each optional with a default so documents written before them still validate:
-Citation.updated_as_on; Run.provider, Run.seeded and Run.rbi_as_on; Run.source and Run.expires_at. New
+Citation.updated_as_on; Run.provider, Run.seeded and Run.rbi_as_on; Run.source and Run.expires_at;
+Finding.agent_model, Finding.fallback_reason and RunSummary.fallback_clauses (a clause the fallback agent
+model reviewed because the run's agent model was busy, see runs.py). New
 document: config/custom_limits (CustomLimits). EvalResults (with EvalCondition,
 EvalMetric, EvalCell, EvalCorpus) is the shape of eval_results/latest that the Evaluation page reads.
 
@@ -177,6 +179,12 @@ class Finding(BaseModel):
     # Set when the review of this clause failed (provider error, timeout, run budget): the label is then
     # insufficient_evidence, the citation None, and the clause goes to a person.
     error: str | None = None
+    # The agent model whose draft produced this finding: Run.agent_model, or the fallback model when that
+    # one was busy. None on a failed clause, and on findings written before this field.
+    agent_model: str | None = None
+    # Why the fallback model reviewed this clause, in plain English ("Gemini 3.8 Flash was busy (HTTP 429)
+    # after 5 tries"); None when the run's agent model did.
+    fallback_reason: str | None = None
 
 
 class AuditEvent(BaseModel):
@@ -199,6 +207,7 @@ class RunSummary(BaseModel):
     monitor_revisions: int = 0
     monitor_stops: int = 0
     failed: int = 0  # clauses whose review failed; the label counts above cover only reviewed clauses
+    fallback_clauses: int = 0  # reviewed clauses whose finding came from the fallback agent model
 
 
 class RunClause(BaseModel):

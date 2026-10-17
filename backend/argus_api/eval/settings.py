@@ -10,12 +10,16 @@ EvalConfigError naming the variable.
   GOOGLE_CLOUD_PROJECT  for vertex (and recorded for the others);  GOOGLE_CLOUD_LOCATION for vertex
   ARGUS_AGENT_MODEL / ARGUS_MONITOR_MODEL  optional overrides of config.PINNED_MODELS (recorded as unpinned)
 
+The Settings have no fallback agent model (fallback_model None), whatever ARGUS_FALLBACK_MODEL says: the
+app hands a busy clause to its fallback model, but an evaluation condition measures one fixed model, so a
+busy model there fails the case instead of changing what is measured.
+
 load_env_file reads KEY=VALUE lines from a .env file into os.environ for keys not already set, so the CLI
 works without `set -a; . ./.env`. Values are never printed or logged.
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from argus_api.config import (
@@ -97,6 +101,7 @@ class EvalSettings:
                 api_key=None,
                 agent_model=agent,
                 monitor_model=monitor,
+                fallback_model=None,
             )
         else:
             key_name = LOCAL_PROVIDER_KEYS[provider]
@@ -108,6 +113,7 @@ class EvalSettings:
                 api_key=_need(key_name, f"API key for {provider}"),
                 agent_model=agent,
                 monitor_model=monitor,
+                fallback_model=None,
             )
         return cls(
             provider=provider,
@@ -125,5 +131,5 @@ class EvalSettings:
             agent_model=settings.agent_model,
             monitor_model=settings.monitor_model,
             pinned=(settings.agent_model, settings.monitor_model) == (pinned_agent, pinned_monitor),
-            settings=settings,
+            settings=replace(settings, fallback_model=None),
         )
