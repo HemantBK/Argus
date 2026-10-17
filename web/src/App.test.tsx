@@ -4,7 +4,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
-import { ApiError, messageForStatus } from "./data/api";
+import { ApiError, CUSTOM_CLAUSE_MIN_CHARS, CUSTOM_POLICY_ID, messageForStatus, type CustomClause } from "./data/api";
 import { run, T0 } from "./data/fixtures.test-util";
 import type { PostState } from "./data/useStartRun";
 import { libraryLabel, recordedAt } from "./shell/format";
@@ -12,6 +12,8 @@ import { href } from "./shell/route";
 import { startProblem } from "./shell/startProblem";
 import { live } from "./shell/screens.test-util";
 import { DEMO_POLICY_ID } from "./start/catalog";
+import { ATTEST_LABEL } from "./start/CustomClauseCard";
+import { forgetSentDraft } from "./start/customDraft";
 
 const LIVE_ID = "0123456789ab4def8123456789abcdef";
 const SAVED_ID = "fedcba9876544321a123456789abcdef";
@@ -49,7 +51,7 @@ interface Fake {
   runs: Map<string, unknown>;
   post: unknown;
   liveRunId: string | null;
-  start: (policyId: string) => string;
+  start: (policyId: string, custom?: CustomClause) => string;
   signIn: () => Promise<{ uid: string }>;
 }
 
@@ -107,7 +109,10 @@ beforeEach(() => {
   });
   fake.signIn = () => Promise.resolve({ uid: "FAKE-uid" });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  forgetSentDraft();
+});
 
 describe("App", () => {
   it("opens on the Start screen with the library dates from data", async () => {
@@ -241,5 +246,41 @@ describe("App", () => {
     fake.signIn = () => Promise.reject(new Error("FAKE auth emulator down"));
     render(<App />);
     expect((await screen.findByRole("alert")).textContent).toMatch(/Could not sign in.*FAKE auth emulator down/s);
+  });
+  describe("Try your own clause", () => {
+    /** A FAKE clause just over the minimum length the API accepts. */
+    const CLAUSE = `FAKE clause: the lender shall disclose the APR before sanction. ${"x".repeat(CUSTOM_CLAUSE_MIN_CHARS)}`;
+
+    function pasteAndReview(text: string): void {
+      fireEvent.change(screen.getByRole("textbox", { name: "One clause of a digital-lending policy" }), { target: { value: text } });
+      fireEvent.click(screen.getByRole("checkbox", { name: ATTEST_LABEL }));
+      fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    }
+
+    it("Review passes the pasted clause from the Start screen through the shell into start()", async () => {
+      render(<App />);
+      pasteAndReview(CLAUSE);
+      expect(fake.start).toHaveBeenCalledTimes(1);
+      expect(fake.start).toHaveBeenCalledWith(CUSTOM_POLICY_ID, { clauseText: CLAUSE, attest: true });
+      expect(window.location.hash).toBe(href.review({ source: "runs", runId: LIVE_ID }));
+      go(window.location.hash);
+      expect((await screen.findByTestId("review")).textContent).toBe(`runs/${LIVE_ID}`);
+    });
+
+    it("Try again after a failed custom start resends the same clause", async () => {
+      render(<App />);
+      pasteAndReview(CLAUSE);
+      fake.runs.set(`runs/${LIVE_ID}`, live.ready(null)); // the API never created the run
+      fake.post = httpError(500, "FAKE Internal Server Error");
+      go(window.location.hash);
+      const alert = await screen.findByRole("alert");
+      expect(alert.querySelector("strong")?.textContent).toBe("The review of your clause could not be started.");
+      expect(screen.getByRole("link", { name: "Edit your clause" }).getAttribute("href")).toBe(href.start());
+
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(fake.start).toHaveBeenCalledTimes(2);
+      expect(fake.start).toHaveBeenLastCalledWith(CUSTOM_POLICY_ID, { clauseText: CLAUSE, attest: true });
+      expect(window.location.hash).toBe(href.review({ source: "runs", runId: RETRY_ID }));
+    });
   });
 });

@@ -117,9 +117,10 @@ describe("StartScreen", () => {
     expect(screen.getByRole("contentinfo").textContent).not.toMatch(/updated on/);
   });
 
-  it("offers no upload and no paste box (D-27)", () => {
+  it("offers no upload, and one paste box for a single clause (D-27, D-60)", () => {
     const { container } = render(<StartScreen saved={live.ready({ runs: [savedA], invalid: [] })} onRun={vi.fn()} />);
-    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
+    expect(within(screen.getByRole("region", { name: "Try your own clause" })).getByRole("textbox")).toBeTruthy();
     expect(container.querySelector("input[type=file]")).toBeNull();
   });
 

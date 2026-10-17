@@ -54,3 +54,27 @@ const FILES = import.meta.glob<unknown>("../../../backend/argus_api/samples/poli
 
 /** The sample policies bundled into this build. */
 export const SAMPLE_POLICIES: SamplePolicies = loadSamplePolicies(FILES);
+
+/**
+ * The text of one clause of one bundled sample policy file, or null when the file or clause is missing or
+ * malformed. The paste box starts from a real sample clause rather than a second copy of its text.
+ */
+export function sampleClauseText(files: Readonly<Record<string, unknown>>, policyId: string, clauseId: string): string | null {
+  for (const raw of Object.values(files)) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const o = raw as { policy_id?: unknown; clauses?: unknown };
+    if (o.policy_id !== policyId || !Array.isArray(o.clauses)) continue;
+    for (const c of o.clauses as unknown[]) {
+      if (typeof c !== "object" || c === null) continue;
+      const { id, text } = c as { id?: unknown; text?: unknown };
+      if (id === clauseId && typeof text === "string" && text.trim() !== "") return text;
+    }
+  }
+  return null;
+}
+
+/** Where the "Try your own clause" box starts: sample policy A, clause c2 (the cooling-off clause). */
+export const CUSTOM_PREFILL_SOURCE = { policyId: "policy_a", clauseId: "c2" } as const;
+
+/** The text the paste box starts with; empty if this build has no such sample clause. */
+export const CUSTOM_PREFILL: string = sampleClauseText(FILES, CUSTOM_PREFILL_SOURCE.policyId, CUSTOM_PREFILL_SOURCE.clauseId) ?? "";

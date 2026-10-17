@@ -95,3 +95,67 @@ button.start-cta {
 .saved-run-older .saved-run-list {
   margin-top: calc(var(--space) / 2);
 }
+
+/* Try your own clause (D-60): a full-width card under the sample policies. */
+.custom-clause {
+  margin-top: calc(var(--space) * 4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: calc(var(--space) * 2) calc(var(--space) * 2.5);
+}
+.custom-clause h2 {
+  margin: 0 0 var(--space);
+}
+.custom-clause form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+.custom-clause-notice {
+  margin: 0 0 var(--space);
+  color: var(--text-muted);
+}
+.custom-clause-label {
+  font-weight: 600;
+}
+.custom-clause-text {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 144px;
+  resize: vertical;
+  padding: var(--space);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+.custom-clause-count {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.custom-clause-count-bad {
+  color: var(--status-gap);
+}
+.custom-clause-attest {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space);
+  min-height: 24px;
+}
+.custom-clause-attest input {
+  margin-top: 4px;
+}
+.custom-clause-problem {
+  margin: 0;
+}
+button.custom-clause-run {
+  align-self: flex-start;
+}
+button.custom-clause-run:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

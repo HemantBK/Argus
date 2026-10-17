@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { ErrorBanner } from "./ErrorBoundary";
 import { AuditScreen } from "./audit/AuditScreen";
+import { CUSTOM_POLICY_ID, type CustomClause } from "./data/api";
 import { useRun, useSavedRuns, type LiveRead, type SavedRuns } from "./data/hooks";
 import type { RunDoc } from "./data/types";
 import { useStartRun, type StartRun } from "./data/useStartRun";
@@ -15,7 +16,7 @@ import { EvalScreen } from "./eval/EvalScreen";
 import { appEnv } from "./env";
 import { ensureSignedIn } from "./firebase";
 import { ReviewScreen } from "./review/ReviewScreen";
-import { RunFailedBanner, StartingNotice, StartProblemBanner } from "./shell/banners";
+import { CustomStartProblemBanner, RunFailedBanner, StartingNotice, StartProblemBanner } from "./shell/banners";
 import { startProblem } from "./shell/startProblem";
 import { href, navigate, runRefOf, useNavigation, type Route, type RunRef } from "./shell/route";
 import { runLibrary } from "./shell/format";
@@ -65,12 +66,14 @@ function skipToMain(e: MouseEvent<HTMLAnchorElement>): void {
 interface StartedRun {
   runId: string;
   policyId: string;
+  /** A pasted clause (held in memory only, so Try again can resend it). */
+  custom?: CustomClause;
 }
 
 interface ScreenProps {
   route: Route;
   saved: LiveRead<SavedRuns>;
-  onRun: (policyId: string) => void;
+  onRun: (policyId: string, custom?: CustomClause) => void;
   fallbackAsOn: string | null;
   /**
    * The live run on screen could not be started and its run document does not exist: its listeners were refused
@@ -98,17 +101,25 @@ function Screen({ route, saved, onRun, fallbackAsOn, runNotStarted }: ScreenProp
   }
 }
 
-function RunBanners({ runDoc, live, isStartedRun, offer, onRetry }: {
+function RunBanners({ runDoc, live, isStartedRun, isCustom, offer, onRetry }: {
   runDoc: RunDoc | null;
   live: StartRun;
   isStartedRun: boolean;
+  /** The started run reviews a pasted clause: no saved run to offer, and its refusals lead back to the clause. */
+  isCustom: boolean;
   offer: RunDoc | null;
   onRetry: () => void;
 }): ReactNode {
   const problem = isStartedRun ? startProblem(live.post) : null;
+  const startError = live.post.status === "error" || live.post.status === "blocked" ? live.post.error : null;
   return (
     <>
-      {problem && <StartProblemBanner problem={problem} saved={offer} onRetry={onRetry} />}
+      {problem &&
+        (isCustom && startError ? (
+          <CustomStartProblemBanner error={startError} onRetry={onRetry} />
+        ) : (
+          <StartProblemBanner problem={problem} saved={offer} onRetry={onRetry} />
+        ))}
       {isStartedRun && live.post.status === "waiting_for_listeners" && <StartingNotice />}
       {!problem && runDoc?.status === "failed" && <RunFailedBanner run={runDoc} saved={offer} />}
     </>
@@ -133,9 +144,9 @@ export function App(): ReactNode {
 
   const { start } = live;
   const onRun = useCallback(
-    (policyId: string) => {
-      const runId = start(policyId);
-      setStarted({ runId, policyId });
+    (policyId: string, custom?: CustomClause) => {
+      const runId = custom ? start(CUSTOM_POLICY_ID, custom) : start(policyId);
+      setStarted(custom ? { runId, policyId: CUSTOM_POLICY_ID, custom } : { runId, policyId });
       navigate(href.review({ source: "runs", runId }));
     },
     [start],
@@ -149,7 +160,7 @@ export function App(): ReactNode {
   // (for example a 500 mid-review) still has content to show, so its screens stay, under the banner.
   const runNotStarted = isStartedRun && startProblem(live.post) !== null && runDoc === null;
   const retry = useCallback(() => {
-    if (started) onRun(started.policyId);
+    if (started) onRun(started.policyId, started.custom);
   }, [started, onRun]);
 
   return (
@@ -163,7 +174,7 @@ export function App(): ReactNode {
         {signIn.status === "error" && (
           <ErrorBanner title="Could not sign in. Live runs cannot start until sign-in works." error={signIn.error} />
         )}
-        {routeRun && <RunBanners runDoc={runDoc} live={live} isStartedRun={isStartedRun} offer={offer} onRetry={retry} />}
+        {routeRun && <RunBanners runDoc={runDoc} live={live} isStartedRun={isStartedRun} isCustom={isStartedRun && started.policyId === CUSTOM_POLICY_ID} offer={offer} onRetry={retry} />}
       </div>
       <main id="main" tabIndex={-1}>
         <Screen route={route} saved={saved} onRun={onRun} fallbackAsOn={savedAsOn} runNotStarted={runNotStarted} />

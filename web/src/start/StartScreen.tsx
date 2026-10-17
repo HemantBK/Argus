@@ -1,23 +1,31 @@
-// Start screen (UI_SPEC 3.1 as cut by 16.1): what Argus does in one line, one big Run demo button, the sample
-// policies with their saved runs, and the footer. No upload, no paste box. Names and clause counts come from the
-// sample policy files the API reviews; saved runs and dates from Firestore.
+// Start screen (UI_SPEC 3.1 as cut by 16.1, plus D-60): what Argus does in one line, one big Run demo button, the
+// sample policies with their saved runs, "Try your own clause" (one pasted clause, reviewed live), and the footer.
+// No upload. Names and clause counts come from the sample policy files the API reviews; saved runs and dates
+// from Firestore.
 import type { ReactNode } from "react";
 import { ErrorBanner } from "../ErrorBoundary";
 import type { LiveRead, SavedRuns } from "../data/hooks";
+import type { CustomClause } from "../data/api";
 import type { RunDoc } from "../data/types";
 import { libraryLabel, savedRunLabel } from "../shell/format";
 import { href } from "../shell/route";
 import { DEMO_POLICY_ID, latestLibrary, sampleCards, type SampleCard } from "./catalog";
 import { HEADLINE, TAGLINE } from "./copy";
-import { SAMPLE_POLICIES, type SamplePolicies } from "./samplePolicies";
+import { CustomClauseCard } from "./CustomClauseCard";
+import { CUSTOM_PREFILL, SAMPLE_POLICIES, type SamplePolicies } from "./samplePolicies";
 import "./start.css";
 
 export interface StartScreenProps {
   saved: LiveRead<SavedRuns>;
-  /** Start a live run of a sample policy (listeners first, then the POST) and open its Review screen. */
-  onRun: (policyId: string) => void;
+  /**
+   * Start a live run (listeners first, then the POST) and open its Review screen: a sample policy, or with
+   * `custom` a pasted clause.
+   */
+  onRun: (policyId: string, custom?: CustomClause) => void;
   /** The sample policy files bundled into this build (tests pass their own). */
   policies?: SamplePolicies;
+  /** The text the "Try your own clause" box starts with (tests pass their own). */
+  prefill?: string;
 }
 
 function SkeletonCards(): ReactNode {
@@ -154,7 +162,7 @@ function Footer({ saved }: { saved: LiveRead<SavedRuns> }): ReactNode {
   );
 }
 
-export function StartScreen({ saved, onRun, policies = SAMPLE_POLICIES }: StartScreenProps): ReactNode {
+export function StartScreen({ saved, onRun, policies = SAMPLE_POLICIES, prefill = CUSTOM_PREFILL }: StartScreenProps): ReactNode {
   return (
     <div className="start">
       <section className="start-hero" aria-labelledby="start-title">
@@ -174,6 +182,7 @@ export function StartScreen({ saved, onRun, policies = SAMPLE_POLICIES }: StartS
         <h2 id="samples-title">Sample policies</h2>
         <Samples saved={saved} onRun={onRun} policies={policies} />
       </section>
+      <CustomClauseCard prefill={prefill} onRun={onRun} />
       <Footer saved={saved} />
     </div>
   );

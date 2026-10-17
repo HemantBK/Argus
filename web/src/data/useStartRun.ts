@@ -3,7 +3,7 @@
 // The steps/findings/audit listeners attach as soon as the API creates the run document (data/hooks.ts explains
 // why that misses nothing). The POST stays open while the API works; results stream in through the listeners.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, newRunId, startRun } from "./api";
+import { ApiError, CUSTOM_POLICY_ID, newRunId, startCustomRun, startRun, type CustomClause } from "./api";
 import { useRunData, type RunData } from "./hooks";
 
 export type PostState =
@@ -18,12 +18,29 @@ export type PostState =
 export interface StartRun extends RunData {
   runId: string | null;
   post: PostState;
-  /** Begin a new live run of a sample policy. Returns the new run id. */
-  start: (policyId: string) => string;
+  /**
+   * Begin a new live run and return its run id: a sample policy, or with `custom` a pasted clause
+   * (policyId CUSTOM_POLICY_ID). The clause is held only in memory, for this request.
+   */
+  start: (policyId: string, custom?: CustomClause) => string;
+}
+
+interface RunRequest {
+  runId: string;
+  policyId: string;
+  custom: CustomClause | undefined;
+}
+
+function send({ runId, policyId, custom }: RunRequest): ReturnType<typeof startRun> {
+  if (custom) return startCustomRun(runId, custom);
+  if (policyId === CUSTOM_POLICY_ID) {
+    return Promise.reject(new ApiError("http", "No clause text was given for this custom run. Go back to the start screen and paste the clause again."));
+  }
+  return startRun(runId, policyId);
 }
 
 export function useStartRun(): StartRun {
-  const [request, setRequest] = useState<{ runId: string; policyId: string } | null>(null);
+  const [request, setRequest] = useState<RunRequest | null>(null);
   const [post, setPost] = useState<{ runId: string; state: PostState } | null>(null);
   const sent = useRef<string | null>(null);
   const data = useRunData(request?.runId ?? null, "runs");
@@ -32,8 +49,8 @@ export function useStartRun(): StartRun {
   useEffect(() => {
     if (!request || !data.attached || listenerError || sent.current === request.runId) return;
     sent.current = request.runId;
-    const { runId, policyId } = request;
-    startRun(runId, policyId).then(
+    const { runId } = request;
+    send(request).then(
       () => {
         setPost({ runId, state: { status: "done" } });
       },
@@ -44,9 +61,9 @@ export function useStartRun(): StartRun {
     );
   }, [request, data.attached, listenerError]);
 
-  const start = useCallback((policyId: string) => {
+  const start = useCallback((policyId: string, custom?: CustomClause) => {
     const runId = newRunId();
-    setRequest({ runId, policyId });
+    setRequest({ runId, policyId: custom ? CUSTOM_POLICY_ID : policyId, custom });
     return runId;
   }, []);
 
