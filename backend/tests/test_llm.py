@@ -21,6 +21,7 @@ from argus_api.llm import (
     MIN_ATTEMPT_S,
     PRICES_USD_PER_MTOK,
     REQUEST_TIMEOUT_S,
+    THROTTLED_ATTEMPTS,
     GoogleLLM,
     LLMError,
     Message,
@@ -55,6 +56,12 @@ class Sleeps(list[float]):
 
 def expected_backoff(retries: int) -> list[float]:
     return [BACKOFF_BASE_S * 2**i for i in range(retries)]
+
+
+@pytest.fixture(autouse=True)
+def no_jitter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Throttled waits are jittered to 50-100%; with the top of the range they equal expected_backoff."""
+    monkeypatch.setattr("argus_api.llm._jitter", lambda: 1.0)
 
 
 # --------------------------------------------------------------------------------------------- Gemini mocks
@@ -193,11 +200,49 @@ def test_google_retries_transient_errors_with_backoff() -> None:
 
 
 def test_google_gives_up_after_max_attempts() -> None:
-    llm, models, sleeps = google([genai_errors.ClientError(429, {}) for _ in range(MAX_ATTEMPTS)])
+    llm, models, sleeps = google([genai_errors.ServerError(503, {}) for _ in range(MAX_ATTEMPTS)])
     with pytest.raises(LLMError, match=f"after {MAX_ATTEMPTS} tries"):
         llm.complete(MODEL, "hi")
     assert len(models.requests) == MAX_ATTEMPTS
     assert sleeps == expected_backoff(MAX_ATTEMPTS - 1)
+
+
+def test_google_retries_a_busy_429_more_than_a_stall() -> None:
+    # The candidate revision's smoke review on 2026-10-17 failed on two 429s one second apart.
+    busy = [genai_errors.ClientError(429, {}) for _ in range(THROTTLED_ATTEMPTS - 1)]
+    llm, models, sleeps = google([*busy, g_text("ok")])
+    assert llm.complete(MODEL, "hi").text == "ok"
+    assert len(models.requests) == THROTTLED_ATTEMPTS > MAX_ATTEMPTS
+    assert sleeps == expected_backoff(THROTTLED_ATTEMPTS - 1)
+
+
+def test_google_gives_up_on_429_after_throttled_attempts() -> None:
+    llm, models, _ = google([genai_errors.ClientError(429, {}) for _ in range(THROTTLED_ATTEMPTS)])
+    with pytest.raises(LLMError, match=f"after {THROTTLED_ATTEMPTS} tries"):
+        llm.complete(MODEL, "hi")
+    assert len(models.requests) == THROTTLED_ATTEMPTS
+
+
+def test_a_stall_after_429s_keeps_the_stall_limit() -> None:
+    # A 503 on the third try is past MAX_ATTEMPTS: stalls never get the extra tries 429s get.
+    replies = [
+        genai_errors.ClientError(429, {}),
+        genai_errors.ClientError(429, {}),
+        genai_errors.ServerError(503, {}),
+    ]
+    llm, models, _ = google(replies)
+    with pytest.raises(LLMError, match="after 3 tries"):
+        llm.complete(MODEL, "hi")
+    assert len(models.requests) == 3
+
+
+def test_throttled_waits_are_jittered_between_half_and_full(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("argus_api.llm._jitter", lambda: 0.0)
+    llm, _, sleeps = google(
+        [genai_errors.ClientError(429, {}), genai_errors.ClientError(429, {}), g_text("ok")]
+    )
+    llm.complete(MODEL, "hi")
+    assert sleeps == [w / 2 for w in expected_backoff(2)]
 
 
 def test_google_does_not_retry_client_errors() -> None:
@@ -347,6 +392,13 @@ def test_openrouter_retries_rate_limits_and_timeouts() -> None:
     assert llm.complete(OR_MODEL, "hi").text == "ok"
     assert len(api.requests) == MAX_ATTEMPTS
     assert sleeps == expected_backoff(MAX_ATTEMPTS - 1)
+
+
+def test_openrouter_treats_a_429_inside_a_200_body_as_throttled() -> None:
+    busy = {**or_reply("x"), "choices": [], "error": {"code": 429, "message": "busy"}}
+    llm, api, _ = openrouter([busy] * (THROTTLED_ATTEMPTS - 1) + [or_reply("ok")])
+    assert llm.complete(OR_MODEL, "hi").text == "ok"
+    assert len(api.requests) == THROTTLED_ATTEMPTS
 
 
 def test_openrouter_retries_an_error_inside_a_200_body() -> None:

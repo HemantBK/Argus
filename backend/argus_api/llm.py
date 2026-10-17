@@ -6,7 +6,9 @@
 
 Every provider offers the same three calls: complete (plain text), complete_json (structured output validated
 against a JSON Schema) and chat (one model turn with function calling). Provider failures surface as LLMError;
-transient ones (HTTP 429, 5xx, timeouts) are retried with exponential backoff first. Every failed attempt is
+transient ones (HTTP 429, 5xx, timeouts) are retried with exponential backoff first. A 429 (the shared
+Gemini capacity is busy) is answered at once, so it gets more tries (THROTTLED_ATTEMPTS) than a 5xx or a
+timeout, which can stall for the whole attempt (MAX_ATTEMPTS). Every failed attempt is
 logged (llm_attempt_failed, WARNING) with what happens next, so retries are visible in Cloud Logging.
 
 Each attempt has its own timeout, sized to the call: a chat turn returns a few dozen tokens, so it is cut
@@ -22,6 +24,7 @@ Token counts are what the provider bills: for Gemini the output count includes t
 
 import json
 import logging
+import random
 import threading
 import time
 import uuid
@@ -57,6 +60,12 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # Transient failures: tries in total (first call included), and the wait before retry n is BASE * 2**(n-1).
 MAX_ATTEMPTS = 2
 BACKOFF_BASE_S = 1.0
+# HTTP 429 (RESOURCE_EXHAUSTED): Gemini 3.x on Vertex AI "global" runs on shared capacity with no per-project
+# quota, and a busy pool rejects calls in about a second. On 2026-10-17 a sample review on a new revision
+# failed when 2 tries 1 s apart both got 429. These rejections cost no time, unlike the stalls below, so they
+# get 5 tries (waits of about 1, 2, 4 and 8 s, 15 s at most), still cut short by the run deadline. The waits
+# are jittered to 50-100% so clauses rejected together do not all retry in the same instant.
+THROTTLED_ATTEMPTS = 5
 # Per attempt. Live runs on 2026-10-16 showed that provider stalls are correlated, not random: when a
 # call sat in the queue, its retries usually stalled too, so cutting attempts at 8-12 s turned slow
 # clauses into failed ones (2 of 6 runs failed). Normal turns finish in 2-10 s and the slowest
@@ -194,7 +203,17 @@ class _Transient(Exception):
     """A provider failure worth retrying that the SDK did not raise as an exception (error in a 200 body)."""
 
 
-Classification = Literal["transient", "fatal"] | None
+class _Throttled(_Transient):
+    """A 429 reported in a 200 body."""
+
+
+# throttled: a 429, retried up to THROTTLED_ATTEMPTS times; transient: a 5xx or a timeout, MAX_ATTEMPTS.
+Classification = Literal["throttled", "transient", "fatal"] | None
+
+
+def _jitter() -> float:
+    """A fraction in [0, 1) that spreads the waits of throttled retries; tests replace it."""
+    return random.random()
 
 
 def _attempt_timeout(timeout_s: float, scope: _Scope | None, clock: Clock, what: str, attempt: int) -> float:
@@ -220,7 +239,7 @@ def _with_retries(
     """Run `call(timeout)` with retries on transient failures. Each failed attempt is logged."""
     scope = _scope.get()
     fields = scope.fields if scope is not None else {}
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+    for attempt in range(1, max(MAX_ATTEMPTS, THROTTLED_ATTEMPTS) + 1):
         timeout = _attempt_timeout(timeout_s, scope, clock, what, attempt)
         started = clock()
         try:
@@ -228,24 +247,32 @@ def _with_retries(
         except LLMError:
             raise
         except Exception as e:
-            kind = "transient" if isinstance(e, _Transient) else classify(e)
+            if isinstance(e, _Throttled):
+                kind: Classification = "throttled"
+            elif isinstance(e, _Transient):
+                kind = "transient"
+            else:
+                kind = classify(e)
             if kind is None:
                 raise  # not a provider failure: a bug, let it surface as is
+            limit = THROTTLED_ATTEMPTS if kind == "throttled" else MAX_ATTEMPTS
             failure = {
                 **fields,
                 "call": what,
                 "attempt": attempt,
-                "max_attempts": MAX_ATTEMPTS,
+                "max_attempts": limit,
                 "error_type": type(e).__name__,
                 "error": str(e)[:300],
                 "attempt_ms": round((clock() - started) * 1000),
                 "timeout_s": round(timeout, 1),
             }
             backoff = BACKOFF_BASE_S * 2 ** (attempt - 1)
+            if kind == "throttled":
+                backoff *= 0.5 + 0.5 * _jitter()
             if kind == "fatal":
                 outcome, error = "fatal", LLMError(f"{what} failed: {e}")
-            elif attempt == MAX_ATTEMPTS:
-                outcome, error = "gave_up", LLMError(f"{what} failed after {MAX_ATTEMPTS} tries: {e}")
+            elif attempt >= limit:
+                outcome, error = "gave_up", LLMError(f"{what} failed after {attempt} tries: {e}")
             elif (
                 scope is not None
                 and scope.deadline is not None
@@ -274,6 +301,13 @@ def _with_retries(
 
 def _is_transient_status(code: int | None) -> bool:
     return code is not None and (code == 429 or code >= 500)
+
+
+def _status_kind(code: int | None) -> Classification:
+    """How a provider's HTTP status is retried: 429 throttled, other 5xx transient, the rest fatal."""
+    if code == 429:
+        return "throttled"
+    return "transient" if _is_transient_status(code) else "fatal"
 
 
 class _InvalidJSON(Exception):
@@ -367,7 +401,7 @@ _GOOGLE_OK_FINISH = {genai_types.FinishReason.STOP, None}
 
 def _classify_google(e: BaseException) -> Classification:
     if isinstance(e, genai_errors.APIError):
-        return "transient" if _is_transient_status(e.code) else "fatal"
+        return _status_kind(e.code)
     if isinstance(e, _GOOGLE_TIMEOUTS):
         return "transient"
     return None
@@ -561,7 +595,7 @@ def _classify_openai(e: BaseException) -> Classification:
     if isinstance(e, openai.APITimeoutError):
         return "transient"
     if isinstance(e, openai.APIStatusError):
-        return "transient" if _is_transient_status(e.status_code) else "fatal"
+        return _status_kind(e.status_code)
     if isinstance(e, openai.OpenAIError):
         return "fatal"
     return None
@@ -602,7 +636,8 @@ class OpenRouterLLM:
                 err = (r.model_extra or {}).get("error") or {}
                 code = err.get("code") if isinstance(err, dict) else None
                 if isinstance(code, int) and _is_transient_status(code):
-                    raise _Transient(f"OpenRouter error {code}: {err.get('message')}")
+                    error = _Throttled if code == 429 else _Transient
+                    raise error(f"OpenRouter error {code}: {err.get('message')}")
                 raise LLMError(f"OpenRouter returned no choices for {model}: {err or 'no error given'}")
             return r
 
