@@ -146,8 +146,7 @@ cd web && npm ci && cp .env.example .env.local && npm run dev   # http://localho
 
 ## Team
 
-Team Argus: Hemant Kumar BK (team leader; product and engineering). Team members: Aryan Yadav, Kirtee Shingan,
-T J Tejas Maladhkar.
+Team Argus: Hemant Kumar BK (product and engineering), Aryan Yadav, Kirtee Shingan, T J Tejas Maladhkar.
 
 ## Licence
 
