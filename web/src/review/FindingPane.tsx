@@ -1,8 +1,9 @@
 // Middle pane (UI_SPEC 3.2): the clause text verbatim, then the finding card: type chip, rationale, citation chip,
-// monitor badge, the outdated-reference chain as three boxes, and the officer's decision.
+// monitor badge, the outdated-reference chain as three boxes with its "What changed" panel, and the officer's decision.
 import type { ReactNode } from "react";
 import { FAILED_CHIP, chipFor, outdatedChain, type Badge, type ClauseRow, type InjectionCatch, type OutdatedChain } from "../data/selectors";
 import type { Citation, FindingDoc, StepDoc } from "../data/types";
+import { DiffView } from "./DiffView";
 import { MonitorBadge } from "./MonitorBadge";
 import { SignoffActions, type SubmitSignoff } from "./SignoffActions";
 import { Spinner, StatusChip } from "./StatusChip";
@@ -115,6 +116,7 @@ function FindingCard({
       )}
 
       {chain && <ChainView chain={chain} shown={shown} onShow={onShowCitation} />}
+      {chain?.current && <DiffView chain={{ ...chain, current: chain.current }} />}
 
       {finding.citation && (
         <p className="cites">

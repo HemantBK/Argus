@@ -1,0 +1,88 @@
+/* "What changed" panel under the outdated-reference chain. Tokens only (src/styles/tokens.css). Colours follow the
+   chain: the withdrawn side uses the outdated tint, the side in force the ok tint. Every difference also has a
+   non-colour cue (strike-through or underline) and a visually hidden text label. */
+.diff-view {
+  margin: 0 0 calc(var(--space) * 2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.diff-summary {
+  cursor: pointer;
+  padding: var(--space) calc(var(--space) * 1.5);
+  font-weight: 700;
+}
+.diff-body {
+  padding: 0 calc(var(--space) * 1.5) calc(var(--space) * 1.5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  font-size: 14px;
+}
+.diff-body p {
+  margin: 0;
+}
+.diff-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space);
+}
+.diff-side {
+  min-width: 0;
+  padding: var(--space);
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.diff-old {
+  border-color: var(--status-outdated);
+}
+.diff-new {
+  border-color: var(--status-ok);
+}
+.diff-side-head {
+  margin: 0 0 calc(var(--space) * 0.5);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.diff-dates {
+  font-size: 13px;
+}
+.diff-quote {
+  margin: calc(var(--space) * 0.5) 0 0;
+  padding: 0;
+  line-height: 1.6;
+}
+.diff-view del,
+.diff-removed {
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  background: var(--status-outdated-bg);
+  color: var(--text);
+}
+.diff-view ins,
+.diff-added {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  background: var(--status-ok-bg);
+  color: var(--text);
+}
+.diff-legend {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+/* Old words outside the stretch that lines up with the quoted passage in force: shown for context, not compared.
+   Muted text, no strike and no tint, plus a visually hidden "not compared" label. */
+.diff-outside {
+  color: var(--text-muted);
+}
+/* Paragraph and sub-paragraph numbers on either side ("(1)", "10."): not wording, so never compared or counted.
+   Muted like the words outside, with its own visually hidden "numbering, not compared" label. */
+.diff-numbering {
+  color: var(--text-muted);
+}
