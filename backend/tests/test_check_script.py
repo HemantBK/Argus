@@ -1114,3 +1114,119 @@ def test_deploy_samples_blocked_without_access(
 
 def test_sample_provider_matches_the_backend() -> None:
     assert check.SAMPLE_PROVIDER == SAMPLE_PROVIDER
+
+
+# ------------------------------------------------------------------------------------------- pre-commit hook
+# A stand-in for scripts/check.py: it records which copy ran (its label, its path, its arguments and the
+# directory it ran in) and exits with the given code. The hook must run the copy in the index.
+FAKE_CHECKER = """import json, os, sys
+run = {{"label": {label!r}, "path": sys.argv[0], "args": sys.argv[1:], "cwd": os.getcwd()}}
+with open(os.environ["ARGUS_HOOK_LOG"], "a", encoding="utf-8") as log:
+    log.write(json.dumps(run) + "\\n")
+sys.exit({code})
+"""
+
+
+def _hook_repo(tmp_path: Path) -> Path:
+    """A repo with the real install-hooks.sh, a backend/.venv/bin/python that runs this interpreter, a
+    committed scripts/check.py (labelled "committed"), and the hook installed."""
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    shutil.copy(REPO / "scripts" / "install-hooks.sh", repo / "scripts" / "install-hooks.sh")
+    venv_bin = repo / "backend" / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    (venv_bin / "python").symlink_to(sys.executable)
+    (repo / ".gitignore").write_text("backend/.venv/\n", encoding="utf-8")
+    (repo / "scripts" / "check.py").write_text(
+        FAKE_CHECKER.format(label="committed", code=0), encoding="utf-8"
+    )
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "--no-verify", "-m", "Start")
+    subprocess.run(
+        ["sh", "scripts/install-hooks.sh"], cwd=repo, check=True, capture_output=True, env=_hook_env(tmp_path)
+    )
+    return repo
+
+
+def _hook_env(tmp_path: Path) -> dict[str, str]:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(
+        GIT_AUTHOR_NAME="Tester",
+        GIT_AUTHOR_EMAIL="tester@example.com",
+        GIT_COMMITTER_NAME="Tester",
+        GIT_COMMITTER_EMAIL="tester@example.com",
+        GIT_CONFIG_GLOBAL=os.devnull,
+        GIT_CONFIG_NOSYSTEM="1",
+        ARGUS_HOOK_LOG=str(tmp_path / "hook.log"),
+        TMPDIR=str(tmp_path / "tmp"),
+    )
+    (tmp_path / "tmp").mkdir(exist_ok=True)
+    return env
+
+
+def _commit(repo: Path, tmp_path: Path) -> tuple[subprocess.CompletedProcess[str], list[dict[str, Any]]]:
+    log = tmp_path / "hook.log"
+    log.unlink(missing_ok=True)
+    proc = subprocess.run(
+        ["git", "commit", "-q", "-m", "Change"],
+        cwd=repo,
+        env=_hook_env(tmp_path),
+        capture_output=True,
+        text=True,
+    )
+    runs = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()] if log.exists() else []
+    return proc, runs
+
+
+@pytest.mark.parametrize(
+    ("staged_code", "worktree_code", "committed"),
+    [(0, 1, True), (1, 0, False)],
+    ids=["staged checker passes, working tree would fail", "staged checker fails, working tree would pass"],
+)
+def test_pre_commit_hook_runs_the_staged_checker(
+    tmp_path: Path, staged_code: int, worktree_code: int, committed: bool
+) -> None:
+    repo = _hook_repo(tmp_path)
+    checker = repo / "scripts" / "check.py"
+    checker.write_text(FAKE_CHECKER.format(label="staged", code=staged_code), encoding="utf-8")
+    git(repo, "add", "scripts/check.py")
+    checker.write_text(FAKE_CHECKER.format(label="worktree", code=worktree_code), encoding="utf-8")
+    head = git(repo, "rev-parse", "HEAD")
+
+    proc, runs = _commit(repo, tmp_path)
+
+    assert [r["label"] for r in runs] == ["staged"], proc.stderr
+    assert runs[0]["args"] == ["commit", "--fast"]
+    assert (
+        Path(runs[0]["cwd"]).resolve() == repo.resolve()
+    )  # check.py --repo defaults to the working directory
+    assert not Path(runs[0]["path"]).exists(), "the hook leaves its copy of the staged checker behind"
+    assert list((tmp_path / "tmp").iterdir()) == []
+    assert (proc.returncode == 0) is committed, proc.stderr
+    assert (git(repo, "rev-parse", "HEAD") != head) is committed
+
+
+def test_pre_commit_hook_runs_the_staged_checker_when_only_other_files_change(tmp_path: Path) -> None:
+    repo = _hook_repo(tmp_path)
+    (repo / "scripts" / "check.py").write_text(
+        FAKE_CHECKER.format(label="worktree", code=1), encoding="utf-8"
+    )
+    (repo / "notes.txt").write_text("FAKE change\n", encoding="utf-8")
+    git(repo, "add", "notes.txt")
+
+    proc, runs = _commit(repo, tmp_path)
+
+    assert [r["label"] for r in runs] == ["committed"], proc.stderr
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_pre_commit_hook_stops_when_the_checker_is_not_staged(tmp_path: Path) -> None:
+    repo = _hook_repo(tmp_path)
+    git(repo, "rm", "-q", "--cached", "scripts/check.py")
+
+    proc, runs = _commit(repo, tmp_path)
+
+    assert runs == []
+    assert proc.returncode != 0
+    assert "scripts/check.py is not staged" in proc.stderr
