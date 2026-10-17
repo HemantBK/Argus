@@ -21,6 +21,14 @@ details} plus <gate>.log (HTTP and gcloud transcript, secrets redacted) and <gat
 back). PASS is the conjunction of the explicit criteria listed in details.criteria; exit code 0 on PASS, 1 on
 FAIL, 2 when the gate could not run (blocked).
 
+Each clause of a live run is classified (classify_clauses): reviewed by the run's agent model ("strong"),
+reviewed by the fallback model because the agent model was busy ("fallback", PASS, reported as "strong N /
+fallback M"), failed with a provider failure on that clause, a 429, 5xx or timeout, on any model, its error
+starting with runs.PROVIDER_BUSY ("capacity": still FAIL, with the reason "provider capacity: wait and
+re-run"; never green), or failed for any other reason ("our_code": FAIL). A clause that only ran out of time
+with no provider failure behind it (runs.OUT_OF_TIME) is our_code: the review was too slow. The smoke also
+reports how many clauses the agent model itself completed.
+
 Spend safety: only smoke and hero call Gemini (through POST /api/runs). They hold an exclusive lock, so two
 live gates never run at once, and every POST is counted in a ledger in the state file; a POST that would take
 the ledger past --budget (default 14) is refused. Test users are anonymous Firebase users minted with the
@@ -95,6 +103,10 @@ CALL_FIELDS = (
     "latency_ms",
     "cost_usd_estimate",
 )
+# backend runs.PROVIDER_BUSY: the start of a failed clause's error when Gemini itself failed on that clause
+# (provider capacity). A clause that only ran out of time (runs.OUT_OF_TIME) does not start with it.
+PROVIDER_BUSY = "Gemini capacity was busy; try again shortly."
+CAPACITY_REASON = "provider capacity: wait and re-run"
 SECRET_KEYS = ("idToken", "refreshToken", "id_token", "refresh_token", "access_token", "accessToken")
 
 
@@ -619,6 +631,68 @@ def label_agreement(
     return {"agree": agree, "n": len(gold), "clauses": rows}
 
 
+@dataclass
+class ClauseOutcomes:
+    strong: list[str] = field(default_factory=list)  # reviewed by the run's agent model
+    fallback: list[str] = field(default_factory=list)  # reviewed by the fallback model (agent model busy)
+    capacity: dict[str, str] = field(default_factory=dict)  # failed: Gemini busy (clause id -> error)
+    our_code: dict[str, str] = field(default_factory=dict)  # failed for any other reason (clause id -> why)
+
+    def split(self) -> str:
+        return f"strong {len(self.strong)} / fallback {len(self.fallback)}"
+
+
+def classify_clauses(docs: RunDocs, clause_ids: list[str]) -> ClauseOutcomes:
+    """How each clause of a run ended, from its finding (see the module docstring). A finding whose provenance
+    does not add up (no agent_model, or a fallback model without a reason) is our code's fault."""
+    run_model = (docs.run or {}).get("agent_model")
+    out = ClauseOutcomes()
+    for cid in clause_ids:
+        f = docs.findings.get(cid)
+        if f is None:
+            out.our_code[cid] = "no finding"
+            continue
+        error = f.get("error")
+        model, reason = f.get("agent_model"), f.get("fallback_reason")
+        if error:
+            if str(error).startswith(PROVIDER_BUSY):
+                out.capacity[cid] = str(error)
+            else:
+                out.our_code[cid] = str(error)
+        elif model and model == run_model and not reason:
+            out.strong.append(cid)
+        elif model and model != run_model and reason:
+            out.fallback.append(cid)
+        else:
+            out.our_code[cid] = (
+                f"provenance: agent_model {model!r}, run agent_model {run_model!r}, "
+                f"fallback_reason {reason!r}"
+            )
+    return out
+
+
+def clause_criteria(tag: str, docs: RunDocs, clause_ids: list[str]) -> tuple[list[Criterion], ClauseOutcomes]:
+    """No clause failed in our code, and none failed because Gemini was busy (a FAIL to wait out and re-run,
+    never a pass). A clause the fallback model reviewed passes."""
+    o = classify_clauses(docs, clause_ids)
+    summary_failed = ((docs.run or {}).get("summary") or {}).get("failed")
+    c = [
+        Criterion(
+            f"{tag}.no_our_code_errors",
+            not o.our_code and summary_failed == len(o.capacity),
+            {"our_code": o.our_code, "summary.failed": summary_failed},
+            "every clause reviewed, or failed only because Gemini was busy",
+        ),
+        Criterion(
+            f"{tag}.no_provider_capacity_failures",
+            not o.capacity,
+            {"capacity": o.capacity, "reason": CAPACITY_REASON} if o.capacity else {},
+            "no clause failed because Gemini was busy on both models",
+        ),
+    ]
+    return c, o
+
+
 def hero_criteria(
     tag: str,
     policy_id: str,
@@ -634,16 +708,7 @@ def hero_criteria(
         Criterion(f"{tag}.readback_200", all(v == 200 for v in docs.statuses.values()), docs.statuses, 200)
     )
     c.append(Criterion(f"{tag}.status_done", run.get("status") == "done", run.get("status"), "done"))
-    summary_failed = (run.get("summary") or {}).get("failed")
-    errors = {cid: d.get("error") for cid, d in f.items() if d.get("error")}
-    c.append(
-        Criterion(
-            f"{tag}.zero_failed_clauses",
-            summary_failed == 0 and not errors,
-            {"summary.failed": summary_failed, "errors": errors},
-            0,
-        )
-    )
+    c += clause_criteria(tag, docs, sorted(expected["policies"][policy_id]))[0]
     c.append(
         Criterion(f"{tag}.provider_vertex", run.get("provider") == "vertex", run.get("provider"), "vertex")
     )
@@ -876,12 +941,16 @@ def cmd_smoke(args: argparse.Namespace, gate: Gate) -> None:
     docs = read_run(Firestore(gate, user.id_token), run_id)
     gate.data[run_id] = docs.__dict__
     expected = json.loads(EXPECTED.read_text(encoding="utf-8"))
-    errors = {cid: d.get("error") for cid, d in docs.findings.items() if d.get("error")}
-    gate.check(
-        "zero_failed_clauses",
-        not errors and (docs.run or {}).get("status") == "done",
-        {"status": (docs.run or {}).get("status"), "errors": errors},
-        "status done, no clause errors",
+    status = (docs.run or {}).get("status")
+    gate.check("status_done", status == "done", status, "done")
+    clause_crit, outcomes = clause_criteria("smoke", docs, sorted(expected["policies"]["policy_a"]))
+    for crit in clause_crit:
+        gate.check(crit.name, crit.ok, crit.observed, crit.expected)
+    gate.details["reviewers"] = outcomes.split()
+    gate.details["primary_completed"] = len(outcomes.strong)
+    print(
+        f"  reviewers: {outcomes.split()}; the agent model completed {len(outcomes.strong)} clause(s)",
+        flush=True,
     )
     entries: list[dict[str, Any]] = []
     if docs.run:
@@ -949,11 +1018,13 @@ def cmd_hero(args: argparse.Namespace, gate: Gate) -> None:
             hits = model_turn_hits(docs, entries)
             gate.check(f"{tag}.no_model_turn_error", not hits, hits, [])
             row["label_agreement"] = label_agreement(policy_id, docs.findings, expected)
+            row["reviewers"] = classify_clauses(docs, sorted(expected["policies"][policy_id])).split()
             row["summary"] = (docs.run or {}).get("summary")
             row["latency_ms"] = (docs.run or {}).get("latency_ms")
             row["cost_usd_estimate"] = (docs.run or {}).get("cost_usd_estimate")
             print(
-                f"  label agreement {row['label_agreement']['agree']}/{row['label_agreement']['n']}",
+                f"  label agreement {row['label_agreement']['agree']}/{row['label_agreement']['n']}; "
+                f"reviewers {row['reviewers']}",
                 flush=True,
             )
             if r.status != 200 or hits:

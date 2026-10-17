@@ -8,13 +8,22 @@ import copy
 import importlib.util
 import json
 import sys
+import uuid
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import pytest
 
+from argus_api import runs
+from argus_api.breaker import Breaker
+from argus_api.config import FALLBACK_MODELS, GEMINI_AGENT_MODEL
 from argus_api.corpus.store import Corpus
+from argus_api.llm import LLMError
+from argus_api.llm_fake import FakeLLM, turn
+from argus_api.schema import Limits
+from argus_api.store_fake import MemoryStore
+from tests.run_support import AGENT_MODEL, MONITOR_MODEL, draft_reply, fixture_corpus, policy_llm, settings
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -59,7 +68,13 @@ def _good_docs(policy_id: str) -> Any:
         rep = None
         if g.get("replaced_citation"):
             rep = _citation(g["replaced_citation"], withdrawn_by="RBI/2025-26/100")
-        findings[cid] = {"clause_id": cid, "label": g["label"], "citation": cit, "replaced_citation": rep}
+        findings[cid] = {
+            "clause_id": cid,
+            "label": g["label"],
+            "citation": cit,
+            "replaced_citation": rep,
+            "agent_model": GEMINI_AGENT_MODEL,
+        }
         seq += 1
         steps.append({"seq": seq, "clause_id": cid, "kind": "draft", "model": "gemini-3.8-flash"})
         seq += 1
@@ -83,7 +98,12 @@ def _good_docs(policy_id: str) -> Any:
         )
         audit.append({"seq": len(audit) + 1, "event": "finding_recorded"})
     audit.append({"seq": len(audit) + 1, "event": "run_finished"})
-    run = {"status": "done", "provider": "vertex", "summary": {"failed": 0}}
+    run = {
+        "status": "done",
+        "provider": "vertex",
+        "summary": {"failed": 0},
+        "agent_model": GEMINI_AGENT_MODEL,
+    }
     statuses = {"run": 200, "steps": 200, "findings": 200, "audit": 200}
     return e2e.RunDocs(run, steps, findings, audit, statuses)
 
@@ -138,7 +158,13 @@ def test_hero_oracle_passes_a_good_run(verify: Any) -> None:
     ("policy_id", "mutate", "fails"),
     [
         ("policy_a", lambda d: d.run.update(status="failed"), "r.status_done"),
-        ("policy_a", lambda d: d.findings["c3"].update(error="boom"), "r.zero_failed_clauses"),
+        ("policy_a", lambda d: d.findings["c3"].update(error="boom"), "r.no_our_code_errors"),
+        (
+            "policy_a",
+            lambda d: d.findings["c3"].update(error=f"{runs.PROVIDER_BUSY} both busy"),
+            "r.no_provider_capacity_failures",
+        ),
+        ("policy_a", lambda d: d.findings["c3"].update(agent_model=None), "r.no_our_code_errors"),
         ("policy_a", lambda d: d.run.update(provider="openrouter"), "r.provider_vertex"),
         ("policy_a", lambda d: d.findings.pop("c8"), "r.pinned_clause_ids"),
         ("policy_a", lambda d: d.audit.pop(), "r.audit_complete"),
@@ -188,6 +214,137 @@ def test_hero_oracle_catches_each_defect(policy_id: str, mutate: Any, fails: str
     crit = e2e.hero_criteria("r", policy_id, docs, EXPECTED, verify)
     assert fails in _failed(crit)
     assert not e2e.judge(crit)
+
+
+# ---- clause outcomes: strong, fallback, provider capacity, our code ---------------------------------------
+
+LITE = FALLBACK_MODELS["vertex"]
+CLAUSES = sorted(EXPECTED["policies"]["policy_a"])
+
+
+def _fallback(d: Any, cid: str) -> None:
+    d.findings[cid].update(
+        agent_model=LITE, fallback_reason="Gemini 3.8 Flash was busy (HTTP 429) after 5 tries"
+    )
+
+
+def _capacity(d: Any, cid: str) -> None:
+    d.findings[cid].update(
+        error=f"{runs.PROVIDER_BUSY} both models were busy.", label="insufficient_evidence"
+    )
+    d.run["summary"]["failed"] += 1
+
+
+def test_the_oracle_reads_the_backends_busy_marker() -> None:
+    assert e2e.PROVIDER_BUSY == runs.PROVIDER_BUSY
+
+
+def test_a_clause_the_fallback_reviewed_passes_and_is_counted(verify: Any) -> None:
+    docs = copy.deepcopy(_good_docs("policy_a"))
+    _fallback(docs, "c1")
+    _fallback(docs, "c4")
+    o = e2e.classify_clauses(docs, CLAUSES)
+    assert o.fallback == ["c1", "c4"] and len(o.strong) == len(CLAUSES) - 2
+    assert o.split() == f"strong {len(CLAUSES) - 2} / fallback 2"
+    assert _failed(e2e.hero_criteria("r", "policy_a", docs, EXPECTED, verify)) == []
+
+
+def test_a_clause_both_models_failed_busy_is_a_capacity_fail_never_green() -> None:
+    docs = copy.deepcopy(_good_docs("policy_a"))
+    _capacity(docs, "c3")
+    o = e2e.classify_clauses(docs, CLAUSES)
+    assert list(o.capacity) == ["c3"] and o.our_code == {}
+    crit, _ = e2e.clause_criteria("r", docs, CLAUSES)
+    assert _failed(crit) == ["r.no_provider_capacity_failures"]
+    assert crit[1].observed["reason"] == e2e.CAPACITY_REASON == "provider capacity: wait and re-run"
+    assert not e2e.judge(crit)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda d: d.findings["c3"].update(
+            error="review of clause c3 failed at the draft step: AgentError: x"
+        ),
+        lambda d: d.findings.pop("c3"),
+        lambda d: d.findings["c3"].update(agent_model=LITE),  # another model, no reason
+        lambda d: d.findings["c3"].update(fallback_reason="busy"),  # a reason, but the run's own model
+        lambda d: d.run["summary"].update(failed=1),  # the run counts a failure no finding shows
+    ],
+    ids=["error", "missing", "model_without_reason", "reason_without_model", "summary"],
+)
+def test_anything_but_a_busy_provider_is_our_code(mutate: Any) -> None:
+    docs = copy.deepcopy(_good_docs("policy_a"))
+    mutate(docs)
+    crit, _ = e2e.clause_criteria("r", docs, CLAUSES)
+    assert _failed(crit) == ["r.no_our_code_errors"]
+
+
+def _runner_error(script: Any) -> str:
+    """The error the real Runner saves for clause c4 of policy_a when its review follows `script` (the run's
+    agent model only, no fallback model)."""
+    store = MemoryStore()
+    store.set(
+        runs.LIMITS_PATH,
+        Limits(daily_run_cap=9, hourly_run_cap=9, per_user_daily_run_cap=9, enabled=True).model_dump(),
+    )
+    s = settings()
+    runner = runs.Runner(
+        store, policy_llm("policy_a", [("c4", script)]), s, fixture_corpus(), breaker=Breaker(s.agent_model)
+    )
+    run = runner.run_review(uuid.uuid4().hex, "uid", runs.load_policy("policy_a"))
+    error = store.get(f"{runs.run_path(run.run_id)}/findings/c4")["error"]
+    assert isinstance(error, str)
+    return error
+
+
+@pytest.mark.parametrize(
+    ("kind", "cause", "model", "expected"),
+    [
+        ("deadline", None, "agent", "our_code"),  # only our deadline: the review was too slow
+        ("deadline", "transient", "agent", "capacity"),  # a 504 came first, then no retry fitted
+        ("throttled", None, "monitor", "capacity"),  # the monitor model was busy (no fallback for it)
+    ],
+    ids=["out_of_time", "busy_then_out_of_time", "monitor_busy"],
+)
+def test_the_oracle_classifies_the_runners_own_errors(
+    kind: str, cause: Any, model: str, expected: str
+) -> None:
+    if model == "agent":
+        script = FakeLLM(turns=[LLMError("cut", kind=kind, model=AGENT_MODEL, cause=cause)])  # type: ignore[arg-type]
+    else:
+        busy = LLMError("busy", kind=kind, model=MONITOR_MODEL)  # type: ignore[arg-type]
+        script = FakeLLM(turns=[turn(text="Ready.")], json_replies=[draft_reply("policy_a", "c4"), busy])
+    error = _runner_error(script)
+    docs = copy.deepcopy(_good_docs("policy_a"))
+    docs.findings["c4"].update(error=error, label="insufficient_evidence")
+    docs.run["summary"]["failed"] += 1
+    o = e2e.classify_clauses(docs, CLAUSES)
+    assert (list(o.capacity) if expected == "capacity" else list(o.our_code)) == ["c4"]
+    assert error.startswith(runs.OUT_OF_TIME if expected == "our_code" else runs.PROVIDER_BUSY)
+
+
+def test_smoke_reports_the_split_and_what_the_agent_model_completed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, verify: Any
+) -> None:
+    docs = copy.deepcopy(_good_docs("policy_a"))
+    _fallback(docs, "c5")
+    monkeypatch.setattr(e2e, "_start", lambda gate, need_health=True: {})
+    monkeypatch.setattr(e2e, "_check_deploy", lambda gate, h: None)
+    monkeypatch.setattr(e2e, "_corpus_verifier", lambda gate, h: verify)
+    monkeypatch.setattr(e2e, "web_api_key", lambda: "k")
+    monkeypatch.setattr(e2e, "mint_user", lambda gate, key: e2e.User("uid", "id", "refresh"))
+    monkeypatch.setattr(e2e, "post_run", lambda *a: ("run1", e2e.Resp(200, "{}")))
+    monkeypatch.setattr(e2e, "read_run", lambda fs, run_id: docs)
+    monkeypatch.setattr(e2e, "settled_run_logs", lambda *a: [])
+    monkeypatch.setattr(e2e, "read_logs", lambda *a, **k: [])
+    docs.run["started_at"] = docs.run["finished_at"] = "2026-10-17T12:00:00Z"
+    gate = e2e.Gate("smoke", tmp_path)
+    args = e2e.parse_args(["--state", str(tmp_path / "state.json"), "--out", str(tmp_path), "smoke"])
+    e2e.cmd_smoke(args, gate)
+    assert gate.details["reviewers"] == f"strong {len(CLAUSES) - 1} / fallback 1"
+    assert gate.details["primary_completed"] == len(CLAUSES) - 1
+    assert _failed(gate.criteria) == []
 
 
 def test_judge_needs_criteria() -> None:
