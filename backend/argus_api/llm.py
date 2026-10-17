@@ -467,12 +467,10 @@ class GoogleLLM:
             if m.role == "system":
                 system.append(m.content)
             elif m.role == "user":
-                text = genai_types.Part(text=m.content)
-                last = contents[-1] if contents else None
-                if last is not None and last.role == "user" and last.parts:
-                    last.parts.append(text)  # a note after tool results joins their turn: roles alternate
-                else:
-                    contents.append(genai_types.Content(role="user", parts=[text]))
+                # Always its own turn. Vertex AI rejects a turn that mixes function responses with text
+                # ("Requests ending with a model turn are not supported", seen live 2026-10-17), so a
+                # note after tool results (the step monitor's) must not join their turn.
+                contents.append(genai_types.Content(role="user", parts=[genai_types.Part(text=m.content)]))
             elif m.role == "assistant":
                 parts = [genai_types.Part(text=m.content)] if m.content else []
                 for tc in m.tool_calls:

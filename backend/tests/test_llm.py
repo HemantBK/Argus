@@ -555,7 +555,8 @@ def test_every_failed_attempt_is_logged_with_what_happens_next(caplog: pytest.Lo
     assert [f["backoff_s"] for f in fields[:-1]] == expected_backoff(MAX_ATTEMPTS - 1)
 
 
-def test_google_a_note_after_tool_results_joins_their_turn() -> None:
+def test_google_a_note_after_tool_results_gets_its_own_turn() -> None:
+    """Vertex AI rejects a turn mixing function responses with text, so the monitor's note is separate."""
     llm, models, _ = google([g_text("ok")])
     tc = ToolCall(id="c1", name=TOOL.name, args={"para": "1"})
     llm.chat(
@@ -569,6 +570,12 @@ def test_google_a_note_after_tool_results_joins_their_turn() -> None:
         [TOOL],
     )
     contents = models.requests[0]["contents"]
-    assert [c.role for c in contents] == ["user", "model", "user"]
-    last = contents[-1].parts
-    assert last[0].function_response is not None and last[1].text == "monitor note"
+    assert [c.role for c in contents] == ["user", "model", "user", "user"]
+    responses, note = contents[2].parts, contents[3].parts
+    assert all(p.function_response is not None for p in responses)
+    assert [p.text for p in note] == ["monitor note"]
+    for c in contents:
+        kinds = {
+            "function_response" if p.function_response else "text" for p in c.parts if not p.function_call
+        }
+        assert len(kinds) <= 1, f"a {c.role} turn mixes {kinds}"
