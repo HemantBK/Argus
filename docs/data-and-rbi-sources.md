@@ -28,6 +28,10 @@ Withdrawal evidence: Consolidation of Regulations - Withdrawal of circulars, RBI
 (https://www.rbi.org.in/Scripts/NotificationUserWithdrawnCircular.aspx), where the Digital Lending Directions,
 2025 appear without the "@" mark, so they were withdrawn with immediate effect.
 
+The library holds issued text only: drafts and consultation papers are not in it, and from the Credit Facilities
+Directions only Chapter III (paras 6-30) is included, not the applicability and definition paragraphs. Para 25(1)
+carries RBI's footnote "Substituted w.e.f. February 13, 2026, vide Reserve Bank of India (Non-Banking Financial Companies – Credit Facilities) Amendment Directions, 2026 dated February 13, 2026"; we have not checked the other Chapter III paragraphs for amendment footnotes.
+
 Only the HTML pages were used; RBI's PDF copies sit behind a human-verification page, which we did not try to get
 past. Annexes published only as PDFs (for example the Key Facts Statement format) are not in the library.
 

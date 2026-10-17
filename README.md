@@ -129,7 +129,8 @@ flowchart LR
 
 - **Narrow scope:** NBFC digital lending only, four RBI instruments, keyword search over 365 paragraphs. Rules
   published only as PDFs (for example the Key Facts Statement format) are cross-referenced, not quoted.
-- **"In force" means in force on the library date**, not a live check against RBI.
+- **"In force" means in force on the library date**, not a live check against RBI. Drafts and unfinalised
+  amendments are not in the library, so no finding can cite them; nor are the applicability and definition paras.
 - **Small samples:** two synthetic 8-clause policies and a 34-case evaluation set; every number carries its n.
 - **The monitor is a fail-safe, not an accuracy boost:** its measured benefit is with a cheaper agent; with the
   shipped agent it was neutral. Its support and injection checks are model judgements and may miss things (the
