@@ -1420,8 +1420,9 @@ MAX_INSTANCES = 3
 REQUEST_TIMEOUT_S = 300
 # The production library (backend/data/corpus + supersession.json), as loaded to Firestore (D-48).
 EXPECTED_FIRESTORE_COUNTS = {"rbi_paragraphs": 365, "rbi_instruments": 4, "supersession": 15}
-# config/limits as set for the competition (D-48): 60 runs a day, 20 an hour, 5 per user, switched on.
-EXPECTED_LIMITS = {"daily_run_cap": 60, "hourly_run_cap": 20, "per_user_daily_run_cap": 5, "enabled": True}
+# config/limits as set for the competition: 100 runs a day (D-67 raised it from 60), 20 an hour and 5 per user
+# (D-48), switched on.
+EXPECTED_LIMITS = {"daily_run_cap": 100, "hourly_run_cap": 20, "per_user_daily_run_cap": 5, "enabled": True}
 WEB_ENV_FILE = "web/.env.production.local"  # the Firebase web config the hosted bundle was built with
 WEB_API_KEY_VAR = "VITE_FIREBASE_API_KEY"
 # Names that must never reach the browser bundle, even without a value next to them.
@@ -2194,7 +2195,7 @@ def limits_problems(fields: dict[str, Any]) -> list[str]:
 
 
 def check_deploy_limits(ctx: Ctx) -> Result:
-    """config/limits reads back as 60 a day, 20 an hour, 5 per user, enabled."""
+    """config/limits reads back as 100 a day, 20 an hour, 5 per user, enabled."""
     rules = ("S-03", "ENG-E9")
     project, _ = _deploy_inputs(ctx)
     token = _firestore_token(ctx)
@@ -2281,9 +2282,180 @@ def check_deploy_cors(ctx: Ctx) -> Result:
     return Result("D-CORS", rules, PASS, f"{origin} allowed; {EVIL_ORIGIN} refused ({evil.status})")
 
 
+# ---- the web build stamp against the API's commit (D-WEB-SHA)
+# web/src/build/versionStamp.ts writes dist/version.json at build time: which commit the hosted bundle came
+# from, whether the tree was dirty, and the settings it resolved. On 18 Oct an old web build stayed live,
+# offering "Try your own clause" while the API's switch (config/custom_limits) was off, and nothing
+# noticed.
+WEB_VERSION_FILE = "version.json"
+WEB_VERSION_FIELDS: dict[str, type] = {
+    "sha": str,
+    "dirty": bool,
+    "builtAt": str,
+    "customClauseOpen": bool,
+    "apiBase": str,
+}
+# A web build is compatible with the serving API when the two commits are equal, or when the web commit
+# descends from the API commit and changes nothing the API runs. The evaluation harness lives in
+# backend/argus_api/eval but is not part of the served API.
+API_PATHSPEC = ("backend/argus_api", ":!backend/argus_api/eval")
+CUSTOM_LIMITS_DOC = "config/custom_limits"
+FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _looks_like_html(res: HttpResult) -> bool:
+    """Hosting rewrites every unknown path to /index.html (HTTP 200), so a missing file comes back as HTML."""
+    ctype = res.headers.get("content-type", "").lower()
+    return "text/html" in ctype or res.body.lstrip()[:15].lower().startswith((b"<!doctype", b"<html"))
+
+
+def fetch_web_version(ctx: Ctx, origin: str) -> dict[str, Any]:
+    """The hosted version.json, checked for shape. _Fail when it is missing, HTML or malformed."""
+    url = f"{origin}/{WEB_VERSION_FILE}"
+    res = http(ctx, url, headers={"Cache-Control": "no-cache"})
+    if res.status is None:
+        raise Blocked(f"{url} unreachable: {res.error}")
+    if res.status != 200:
+        raise _Fail(f"{url} returned HTTP {res.status}: the hosted build has no version stamp")
+    if _looks_like_html(res):
+        raise _Fail(
+            f"{url} is served as HTML (the index.html rewrite): the hosted build has no version stamp, "
+            "so nothing says which commit is live"
+        )
+    try:
+        stamp = json.loads(res.body)
+    except ValueError:
+        raise _Fail(f"{url} is not JSON") from None
+    if not isinstance(stamp, dict):
+        raise _Fail(f"{url} is not a JSON object")
+    ctx.internal("web-version", json.dumps(stamp, indent=2, sort_keys=True))
+    bad = [
+        f"{name} is {stamp.get(name)!r}, expected a {kind.__name__}"
+        for name, kind in WEB_VERSION_FIELDS.items()
+        if not isinstance(stamp.get(name), kind)
+    ]
+    if not bad and not FULL_SHA.match(stamp["sha"]):
+        bad.append(f"sha is {stamp['sha']!r}, not a full commit sha")
+    if bad:
+        raise _Fail(f"{url} is malformed: " + "; ".join(bad))
+    return stamp
+
+
+def fetch_api_sha(ctx: Ctx, api: str) -> str:
+    res = http(ctx, f"{api}/health", timeout_s=HEALTH_TIMEOUT_S)
+    if res.status is None:
+        raise Blocked(f"{api}/health unreachable: {res.error}")
+    if res.status != 200:
+        raise _Fail(f"{api}/health returned {res.status}")
+    try:
+        sha = json.loads(res.body).get("git_sha")
+    except (ValueError, AttributeError):
+        raise _Fail(f"{api}/health is not a JSON object") from None
+    if not isinstance(sha, str) or not FULL_SHA.match(sha):
+        raise _Fail(f"{api}/health git_sha is {sha!r}: the API did not record its commit")
+    return sha
+
+
+def resolve_commit(ctx: Ctx, rev: str) -> str | None:
+    """The full sha of rev (a sha, HEAD, a branch) in this clone, or None when the clone does not have it."""
+    run = ctx.git("rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
+    sha = _stdout(run).strip()
+    return sha if run.ok and FULL_SHA.match(sha) else None
+
+
+def web_api_compatibility(ctx: Ctx, api_sha: str, web_sha: str) -> list[str]:
+    """Why the web commit may not run against the API commit (empty when it may)."""
+    if web_sha == api_sha:
+        return []
+    missing = [
+        f"{name} commit {sha[:12]} is not in this clone (git fetch)"
+        for name, sha in (("API", api_sha), ("web", web_sha))
+        if resolve_commit(ctx, sha) is None
+    ]
+    if missing:
+        return [*missing, "cannot show the web build is compatible with the API"]
+    ancestor = ctx.git("merge-base", "--is-ancestor", api_sha, web_sha)
+    if ancestor.exit_code == 1:
+        return [f"web {web_sha[:12]} does not descend from API {api_sha[:12]}"]
+    if not ancestor.ok:
+        return [f"git merge-base failed: {ancestor.output.strip()[:200]}"]
+    diff = ctx.git("diff", "--name-only", f"{api_sha}..{web_sha}", "--", *API_PATHSPEC)
+    if not diff.ok:
+        return [f"git diff failed: {diff.output.strip()[:200]}"]
+    changed = _stdout(diff).split()
+    if changed:
+        return [
+            f"web {web_sha[:12]} changes the API code since the serving API {api_sha[:12]} "
+            f"({len(changed)} files, e.g. {', '.join(changed[:5])}): "
+            "deploy the API first (release.sh candidate)"
+        ]
+    return []
+
+
+def firestore_get(ctx: Ctx, project: str, path: str) -> dict[str, Any] | None:
+    """One production Firestore document's fields as Python values, or None when the document is missing."""
+    token = _firestore_token(ctx)
+    url = f"{FIRESTORE_API}/projects/{project}/databases/(default)/documents/{path}"
+    res = http(ctx, url, headers={"Authorization": f"Bearer {token}", "x-goog-user-project": project})
+    if res.status == 404:
+        return None
+    if res.status != 200:
+        raise Blocked(f"Firestore REST get {path} failed: {res.error or f'HTTP {res.status}'}")
+    fields = json.loads(res.body or b"{}").get("fields", {})
+    return {k: _firestore_value(v) for k, v in fields.items()}
+
+
+def check_deploy_web_sha(ctx: Ctx) -> Result:
+    """The hosted web build names a clean commit that may run against the serving API, calls the production
+    API, and offers pasting a clause only when the API's switch is on."""
+    rules = ("S-03",)
+    project, api = _deploy_inputs(ctx)
+    origin = _hosting_origin(ctx)
+    try:
+        stamp = fetch_web_version(ctx, origin)
+        api_sha = fetch_api_sha(ctx, api)
+    except _Fail as exc:
+        return Result("D-WEB-SHA", rules, FAIL, str(exc))
+    web_sha = stamp["sha"]
+    problems = []
+    if stamp["dirty"]:
+        problems.append("the web build was made from a tree with uncommitted changes (dirty: true)")
+    if stamp["apiBase"].rstrip("/") != api:
+        problems.append(f"the web build calls {stamp['apiBase']!r}, not the production API {api!r}")
+    expect = getattr(ctx.args, "expect_web_sha", None)
+    if expect:
+        want = resolve_commit(ctx, expect)
+        if want is None:
+            problems.append(f"--expect-web-sha {expect!r} is not a commit in this clone")
+        elif web_sha != want:
+            problems.append(f"web sha {web_sha[:12]} is not --expect-web-sha {expect} ({want[:12]})")
+    problems += web_api_compatibility(ctx, api_sha, web_sha)
+    custom_note = "pasting closed"
+    if stamp["customClauseOpen"]:
+        doc = firestore_get(ctx, project, CUSTOM_LIMITS_DOC)
+        enabled = None if doc is None else doc.get("custom_enabled")
+        if enabled is not True:
+            state = "missing" if doc is None else f"custom_enabled {enabled!r}"
+            problems.append(
+                f"the web build offers 'Try your own clause' but {CUSTOM_LIMITS_DOC} is {state}, "
+                "so the API refuses every pasted clause"
+            )
+        custom_note = f"pasting open, {CUSTOM_LIMITS_DOC} custom_enabled {enabled!r}"
+    relation = "equal" if web_sha == api_sha else "web-only descendant"
+    summary = (
+        f"web {web_sha[:12]} (built {stamp['builtAt']}), API {api_sha[:12]}"
+        + ("" if problems else f" ({relation})")
+        + f"; {custom_note}"
+    )
+    if problems:
+        return Result("D-WEB-SHA", rules, FAIL, summary, problems)
+    return Result("D-WEB-SHA", rules, PASS, f"{summary}; clean build calling {api}")
+
+
 DEPLOY_CHECKS = [
     Check("D-HEALTH", ("S-03", "B-01", "B-02"), check_deploy_health),
     Check("D-WEB", ("S-03", "B-03"), check_deploy_web),
+    Check("D-WEB-SHA", ("S-03",), check_deploy_web_sha),
     Check("D-WEB-SECRETS", ("ENG-E7", "S-03", "G1"), check_deploy_web_secrets),
     Check("D-CORS", ("S-03", "G9"), check_deploy_cors),
     Check("D-NO-TOKEN", ("S-03", "ENG-E9"), check_deploy_no_token),
@@ -2565,6 +2737,273 @@ def check_submission_phrases(ctx: Ctx) -> Result:
     return Result("S-BANNED-PHRASES", rules, PASS, f"no banned phrases in {', '.join(texts)}")
 
 
+# ---- public claims against the live settings (S-CLAIMS)
+# The run caps, model names, library dates and evaluation run ids are written in README.md, docs/*.md and the
+# submission text, and decided elsewhere: config/limits and rbi_instruments in Firestore, /health with
+# config.MODEL_NAMES, and the official evaluation evidence. Each mention must match its source.
+LIMIT_FIELDS = {"daily": "daily_run_cap", "hourly": "hourly_run_cap", "per user": "per_user_daily_run_cap"}
+_RUNS = r"(?:(?:live\s+)?(?:runs?|reviews?)\s+)?"
+CAP_PATTERNS = {
+    "daily": re.compile(rf"\b(\d+)\s+{_RUNS}(?:a|per)\s+day\b", re.I),
+    "hourly": re.compile(rf"\b(\d+)\s+{_RUNS}(?:an|a|per)\s+hour\b", re.I),
+    "per user": re.compile(rf"\b(\d+)\s+{_RUNS}(?:a|per)\s+(?:visitor|user|person|browser)\b", re.I),
+}
+MODEL_NAME_MENTION = re.compile(r"\bGemini\s+\d+(?:\.\d+)?\s+[A-Z][a-z]+(?:-[A-Z][a-z]+)?")
+MODEL_ID_MENTION = re.compile(r"\bgemini-\d+(?:\.\d+)?(?:-[a-z]+)+\b")
+EVAL_RUN_ID = re.compile(r"\b\d{8}T\d{6}Z-[0-9a-f]{6}\b")
+OFFICIAL_RUN_DIR = re.compile(r"^evidence/[^/]+/eval-official/results/(\d{8}T\d{6}Z-[0-9a-f]{6})/")
+HISTORY_HEADING = re.compile(r"(?i)\b(?:history|preliminary|superseded)\b")
+LIBRARY_COLLECTION = "rbi_instruments"  # the library as loaded to production (corpus/store.py)
+LIBRARY_DATE_FIELDS = ("updated_as_on", "snapshot_date")  # RBI's "updated as on" date; the fetch date
+_MONTHS = "jan feb mar apr may jun jul aug sep oct nov dec".split()
+_DATE = r"\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Z][a-z]{2,8}\s+\d{4}|[A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4}"
+DATE_MENTIONS = {
+    "updated as on": re.compile(rf"(?i:updated as on)[\s\"*]+({_DATE})"),
+    "fetched": re.compile(
+        rf"(?i:fetched(?:\s+from\s+rbi\.org\.in)?(?:\s+on)?|fetch date,?)[\s\"*]+({_DATE})"
+    ),
+}
+
+
+def parse_doc_date(text: str) -> str | None:
+    """'15 Jul 2026', 'July 15, 2026' or '2026-07-15' as ISO; None when it is not a date."""
+    text = " ".join(text.split())
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", text)
+    if m:
+        return text
+    m = re.fullmatch(r"(\d{1,2}) ([A-Za-z]+) (\d{4})", text) or re.fullmatch(
+        r"([A-Za-z]+) (\d{1,2}), (\d{4})", text
+    )
+    if not m:
+        return None
+    day, month = (m[1], m[2]) if m[1].isdigit() else (m[2], m[1])
+    month_no = _MONTHS.index(month[:3].lower()) + 1 if month[:3].lower() in _MONTHS else 0
+    if not month_no:
+        return None
+    try:
+        return dt.date(int(m[3]), month_no, int(day)).isoformat()
+    except ValueError:
+        return None
+
+
+def _line_of(text: str, pos: int) -> int:
+    return text.count("\n", 0, pos) + 1
+
+
+def _heading_at(text: str, pos: int) -> str:
+    """The markdown headings that enclose pos (a section and its parents), joined; '' when none."""
+    chain: dict[int, str] = {}
+    for m in re.finditer(r"(?m)^(#{1,6})\s(.*)$", text[:pos]):
+        level = len(m[1])
+        chain = {k: v for k, v in chain.items() if k < level}
+        chain[level] = m[2]
+    return " / ".join(chain[k] for k in sorted(chain))
+
+
+@dataclasses.dataclass
+class ClaimTruth:
+    """What the claims must say; None for a source that could not be read."""
+
+    caps: dict[str, int] | None
+    model_names: set[str] | None
+    model_ids: set[str] | None
+    required_names: list[str]
+    updated_as_on: set[str] | None
+    fetched: set[str] | None
+    official_runs: set[str] | None
+
+
+def claim_mismatches(texts: dict[str, str], truth: ClaimTruth) -> list[str]:
+    """Every mention in texts that disagrees with truth, as 'file:line: ...'."""
+    out: list[str] = []
+    for name, text in texts.items():
+        if truth.caps is not None:
+            for kind, pattern in CAP_PATTERNS.items():
+                for m in pattern.finditer(text):
+                    if int(m[1]) != truth.caps[kind]:
+                        out.append(
+                            f"{name}:{_line_of(text, m.start())}: {' '.join(m[0].split())!r}: "
+                            f"the live {kind} cap (config/limits {LIMIT_FIELDS[kind]}) is {truth.caps[kind]}"
+                        )
+        if truth.model_names is not None:
+            for m in MODEL_NAME_MENTION.finditer(text):
+                said = " ".join(m[0].split())
+                if said not in truth.model_names:
+                    out.append(
+                        f"{name}:{_line_of(text, m.start())}: {said!r} is not a model the API runs "
+                        f"({', '.join(sorted(truth.model_names))})"
+                    )
+        if truth.model_ids is not None:
+            for m in MODEL_ID_MENTION.finditer(text):
+                if m[0] not in truth.model_ids:
+                    out.append(
+                        f"{name}:{_line_of(text, m.start())}: model id {m[0]!r} is not one the API runs "
+                        f"({', '.join(sorted(truth.model_ids))})"
+                    )
+        for kind, pattern in DATE_MENTIONS.items():
+            want = truth.updated_as_on if kind == "updated as on" else truth.fetched
+            if want is None:
+                continue
+            for m in pattern.finditer(text):
+                iso = parse_doc_date(m[1])
+                if iso not in want:
+                    out.append(
+                        f"{name}:{_line_of(text, m.start())}: {kind} {' '.join(m[1].split())!r}: the library "
+                        f"says {', '.join(sorted(want)) or 'nothing'} (Firestore {LIBRARY_COLLECTION})"
+                    )
+        official = truth.official_runs if truth.official_runs is not None else set()
+        for m in EVAL_RUN_ID.finditer(text) if truth.official_runs is not None else ():
+            if m[0] in official or HISTORY_HEADING.search(_heading_at(text, m.start())):
+                continue
+            out.append(
+                f"{name}:{_line_of(text, m.start())}: run {m[0]} is not an official evaluation run "
+                "(evidence/*/eval-official/results/) and is not under a history or preliminary heading"
+            )
+    for name in ("README.md", *(n for n in texts if n.endswith("SUBMISSION.md"))):
+        if name in texts:
+            out += [
+                f"{name}: never names {model!r}, the model /health reports"
+                for model in truth.required_names
+                if model not in " ".join(texts[name].split())
+            ]
+    return out
+
+
+def _claim_texts(ctx: Ctx) -> tuple[dict[str, str], list[str]]:
+    """README.md and docs/*.md as tracked, plus the submission text (--claims-text or the --submission
+    description_file); and what could not be read."""
+    texts = {
+        p: t
+        for p in ctx.tracked()
+        if p == "README.md" or re.fullmatch(r"docs/[^/]+\.md", p)
+        if (t := ctx.text(p)) is not None
+    }
+    missing: list[str] = []
+    paths = [Path(p) for p in (getattr(ctx.args, "claims_text", None) or [])]
+    if getattr(ctx.args, "submission", None):
+        try:
+            desc = ctx.sub_path("description_file")
+            if desc is not None:
+                paths.append(desc)
+        except Blocked as exc:
+            missing.append(str(exc))
+    for p in dict.fromkeys(paths):
+        if p.is_file():
+            texts[str(p) if p.name != "SUBMISSION.md" else "SUBMISSION.md"] = p.read_text(encoding="utf-8")
+        else:
+            missing.append(f"not found: {p}")
+    if not paths:
+        missing.append("no submission text (pass --claims-text ../SUBMISSION.md or --submission)")
+    return texts, missing
+
+
+def repo_model_names(ctx: Ctx) -> tuple[str, dict[str, str]]:
+    """config.FALLBACK_MODELS['vertex'] and config.MODEL_NAMES (model id -> name in words) from the repo."""
+    code = (
+        "import json, sys; sys.path.insert(0, 'backend'); "
+        "from argus_api.config import FALLBACK_MODELS, MODEL_NAMES; "
+        "print(json.dumps([FALLBACK_MODELS['vertex'], MODEL_NAMES]))"
+    )
+    fallback, names = json.loads(
+        _repo_python(ctx, ["-c", code], "reading config.MODEL_NAMES").splitlines()[-1]
+    )
+    return str(fallback), {str(k): str(v) for k, v in names.items()}
+
+
+def _claim_truth(ctx: Ctx) -> tuple[ClaimTruth, list[str]]:
+    unread: list[str] = []
+    caps: dict[str, int] | None = None
+    try:
+        project, _ = _deploy_inputs(ctx)
+        doc = firestore_get(ctx, project, "config/limits")
+        if doc is None:
+            unread.append("config/limits is missing")
+        else:
+            values = {kind: doc.get(field) for kind, field in LIMIT_FIELDS.items()}
+            numbers = {k: v for k, v in values.items() if isinstance(v, int) and not isinstance(v, bool)}
+            if len(numbers) == len(values):
+                caps = numbers
+            else:
+                unread.append(f"config/limits caps are not all numbers: {values}")
+    except Blocked as exc:
+        unread.append(f"caps: {exc}")
+    names: set[str] | None = None
+    ids: set[str] | None = None
+    required: list[str] = []
+    try:
+        _, api = _deploy_inputs(ctx)
+        res = http(ctx, f"{api}/health", timeout_s=HEALTH_TIMEOUT_S)
+        body = json.loads(res.body) if res.status == 200 else None
+        if not isinstance(body, dict):
+            raise Blocked(f"{api}/health: {res.error or f'HTTP {res.status}'}")
+        fallback, display = repo_model_names(ctx)
+        live = [str(body.get("agent_model")), str(body.get("monitor_model"))]
+        ids = {*live, str(fallback)}
+        unnamed = sorted(i for i in ids if i not in display)
+        if unnamed:
+            raise Blocked(f"config.MODEL_NAMES has no display name for {', '.join(unnamed)}")
+        names = {display[i] for i in ids}
+        required = [display[i] for i in live]
+    except (Blocked, ValueError) as exc:
+        unread.append(f"models: {exc}")
+    updated: set[str] | None = None
+    fetched: set[str] | None = None
+    try:
+        project, _ = _deploy_inputs(ctx)
+        docs = firestore_list(
+            ctx, project, LIBRARY_COLLECTION, list(LIBRARY_DATE_FIELDS), _firestore_token(ctx)
+        )
+        rows = [{k: _firestore_value(v) for k, v in d.get("fields", {}).items()} for d in docs]
+        dates = {f: {str(r[f]) for r in rows if isinstance(r.get(f), str)} for f in LIBRARY_DATE_FIELDS}
+        if not dates["snapshot_date"]:
+            raise Blocked(f"no {LIBRARY_COLLECTION} document has a snapshot_date")
+        updated, fetched = dates["updated_as_on"], dates["snapshot_date"]
+    except Blocked as exc:
+        unread.append(f"library dates: {exc}")
+    official: set[str] | None = {m[1] for p in ctx.tracked() if (m := OFFICIAL_RUN_DIR.match(p))}
+    if not official:
+        unread.append("no official evaluation runs under evidence/*/eval-official/results/")
+        official = None
+    truth = ClaimTruth(caps, names, ids, required, updated, fetched, official)
+    return truth, unread
+
+
+def check_claims(ctx: Ctx) -> Result:
+    """Run caps, model names, library dates and evaluation run ids in README.md, docs/*.md and the submission
+    text match config/limits, /health with config.MODEL_NAMES, the library and the official evaluation
+    evidence."""
+    rules = ("S-05", "ENG-E13")
+    texts, missing = _claim_texts(ctx)
+    truth, unread = _claim_truth(ctx)
+    mismatches = claim_mismatches(texts, truth)
+    ctx.internal("claims", "\n".join(mismatches) or "ok")
+    read = f"{len(texts)} texts ({', '.join(n for n in texts if not n.startswith('docs/'))}, docs/*.md)"
+    if mismatches:
+        return Result(
+            "S-CLAIMS",
+            rules,
+            FAIL,
+            f"{len(mismatches)} claims disagree with their source in {read}",
+            mismatches + [f"not checked: {u}" for u in unread + missing],
+        )
+    if unread or missing:
+        return Result(
+            "S-CLAIMS",
+            rules,
+            BLOCKED,
+            f"no mismatch in {read}, but not checked: " + "; ".join(unread + missing),
+        )
+    caps = truth.caps or {}
+    return Result(
+        "S-CLAIMS",
+        rules,
+        PASS,
+        f"{read} agree: caps {caps.get('daily')}/day, {caps.get('hourly')}/hour, "
+        f"{caps.get('per user')}/user; models {', '.join(sorted(truth.model_names or ()))}; library dates; "
+        f"{len(truth.official_runs or ())} official run ids",
+    )
+
+
 SUBMISSION_CHECKS = [
     Check("S-DECK", ("S-01",), check_deck),
     Check("S-DECK-SLIDE1", ("S-07", "B-06"), check_deck_slide1),
@@ -2576,6 +3015,7 @@ SUBMISSION_CHECKS = [
     Check("S-README", ("S-04", "ENG-E13", "G10"), check_readme),
     Check("S-LINKS", ("S-06",), check_links),
     Check("S-BANNED-PHRASES", ("ENG-E13", "S-05"), check_submission_phrases),
+    Check("S-CLAIMS", ("S-05", "ENG-E13"), check_claims),
 ]
 
 
@@ -2777,6 +3217,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     p.add_argument("--expect-sha", help="deploy: /health git_sha must equal this commit")
     p.add_argument(
+        "--expect-web-sha",
+        help="deploy: the hosted version.json sha must be this commit (a sha or a rev such as HEAD)",
+    )
+    p.add_argument(
         "--allow-min-zero",
         action="store_true",
         help="deploy: accept min instances 0 (cost saving before the final gate, D-49); default needs 1",
@@ -2785,6 +3229,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--submission",
         help="submission: JSON with deck_pdf, video_file, video_url, repo_url, "
         "app_url, description_file, links[], team_name, team_leader; or a .md file, read as description_file",
+    )
+    p.add_argument(
+        "--claims-text",
+        action="append",
+        metavar="PATH",
+        help="submission: a text outside the repo whose claims S-CLAIMS also checks, such as "
+        "../SUBMISSION.md (repeatable; the --submission description_file is read too)",
     )
     p.add_argument("--rules-file", help="rules-coverage: RULES.md to compare the rule IDs with")
     return p.parse_args(argv)

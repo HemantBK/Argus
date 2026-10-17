@@ -1710,20 +1710,21 @@ def limits_doc(**values: Any) -> dict[str, Any]:
     }
 
 
-GOOD_LIMITS = {"daily_run_cap": 60, "hourly_run_cap": 20, "per_user_daily_run_cap": 5, "enabled": True}
+GOOD_LIMITS = {"daily_run_cap": 100, "hourly_run_cap": 20, "per_user_daily_run_cap": 5, "enabled": True}
 
 
 @pytest.mark.parametrize(
     ("status", "values", "expected"),
     [
         (200, GOOD_LIMITS, check.PASS),
+        (200, {**GOOD_LIMITS, "daily_run_cap": 60}, check.FAIL),
         (200, {**GOOD_LIMITS, "per_user_daily_run_cap": 1}, check.FAIL),
         (200, {**GOOD_LIMITS, "enabled": False}, check.FAIL),
         (200, {**GOOD_LIMITS, "extra": 1}, check.FAIL),
         (404, {}, check.FAIL),
         (403, {}, check.BLOCKED),
     ],
-    ids=["60-20-5-on", "user-cap-1", "kill-switch-on", "extra-field", "missing", "forbidden"],
+    ids=["100-20-5-on", "old-cap-60", "user-cap-1", "kill-switch-on", "extra-field", "missing", "forbidden"],
 )
 def test_deploy_limits_read_back(
     tmp_path: Path,
@@ -1813,6 +1814,7 @@ def test_every_deploy_check_has_an_offline_test() -> None:
     tested = {
         "D-HEALTH",
         "D-WEB",
+        "D-WEB-SHA",
         "D-WEB-SECRETS",
         "D-CORS",
         "D-NO-TOKEN",
@@ -2014,3 +2016,460 @@ def test_pre_commit_hook_stops_when_the_checker_is_not_staged(tmp_path: Path) ->
     assert runs == []
     assert proc.returncode != 0
     assert "scripts/check.py is not staged" in proc.stderr
+
+
+# ---------------------------------------------------------------------------------- D-WEB-SHA
+# On 18 Oct an old web build stayed on Hosting: it offered "Try your own clause" while config/custom_limits
+# was missing (pasting off), so every pasted clause failed. Nothing could tell which commit the hosted bundle
+# came from.
+API_SRC = "backend/argus_api/main.py"
+EVAL_SRC = "backend/argus_api/eval/cases.py"
+WEB_SRC_FILE = "web/src/App.tsx"
+
+
+def stamp_repo(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+    """A git repo with: base; api (the serving API); web_only (web and eval edits on top of api); backend (an
+    API edit on top of web_only); side (a branch from base that does not contain api)."""
+    repo = tmp_path / "stamp"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+
+    def commit(message: str, files: dict[str, str]) -> str:
+        for path, text in files.items():
+            (repo / path).parent.mkdir(parents=True, exist_ok=True)
+            (repo / path).write_text(text, encoding="utf-8")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", message)
+        return git(repo, "rev-parse", "HEAD").strip()
+
+    shas = {"base": commit("base", {API_SRC: "v0\n", WEB_SRC_FILE: "w0\n"})}
+    shas["api"] = commit("api", {API_SRC: "v1\n"})
+    shas["web_only"] = commit("web only", {WEB_SRC_FILE: "w1\n", EVAL_SRC: "cases\n"})
+    shas["backend"] = commit("backend", {API_SRC: "v2\n"})
+    git(repo, "checkout", "-q", "-b", "side", shas["base"])
+    shas["side"] = commit("side", {WEB_SRC_FILE: "w-side\n"})
+    git(repo, "checkout", "-q", "main")
+    return repo, shas
+
+
+def web_stamp(sha: str, **change: Any) -> dict[str, Any]:
+    return {
+        "sha": sha,
+        "dirty": False,
+        "builtAt": "2026-10-18T03:00:00.000Z",
+        "customClauseOpen": False,
+        "apiBase": LIVE["service_url"],
+        **change,
+    }
+
+
+def web_sha_routes(
+    api_sha: str, version: tuple[int | None, Any], custom: tuple[int, Any] | None = None
+) -> dict[str, tuple[int | None, Any]]:
+    routes: dict[str, tuple[int | None, Any]] = {
+        "/version.json": version,
+        "/health": (200, {**HEALTH, "git_sha": api_sha}),
+    }
+    if custom is not None:
+        routes["/documents/config/custom_limits"] = custom
+    return routes
+
+
+def custom_doc(enabled: bool) -> dict[str, Any]:
+    return {
+        "name": "projects/p/databases/(default)/documents/config/custom_limits",
+        "fields": {"custom_enabled": {"booleanValue": enabled}, "custom_daily_cap": {"integerValue": "10"}},
+    }
+
+
+def test_web_sha_equal_commits_pass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, shas = stamp_repo(tmp_path)
+    route_http(monkeypatch, web_sha_routes(shas["api"], (200, web_stamp(shas["api"]))))
+    result = run_one(repo, check.check_deploy_web_sha, **LIVE)
+    assert result.status == check.PASS, (result.reason, result.details)
+    assert "(equal)" in result.reason
+
+
+def test_web_sha_web_only_descendant_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A web build on a later commit is fine when nothing the API runs changed (eval/ edits do not count)."""
+    repo, shas = stamp_repo(tmp_path)
+    route_http(monkeypatch, web_sha_routes(shas["api"], (200, web_stamp(shas["web_only"]))))
+    result = run_one(repo, check.check_deploy_web_sha, **LIVE)
+    assert result.status == check.PASS, (result.reason, result.details)
+    assert "web-only descendant" in result.reason
+
+
+def test_web_sha_backend_diff_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, shas = stamp_repo(tmp_path)
+    route_http(monkeypatch, web_sha_routes(shas["api"], (200, web_stamp(shas["backend"]))))
+    result = run_one(repo, check.check_deploy_web_sha, **LIVE)
+    assert result.status == check.FAIL
+    assert any(API_SRC in d and "changes the API code" in d for d in result.details), result.details
+
+
+@pytest.mark.parametrize(
+    ("web", "why"),
+    [("side", "does not descend"), ("unknown", "not in this clone")],
+    ids=["not-a-descendant", "commit-not-in-clone"],
+)
+def test_web_sha_unrelated_or_unknown_commit_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, web: str, why: str
+) -> None:
+    repo, shas = stamp_repo(tmp_path)
+    web_sha = shas.get(web, "f" * 40)
+    route_http(monkeypatch, web_sha_routes(shas["api"], (200, web_stamp(web_sha))))
+    result = run_one(repo, check.check_deploy_web_sha, **LIVE)
+    assert result.status == check.FAIL
+    assert any(why in d for d in result.details), result.details
+
+
+HTML_PAGE = b'<!doctype html>\n<html lang="en"><head><meta charset="UTF-8" /></head></html>\n'
+
+
+@pytest.mark.parametrize(
+    ("version", "why"),
+    [
+        ((404, b"Not Found"), "HTTP 404"),
+        ((200, HTML_PAGE), "served as HTML"),
+        ((200, b"sha=abc"), "not JSON"),
+        ((200, ["not", "an", "object"]), "not a JSON object"),
+        ((200, {"sha": "a" * 40}), "malformed"),
+        ((200, {**web_stamp("a" * 40), "sha": "9e5aa49"}), "not a full commit sha"),
+    ],
+    ids=["404", "html-rewrite", "not-json", "not-object", "fields-missing", "short-sha"],
+)
+def test_web_sha_missing_or_html_version_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: tuple[int, Any], why: str
+) -> None:
+    """Would have caught 18 Oct: the hosted build had no version.json, and Hosting answered the path with
+    index.html (HTTP 200), so nothing could say which commit was live. A missing or HTML stamp is a FAIL."""
+    repo, shas = stamp_repo(tmp_path)
+    route_http(monkeypatch, web_sha_routes(shas["api"], version))
+    result = run_one(repo, check.check_deploy_web_sha, **LIVE)
+    assert result.status == check.FAIL, (result.reason, result.details)
+    assert why in result.reason
+
+
+def test_web_sha_html_content_type_alone_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, shas = stamp_repo(tmp_path)
+
+    def fake_http(ctx: Any, url: str, **kwargs: Any) -> Any:
+        if url.endswith("/version.json"):
+            body = json.dumps(web_stamp(shas["api"])).encode()
+            return check.HttpResult(200, url, {"content-type": "text/html; charset=utf-8"}, body)
+        return check.HttpResult(200, url, {}, json.dumps({**HEALTH, "git_sha": shas["api"]}).encode())
+
+    monkeypatch.setattr(check, "http", fake_http)
+    assert run_one(repo, check.check_deploy_web_sha, **LIVE).status == check.FAIL
+
+
+def test_web_sha_dirty_build_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, shas = stamp_repo(tmp_path)
+    route_http(monkeypatch, web_sha_routes(shas["api"], (200, web_stamp(shas["api"], dirty=True))))
+    result = run_one(repo, check.check_deploy_web_sha, **LIVE)
+    assert result.status == check.FAIL
+    assert any("dirty" in d for d in result.details)
+
+
+@pytest.mark.parametrize(
+    "api_base",
+    ["http://localhost:8080", "https://argus-api-other.asia-south1.run.app"],
+    ids=["local", "other"],
+)
+def test_web_sha_other_api_base_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, api_base: str) -> None:
+    repo, shas = stamp_repo(tmp_path)
+    route_http(monkeypatch, web_sha_routes(shas["api"], (200, web_stamp(shas["api"], apiBase=api_base))))
+    result = run_one(repo, check.check_deploy_web_sha, **LIVE)
+    assert result.status == check.FAIL
+    assert any("not the production API" in d for d in result.details)
+
+
+@pytest.mark.parametrize(
+    ("custom", "expected"),
+    [
+        ((404, {}), check.FAIL),
+        ((200, custom_doc(False)), check.FAIL),
+        ((200, custom_doc(True)), check.PASS),
+    ],
+    ids=["switch-missing", "switch-off", "switch-on"],
+)
+def test_web_sha_open_card_needs_the_server_switch_on(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logged_in: None,
+    custom: tuple[int, Any],
+    expected: str,
+) -> None:
+    """Would have caught 18 Oct: the hosted build offered "Try your own clause" (customClauseOpen true) while
+    config/custom_limits was missing, so the API refused every pasted clause. Open-vs-off is a FAIL."""
+    repo, shas = stamp_repo(tmp_path)
+    routes = web_sha_routes(shas["api"], (200, web_stamp(shas["api"], customClauseOpen=True)), custom)
+    calls = route_http(monkeypatch, routes)
+    result = run_one(repo, check.check_deploy_web_sha, **LIVE)
+    assert result.status == expected, (result.reason, result.details)
+    assert any("/documents/config/custom_limits" in url for url, _ in calls)
+
+
+def test_web_sha_closed_card_does_not_read_the_switch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, shas = stamp_repo(tmp_path)
+    calls = route_http(monkeypatch, web_sha_routes(shas["api"], (200, web_stamp(shas["api"]))))
+    assert run_one(repo, check.check_deploy_web_sha, **LIVE).status == check.PASS
+    assert not any("custom_limits" in url for url, _ in calls)
+
+
+@pytest.mark.parametrize(
+    ("expect", "expected"),
+    [("HEAD", check.FAIL), ("web_only", check.PASS), ("not-a-rev", check.FAIL)],
+    ids=["head-is-later", "named-sha", "unknown-rev"],
+)
+def test_web_sha_expect_web_sha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, expect: str, expected: str
+) -> None:
+    repo, shas = stamp_repo(tmp_path)  # HEAD is the "backend" commit; the hosted build is "web_only"
+    route_http(monkeypatch, web_sha_routes(shas["api"], (200, web_stamp(shas["web_only"]))))
+    result = run_one(repo, check.check_deploy_web_sha, **LIVE, expect_web_sha=shas.get(expect, expect))
+    assert result.status == expected, (result.reason, result.details)
+
+
+@pytest.mark.parametrize(
+    ("health", "expected"),
+    [
+        ((None, b""), check.BLOCKED),
+        ((503, b"{}"), check.FAIL),
+        ((200, {**HEALTH, "git_sha": "unknown"}), check.FAIL),
+    ],
+    ids=["unreachable", "503", "no-sha"],
+)
+def test_web_sha_needs_the_api_sha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, health: tuple[int | None, Any], expected: str
+) -> None:
+    repo, shas = stamp_repo(tmp_path)
+    route_http(monkeypatch, {"/version.json": (200, web_stamp(shas["api"])), "/health": health})
+    assert run_one(repo, check.check_deploy_web_sha, **LIVE).status == expected
+
+
+def test_expect_web_sha_flag_parses() -> None:
+    assert check.parse_args(["deploy", "--expect-web-sha", "HEAD"]).expect_web_sha == "HEAD"
+    assert check.parse_args(["deploy"]).expect_web_sha is None
+
+
+# ---------------------------------------------------------------------------------- S-CLAIMS
+OFFICIAL_RUN = "20261017T154026Z-446cd6"
+PRELIM_RUN = "20261016T162930Z-275c7b"
+NAMES = {
+    "gemini-agent-x": "Gemini 9.1 Flash",
+    "gemini-monitor-y": "Gemini 9.0 Flash-Lite",
+    "gemini-back-z": "Gemini 8.5 Flash-Lite",
+}
+CLAIMS_HEALTH = {**HEALTH, "agent_model": "gemini-agent-x", "monitor_model": "gemini-monitor-y"}
+GOOD_README = f"""# Argus
+
+Gemini 9.1 Flash reviews each clause and Gemini 9.0 Flash-Lite judges each draft; when busy, Gemini 8.5
+Flash-Lite takes over. The library was fetched 16 Oct 2026; the Directions are updated as on 15 Jul 2026.
+The headline run is {OFFICIAL_RUN}.
+"""
+GOOD_ARCH = f"""# Architecture
+
+Run limits in `config/limits`: 100 runs a day,
+20 an hour, 5 per visitor. Library fetched from rbi.org.in on
+2026-10-16, "updated as on July 15, 2026". Model id gemini-agent-x.
+
+## History: preliminary runs (superseded)
+
+### Base set
+
+Run {PRELIM_RUN}, history only.
+"""
+GOOD_SUBMISSION = "Gemini 9.1 Flash is the agent and Gemini 9.0 Flash-Lite the monitor. 100 runs a day.\n"
+
+
+def instruments_doc(key: str, updated: str | None, snapshot: str) -> dict[str, Any]:
+    fields: dict[str, Any] = {"snapshot_date": {"stringValue": snapshot}}
+    fields["updated_as_on"] = {"stringValue": updated} if updated else {"nullValue": None}
+    return {"name": f"projects/p/databases/(default)/documents/rbi_instruments/{key}", "fields": fields}
+
+
+def claims_repo(tmp_path: Path, readme: str = GOOD_README, arch: str = GOOD_ARCH) -> Path:
+    repo = tmp_path / "claims"
+    (repo / "docs").mkdir(parents=True)
+    (repo / "README.md").write_text(readme, encoding="utf-8")
+    (repo / "docs" / "architecture.md").write_text(arch, encoding="utf-8")
+    results = repo / "evidence" / "2026-10-17" / "eval-official" / "results" / OFFICIAL_RUN
+    results.mkdir(parents=True)
+    (results / "summary.json").write_text("{}\n", encoding="utf-8")
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "add", "-A")
+    return repo
+
+
+def claims_routes(
+    monkeypatch: pytest.MonkeyPatch, limits: dict[str, Any] = GOOD_LIMITS
+) -> list[tuple[str, dict[str, Any]]]:
+    monkeypatch.setattr(check, "repo_model_names", lambda ctx: ("gemini-back-z", NAMES))
+    return route_http(
+        monkeypatch,
+        {
+            "/health": (200, CLAIMS_HEALTH),
+            "/documents/config/limits": (200, limits_doc(**limits)),
+            "/documents/rbi_instruments": (
+                200,
+                {
+                    "documents": [
+                        instruments_doc("in_force", "2026-07-15", "2026-10-16"),
+                        instruments_doc("withdrawn", None, "2026-10-16"),
+                    ]
+                },
+            ),
+        },
+    )
+
+
+LIVE_100 = GOOD_LIMITS
+OLD_60 = {**GOOD_LIMITS, "daily_run_cap": 60}
+
+
+def test_claims_pass_when_every_mention_matches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, logged_in: None
+) -> None:
+    repo = claims_repo(tmp_path)
+    sub = tmp_path / "SUBMISSION.md"
+    sub.write_text(GOOD_SUBMISSION, encoding="utf-8")
+    claims_routes(monkeypatch, LIVE_100)
+    result = run_one(repo, check.check_claims, **LIVE, claims_text=[str(sub)], submission=None)
+    assert result.status == check.PASS, (result.reason, result.details)
+    assert "SUBMISSION.md" in result.reason
+
+
+@pytest.mark.parametrize(
+    ("readme_change", "arch_change", "submission", "limits", "expect"),
+    [
+        (None, None, GOOD_SUBMISSION, OLD_60, "docs/architecture.md:3: '100 runs a day'"),
+        (None, ("20 an hour", "30 an hour"), GOOD_SUBMISSION, LIVE_100, "live hourly cap"),
+        (None, ("5 per visitor", "3 per visitor"), GOOD_SUBMISSION, LIVE_100, "live per user cap"),
+        (None, None, "Up to 60 runs a day.\n", LIVE_100, "SUBMISSION.md:1: '60 runs a day'"),
+        (
+            ("Gemini 9.1 Flash reviews", "Gemini 9.2 Flash reviews"),
+            None,
+            GOOD_SUBMISSION,
+            LIVE_100,
+            "'Gemini 9.2 Flash'",
+        ),
+        (
+            None,
+            ("gemini-agent-x", "gemini-2.5-pro"),
+            GOOD_SUBMISSION,
+            LIVE_100,
+            "model id 'gemini-2.5-pro'",
+        ),
+        (None, None, "Gemini 9.0 Flash-Lite judges.\n", LIVE_100, "never names 'Gemini 9.1 Flash'"),
+        (
+            ("fetched 16 Oct 2026", "fetched 17 Oct 2026"),
+            None,
+            GOOD_SUBMISSION,
+            LIVE_100,
+            "fetched '17 Oct 2026'",
+        ),
+        (
+            ("as on 15 Jul 2026", "as on 1 Jul 2026"),
+            None,
+            GOOD_SUBMISSION,
+            LIVE_100,
+            "updated as on '1 Jul 2026'",
+        ),
+        ((OFFICIAL_RUN, PRELIM_RUN), None, GOOD_SUBMISSION, LIVE_100, f"run {PRELIM_RUN} is not an official"),
+    ],
+    ids=[
+        "daily-cap",
+        "hourly-cap",
+        "user-cap",
+        "submission-cap",
+        "model-name",
+        "model-id",
+        "model-missing",
+        "fetch-date",
+        "updated-date",
+        "preliminary-run-in-readme",
+    ],
+)
+def test_claims_report_each_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    logged_in: None,
+    readme_change: tuple[str, str] | None,
+    arch_change: tuple[str, str] | None,
+    submission: str,
+    limits: dict[str, Any],
+    expect: str,
+) -> None:
+    readme = GOOD_README.replace(*readme_change) if readme_change else GOOD_README
+    arch = GOOD_ARCH.replace(*arch_change) if arch_change else GOOD_ARCH
+    assert readme != GOOD_README or arch != GOOD_ARCH or submission != GOOD_SUBMISSION or limits != LIVE_100
+    repo = claims_repo(tmp_path, readme, arch)
+    sub = tmp_path / "SUBMISSION.md"
+    sub.write_text(submission, encoding="utf-8")
+    claims_routes(monkeypatch, limits)
+    result = run_one(repo, check.check_claims, **LIVE, claims_text=[str(sub)], submission=None)
+    assert result.status == check.FAIL, (result.reason, result.details)
+    assert any(expect in d for d in result.details), result.details
+
+
+def test_claims_reports_every_mismatch_not_just_the_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, logged_in: None
+) -> None:
+    repo = claims_repo(tmp_path)
+    sub = tmp_path / "SUBMISSION.md"
+    sub.write_text(GOOD_SUBMISSION, encoding="utf-8")
+    claims_routes(monkeypatch, {**GOOD_LIMITS, "daily_run_cap": 60, "hourly_run_cap": 10})
+    result = run_one(repo, check.check_claims, **LIVE, claims_text=[str(sub)], submission=None)
+    caps = [d for d in result.details if "cap (config/limits" in d]
+    assert len(caps) == 3, result.details  # architecture.md daily and hourly, SUBMISSION.md daily
+
+
+def test_claims_blocked_without_submission_text_or_live_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, logged_in: None
+) -> None:
+    repo = claims_repo(tmp_path)
+    claims_routes(monkeypatch, LIVE_100)
+    result = run_one(repo, check.check_claims, **LIVE, claims_text=None, submission=None)
+    assert result.status == check.BLOCKED and "--claims-text" in result.reason
+    route_http(monkeypatch, {})  # nothing reachable: caps, models and dates cannot be read
+    sub = tmp_path / "SUBMISSION.md"
+    sub.write_text(GOOD_SUBMISSION, encoding="utf-8")
+    result = run_one(repo, check.check_claims, **LIVE, claims_text=[str(sub)], submission=None)
+    assert result.status == check.BLOCKED, (result.reason, result.details)
+    assert all(word in result.reason for word in ("caps", "models", "library dates"))
+
+
+def test_claims_reads_the_submission_description_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, logged_in: None
+) -> None:
+    repo = claims_repo(tmp_path)
+    sub = tmp_path / "SUBMISSION.md"
+    sub.write_text("Gemini 9.1 Flash and Gemini 9.0 Flash-Lite. 7 per user.\n", encoding="utf-8")
+    claims_routes(monkeypatch, LIVE_100)
+    result = run_one(repo, check.check_claims, **LIVE, claims_text=None, submission=str(sub))
+    assert result.status == check.FAIL
+    assert any(d.startswith("SUBMISSION.md:1: '7 per user'") for d in result.details), result.details
+
+
+@pytest.mark.parametrize(
+    ("text", "iso"),
+    [
+        ("15 Jul 2026", "2026-07-15"),
+        ("July 15, 2026", "2026-07-15"),
+        ("2026-10-16", "2026-10-16"),
+        ("16 October 2026", "2026-10-16"),
+        ("31 Feb 2026", None),
+        ("15 Foo 2026", None),
+    ],
+)
+def test_parse_doc_date(text: str, iso: str | None) -> None:
+    assert check.parse_doc_date(text) == iso
+
+
+def test_repo_model_names_are_the_backend_names() -> None:
+    from argus_api.config import FALLBACK_MODELS, MODEL_NAMES
+
+    assert check.repo_model_names(ctx_for(REPO)) == (FALLBACK_MODELS["vertex"], MODEL_NAMES)
