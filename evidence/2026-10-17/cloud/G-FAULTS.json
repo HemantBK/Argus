@@ -1,0 +1,124 @@
+{
+  "gate": "G-FAULTS",
+  "command": "scripts/cloud_e2e.py --gate-id G-FAULTS faults",
+  "git_sha": "92c4ab1aba80147ded6b366e93f7da22ad9291e4",
+  "revision": "argus-api-00003-6xj",
+  "started_utc": "2026-10-17T08:03:26+00:00",
+  "exit_code": 0,
+  "pass": true,
+  "details": {
+    "health": {
+      "status": "ok",
+      "git_sha": "92c4ab1aba80147ded6b366e93f7da22ad9291e4",
+      "mode": "cloud",
+      "provider": "vertex",
+      "agent_model": "gemini-3.8-flash",
+      "monitor_model": "gemini-3.5-flash-lite",
+      "location": "global",
+      "corpus_hash": "4ba88a4ca44614a09e911c0ecb990db82c7cd25a9d1b34c97c1d7944b9ac6db6"
+    },
+    "limits_before": {
+      "daily_run_cap": 60,
+      "per_user_daily_run_cap": 5,
+      "enabled": true,
+      "hourly_run_cap": 20
+    },
+    "uid": "5p4lIPzglgZOk51rtORvi1Nn8FI2",
+    "user_count_today": 0,
+    "rejected_run_ids": [
+      "0e88b581431943d7b197c7bda15a6692",
+      "0a41971c53064cbe8184561dd20c8648"
+    ],
+    "limits_after": {
+      "per_user_daily_run_cap": 5,
+      "hourly_run_cap": 20,
+      "enabled": true,
+      "daily_run_cap": 60
+    },
+    "criteria": [
+      {
+        "name": "set_user_cap",
+        "ok": true,
+        "observed": null,
+        "expected": 200
+      },
+      {
+        "name": "user_cap_read_back",
+        "ok": true,
+        "observed": null,
+        "expected": 0
+      },
+      {
+        "name": "cap_post_429",
+        "ok": true,
+        "observed": {
+          "status": 429,
+          "body": "{\"detail\":\"You have used your 0 live runs for today. Open a saved run, or try again tomorrow (India time).\"}"
+        },
+        "expected": 429
+      },
+      {
+        "name": "cap_no_run_doc",
+        "ok": true,
+        "observed": null,
+        "expected": 404
+      },
+      {
+        "name": "set_kill_switch",
+        "ok": true,
+        "observed": null,
+        "expected": 200
+      },
+      {
+        "name": "kill_switch_read_back",
+        "ok": true,
+        "observed": null,
+        "expected": false
+      },
+      {
+        "name": "kill_post_503",
+        "ok": true,
+        "observed": {
+          "status": 503,
+          "body": "{\"detail\":\"Argus is paused: new runs are switched off. Open a saved run instead.\"}"
+        },
+        "expected": 503
+      },
+      {
+        "name": "kill_no_run_doc",
+        "ok": true,
+        "observed": null,
+        "expected": 404
+      },
+      {
+        "name": "limits_restored",
+        "ok": true,
+        "observed": {
+          "per_user_daily_run_cap": 5,
+          "hourly_run_cap": 20,
+          "enabled": true,
+          "daily_run_cap": 60
+        },
+        "expected": {
+          "daily_run_cap": 60,
+          "per_user_daily_run_cap": 5,
+          "enabled": true,
+          "hourly_run_cap": 20
+        }
+      },
+      {
+        "name": "no_model_log_for_0e88b581431943d7b197c7bda15a6692",
+        "ok": true,
+        "observed": 0,
+        "expected": 0
+      },
+      {
+        "name": "no_model_log_for_0a41971c53064cbe8184561dd20c8648",
+        "ok": true,
+        "observed": 0,
+        "expected": 0
+      }
+    ],
+    "failed_criteria": []
+  }
+}

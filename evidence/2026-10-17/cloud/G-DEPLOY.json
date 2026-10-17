@@ -1,0 +1,35 @@
+{
+  "gate": "G-DEPLOY",
+  "command": "backend/.venv/bin/python scripts/check.py deploy --strict --allow-min-zero --expect-sha 92c4ab1aba80147ded6b366e93f7da22ad9291e4 --json G-DEPLOY/results.json --evidence-dir G-DEPLOY",
+  "git_sha": "92c4ab1aba80147ded6b366e93f7da22ad9291e4",
+  "revision": "argus-api-00003-6xj",
+  "started_utc": "2026-10-17T07:57:55Z",
+  "exit_code": 1,
+  "pass": false,
+  "details": {
+    "pass_rule": "exit_code == 0 (check.py --strict: no FAIL and no BLOCKED)",
+    "statuses": {
+      "D-HEALTH": "PASS",
+      "D-WEB": "PASS",
+      "D-WEB-SECRETS": "PASS",
+      "D-CORS": "PASS",
+      "D-NO-TOKEN": "PASS",
+      "D-RUN-CONFIG": "PASS",
+      "D-SA-ROLES": "PASS",
+      "D-RULES": "PASS",
+      "D-ANON-AUTH": "PASS",
+      "D-API-KEY": "FAIL",
+      "D-FIRESTORE-CORPUS": "PASS",
+      "D-LIMITS": "PASS",
+      "D-BUDGET": "PASS",
+      "D-UPTIME": "FAIL",
+      "D-SAMPLES": "WARN",
+      "H-UPTIME": "HUMAN"
+    },
+    "fail_or_blocked": [
+      "D-API-KEY",
+      "D-UPTIME"
+    ],
+    "raw": "G-DEPLOY/stdout.log, G-DEPLOY/results.json, G-DEPLOY/evidence.jsonl"
+  }
+}

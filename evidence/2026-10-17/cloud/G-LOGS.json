@@ -1,0 +1,131 @@
+{
+  "gate": "G-LOGS",
+  "command": "scripts/cloud_e2e.py --gate-id G-LOGS logs --run-id d38710fb772d490eb705acff965f8b8b --run-id d67c3dfef827415f8a0c79ed7bae1d53 --run-id f30914e657fd4b5881d8fb7d49f4aa13 --run-id c0de9595619e4ab1bb8e85fb0c209b82",
+  "git_sha": "92c4ab1aba80147ded6b366e93f7da22ad9291e4",
+  "revision": "argus-api-00003-6xj",
+  "started_utc": "2026-10-17T08:03:06+00:00",
+  "exit_code": 0,
+  "pass": true,
+  "details": {
+    "runs": {
+      "d38710fb772d490eb705acff965f8b8b": {
+        "agent_calls_steps": 35,
+        "agent_calls_logged": 35,
+        "monitor_calls_steps": 8,
+        "monitor_calls_logged": 8,
+        "entries": 69
+      },
+      "d67c3dfef827415f8a0c79ed7bae1d53": {
+        "agent_calls_steps": 34,
+        "agent_calls_logged": 34,
+        "monitor_calls_steps": 8,
+        "monitor_calls_logged": 8,
+        "entries": 66
+      },
+      "f30914e657fd4b5881d8fb7d49f4aa13": {
+        "agent_calls_steps": 38,
+        "agent_calls_logged": 38,
+        "monitor_calls_steps": 9,
+        "monitor_calls_logged": 9,
+        "entries": 72
+      },
+      "c0de9595619e4ab1bb8e85fb0c209b82": {
+        "agent_calls_steps": 38,
+        "agent_calls_logged": 38,
+        "monitor_calls_steps": 8,
+        "monitor_calls_logged": 8,
+        "entries": 74
+      }
+    },
+    "error_windows": [
+      [
+        "2026-10-17T07:58:56.943690+00:00",
+        "2026-10-17T08:01:45.714780+00:00"
+      ]
+    ],
+    "criteria": [
+      {
+        "name": "d38710fb772d490eb705acff965f8b8b.model_steps_present",
+        "ok": true,
+        "observed": 43,
+        "expected": ">0"
+      },
+      {
+        "name": "d38710fb772d490eb705acff965f8b8b.every_call_logged",
+        "ok": true,
+        "observed": {},
+        "expected": "per (event, clause, model): logs == steps"
+      },
+      {
+        "name": "d38710fb772d490eb705acff965f8b8b.call_lines_structured",
+        "ok": true,
+        "observed": [],
+        "expected": []
+      },
+      {
+        "name": "d67c3dfef827415f8a0c79ed7bae1d53.model_steps_present",
+        "ok": true,
+        "observed": 42,
+        "expected": ">0"
+      },
+      {
+        "name": "d67c3dfef827415f8a0c79ed7bae1d53.every_call_logged",
+        "ok": true,
+        "observed": {},
+        "expected": "per (event, clause, model): logs == steps"
+      },
+      {
+        "name": "d67c3dfef827415f8a0c79ed7bae1d53.call_lines_structured",
+        "ok": true,
+        "observed": [],
+        "expected": []
+      },
+      {
+        "name": "f30914e657fd4b5881d8fb7d49f4aa13.model_steps_present",
+        "ok": true,
+        "observed": 47,
+        "expected": ">0"
+      },
+      {
+        "name": "f30914e657fd4b5881d8fb7d49f4aa13.every_call_logged",
+        "ok": true,
+        "observed": {},
+        "expected": "per (event, clause, model): logs == steps"
+      },
+      {
+        "name": "f30914e657fd4b5881d8fb7d49f4aa13.call_lines_structured",
+        "ok": true,
+        "observed": [],
+        "expected": []
+      },
+      {
+        "name": "c0de9595619e4ab1bb8e85fb0c209b82.model_steps_present",
+        "ok": true,
+        "observed": 46,
+        "expected": ">0"
+      },
+      {
+        "name": "c0de9595619e4ab1bb8e85fb0c209b82.every_call_logged",
+        "ok": true,
+        "observed": {},
+        "expected": "per (event, clause, model): logs == steps"
+      },
+      {
+        "name": "c0de9595619e4ab1bb8e85fb0c209b82.call_lines_structured",
+        "ok": true,
+        "observed": [],
+        "expected": []
+      },
+      {
+        "name": "zero_error_entries_in_window",
+        "ok": true,
+        "observed": {
+          "count": 0,
+          "first": []
+        },
+        "expected": 0
+      }
+    ],
+    "failed_criteria": []
+  }
+}

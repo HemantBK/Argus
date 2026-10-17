@@ -1,0 +1,2926 @@
+{
+  "95c9f5f8ccc748c4865ff5daef0d676a": {
+    "run": {
+      "latency_ms": 19862,
+      "seeded": false,
+      "started_at": "2026-10-17T07:58:38.154982Z",
+      "error": null,
+      "finished_at": "2026-10-17T07:58:59.054618Z",
+      "policy_id": "policy_a",
+      "corpus_as_on": "2026-10-16",
+      "owner_uid": "1TlVA9w0hreQi1pmhQxJC0WwvNq1",
+      "clauses": [
+        {
+          "title": "Before entering into an agreement with any Lending\u2026",
+          "clause_id": "c1",
+          "text": "Before entering into an agreement with any Lending Service Provider (LSP) for digital lending, the Company shall conduct enhanced due diligence covering the LSP's technical capabilities, data privacy policies and storage systems, fairness in conduct with borrowers, past record of conduct and ability to comply with applicable regulations. The Company shall review the conduct of each LSP against the agreement at least once a year and shall take appropriate action on any deviation from it."
+        },
+        {
+          "title": "Every borrower may exit a digital loan during\u2026",
+          "clause_id": "c2",
+          "text": "Every borrower may exit a digital loan during a cooling-off period of three days from disbursal by repaying the principal and the proportionate APR, without any penalty, in line with RBI (Digital Lending) Directions, 2025, para 10."
+        },
+        {
+          "title": "The LSP's sourcing and facilitation fee of 1.5%\u2026",
+          "clause_id": "c3",
+          "text": "The LSP's sourcing and facilitation fee of 1.5% of the sanctioned amount shall be collected by the LSP directly from the borrower at the time of disbursal and shall not be paid by the Company."
+        },
+        {
+          "title": "Loans shall always be disbursed directly into the\u2026",
+          "clause_id": "c4",
+          "text": "Loans shall always be disbursed directly into the bank account of the borrower. No disbursal shall be made to any third-party account, including any account of an LSP."
+        },
+        {
+          "title": "To simplify collections, borrowers shall pay their EMIs\u2026",
+          "clause_id": "c5",
+          "text": "To simplify collections, borrowers shall pay their EMIs into a collection account maintained by the LSP, which shall pool repayments and remit them to the Company's bank account on a weekly basis."
+        },
+        {
+          "title": "All borrower data shall be stored only on\u2026",
+          "clause_id": "c6",
+          "text": "All borrower data shall be stored only on servers located within India. Where any data is processed outside India, it shall be deleted from the servers outside India and brought back to India within 24 hours of processing, as required by RBI (Non-Banking Financial Companies - Credit Facilities) Directions, 2025, para 14(9)."
+        },
+        {
+          "title": "The Company and every LSP that has an\u2026",
+          "clause_id": "c7",
+          "text": "The Company and every LSP that has an interface with borrowers shall designate a nodal grievance redressal officer for digital lending complaints. The officers' contact details shall be displayed prominently on the Company's website, the LSP's website, the digital lending app and in the Key Fact Statement. Borrowers may lodge complaints on the digital lending app and on the Company's website, and the Company remains responsible for resolving every complaint. If a complaint is rejected wholly or partly, the borrower is not satisfied with the reply, or no reply is received within 30 days, the borrower shall be told that they may complain on the Reserve Bank's Complaint Management System (https://cms.rbi.org.in/) under the Reserve Bank - Integrated Ombudsman Scheme, or send a physical complaint to the Reserve Bank's Centralised Receipt and Processing Centre in Chandigarh."
+        },
+        {
+          "title": "On execution of each loan contract or transaction,\u2026",
+          "clause_id": "c8",
+          "text": "On execution of each loan contract or transaction, digitally signed documents on the Company's letterhead, namely the Key Fact Statement, summary of the loan product, sanction letter, terms and conditions, account statements and the privacy policies of the Company and its LSPs on the storage and use of borrowers' data, shall flow automatically to the borrower's registered and verified email or SMS. Digitally signed documents shall comply with the Information Technology Act, 2000."
+        }
+      ],
+      "schema_version": "v0.1",
+      "status": "done",
+      "policy_title": "Sample NBFC A: Digital Lending Policy",
+      "rbi_as_on": "2026-07-15",
+      "monitor_model": "gemini-3.5-flash-lite",
+      "run_id": "95c9f5f8ccc748c4865ff5daef0d676a",
+      "summary": {
+        "gap": 0,
+        "failed": 0,
+        "monitor_stops": 0,
+        "conflict": 2,
+        "compliant": 4,
+        "monitor_revisions": 2,
+        "clauses": 8,
+        "insufficient_evidence": 1,
+        "outdated_reference": 1
+      },
+      "provider": "vertex",
+      "cost_usd_estimate": 0.10523760000000001,
+      "saved": false,
+      "agent_model": "gemini-3.8-flash"
+    },
+    "steps": [
+      {
+        "at": "2026-10-17T07:58:39.236090Z",
+        "kind": "plan",
+        "seq": 1,
+        "model": null,
+        "output_tokens": null,
+        "tool": null,
+        "latency_ms": null,
+        "input_tokens": null,
+        "cost_usd_estimate": null,
+        "clause_id": "c1",
+        "summary": "Started the review of clause c1 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "verdict": null
+      },
+      {
+        "at": "2026-10-17T07:58:39.237968Z",
+        "input_tokens": null,
+        "clause_id": "c2",
+        "verdict": null,
+        "summary": "Started the review of clause c2 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "tool": null,
+        "seq": 2,
+        "output_tokens": null,
+        "cost_usd_estimate": null,
+        "model": null,
+        "latency_ms": null,
+        "kind": "plan"
+      },
+      {
+        "tool": null,
+        "at": "2026-10-17T07:58:39.238726Z",
+        "latency_ms": null,
+        "kind": "plan",
+        "cost_usd_estimate": null,
+        "output_tokens": null,
+        "seq": 3,
+        "clause_id": "c3",
+        "verdict": null,
+        "input_tokens": null,
+        "model": null,
+        "summary": "Started the review of clause c3 against the RBI library as on 2026-10-16, with up to 6 tool calls."
+      },
+      {
+        "cost_usd_estimate": null,
+        "seq": 4,
+        "input_tokens": null,
+        "model": null,
+        "output_tokens": null,
+        "at": "2026-10-17T07:58:39.239347Z",
+        "latency_ms": null,
+        "kind": "plan",
+        "verdict": null,
+        "tool": null,
+        "summary": "Started the review of clause c4 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "clause_id": "c4"
+      },
+      {
+        "latency_ms": null,
+        "summary": "Started the review of clause c5 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "verdict": null,
+        "kind": "plan",
+        "cost_usd_estimate": null,
+        "model": null,
+        "seq": 5,
+        "output_tokens": null,
+        "tool": null,
+        "at": "2026-10-17T07:58:39.239881Z",
+        "clause_id": "c5",
+        "input_tokens": null
+      },
+      {
+        "output_tokens": null,
+        "cost_usd_estimate": null,
+        "at": "2026-10-17T07:58:39.240328Z",
+        "clause_id": "c6",
+        "latency_ms": null,
+        "tool": null,
+        "model": null,
+        "verdict": null,
+        "input_tokens": null,
+        "seq": 6,
+        "summary": "Started the review of clause c6 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "kind": "plan"
+      },
+      {
+        "summary": "Started the review of clause c7 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "at": "2026-10-17T07:58:39.240909Z",
+        "model": null,
+        "seq": 7,
+        "verdict": null,
+        "output_tokens": null,
+        "clause_id": "c7",
+        "latency_ms": null,
+        "kind": "plan",
+        "input_tokens": null,
+        "tool": null,
+        "cost_usd_estimate": null
+      },
+      {
+        "tool": null,
+        "at": "2026-10-17T07:58:39.241427Z",
+        "kind": "plan",
+        "cost_usd_estimate": null,
+        "output_tokens": null,
+        "latency_ms": null,
+        "seq": 8,
+        "input_tokens": null,
+        "clause_id": "c8",
+        "verdict": null,
+        "model": null,
+        "summary": "Started the review of clause c8 against the RBI library as on 2026-10-16, with up to 6 tool calls."
+      },
+      {
+        "cost_usd_estimate": 0.00145275,
+        "tool": "search_library",
+        "summary": "Searched instruments in force for \"data stored servers located within India processing outside\": 8 results, top: para 14(4) of RBI/DOR/2025-26/347.",
+        "verdict": null,
+        "at": "2026-10-17T07:58:41.062396Z",
+        "clause_id": "c6",
+        "output_tokens": 72,
+        "kind": "search",
+        "model": "gemini-3.8-flash",
+        "seq": 9,
+        "latency_ms": 1281,
+        "input_tokens": 1577
+      },
+      {
+        "latency_ms": 3,
+        "seq": 10,
+        "at": "2026-10-17T07:58:41.090469Z",
+        "cost_usd_estimate": null,
+        "verdict": null,
+        "model": null,
+        "kind": "read",
+        "output_tokens": null,
+        "summary": "Tried to read para 14(9) of RBI/DOR/2025-26/347: no such paragraph in the snapshot.",
+        "clause_id": "c6",
+        "input_tokens": null,
+        "tool": "read_paragraph"
+      },
+      {
+        "output_tokens": null,
+        "tool": null,
+        "summary": "Monitor verdict on the read of para 14(9) of RBI/DOR/2025-26/347: revise (paragraph does not exist).",
+        "latency_ms": 1,
+        "cost_usd_estimate": null,
+        "verdict": {
+          "reason": "Revise the plan: the finding cannot rest on paragraph 14(9) of RBI/DOR/2025-26/347. The agent asked to read paragraph 14(9) of RBI/DOR/2025-26/347, which does not exist in the RBI snapshot of 2026-10-16. Paragraphs with that number in the library: 14, 14(1), 14(2), 14(3), 14(4).",
+          "action": "revise",
+          "checks": [
+            {
+              "passed": false,
+              "detail": "The agent asked to read paragraph 14(9) of RBI/DOR/2025-26/347, which does not exist in the RBI snapshot of 2026-10-16. Paragraphs with that number in the library: 14, 14(1), 14(2), 14(3), 14(4).",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ]
+        },
+        "kind": "monitor",
+        "at": "2026-10-17T07:58:41.107220Z",
+        "model": null,
+        "clause_id": "c6",
+        "seq": 11,
+        "input_tokens": null
+      },
+      {
+        "output_tokens": 30,
+        "clause_id": "c1",
+        "model": "gemini-3.8-flash",
+        "summary": "Searched instruments in force for \"Lending Service Provider enhanced due diligence conduct review\": 8 results, top: para 6(2) of RBI/DOR/2025-26/347.",
+        "input_tokens": 1591,
+        "verdict": null,
+        "latency_ms": 1935,
+        "tool": "search_library",
+        "cost_usd_estimate": 0.00130575,
+        "kind": "search",
+        "at": "2026-10-17T07:58:41.216014Z",
+        "seq": 12
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "clause_id": "c7",
+        "seq": 13,
+        "summary": "Searched instruments in force for \"nodal grievance redressal officer digital lending\": 8 results, top: para 12(1) of RBI/DOR/2025-26/347.",
+        "verdict": null,
+        "output_tokens": 29,
+        "input_tokens": 1678,
+        "cost_usd_estimate": 0.00136725,
+        "kind": "search",
+        "at": "2026-10-17T07:58:41.227374Z",
+        "latency_ms": 1412,
+        "tool": "search_library"
+      },
+      {
+        "cost_usd_estimate": 0.0012585,
+        "clause_id": "c5",
+        "output_tokens": 27,
+        "model": "gemini-3.8-flash",
+        "input_tokens": 1543,
+        "latency_ms": 1534,
+        "tool": "search_library",
+        "summary": "Searched instruments in force for \"disbursement repayment pool account LSP\": 8 results, top: para 10(2) of RBI/DOR/2025-26/347.",
+        "at": "2026-10-17T07:58:41.271796Z",
+        "kind": "search",
+        "verdict": null,
+        "seq": 14
+      },
+      {
+        "tool": "search_library",
+        "at": "2026-10-17T07:58:41.364129Z",
+        "summary": "Searched instruments in force for \"disbursed directly into bank account borrower third-party\": 8 results, top: para 10(1) of RBI/DOR/2025-26/347.",
+        "kind": "search",
+        "clause_id": "c4",
+        "cost_usd_estimate": 0.00127425,
+        "model": "gemini-3.8-flash",
+        "latency_ms": 1666,
+        "verdict": null,
+        "seq": 15,
+        "output_tokens": 32,
+        "input_tokens": 1539
+      },
+      {
+        "tool": "search_library",
+        "verdict": null,
+        "clause_id": "c3",
+        "kind": "search",
+        "summary": "Searched instruments in force for \"LSP fee borrower disbursal\": 8 results, top: para 10 of RBI/DOR/2025-26/347.",
+        "cost_usd_estimate": 0.00126225,
+        "output_tokens": 27,
+        "at": "2026-10-17T07:58:41.384503Z",
+        "input_tokens": 1548,
+        "seq": 16,
+        "latency_ms": 1731,
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "cost_usd_estimate": 0.00151425,
+        "tool": "check_status",
+        "latency_ms": 1840,
+        "kind": "read",
+        "model": "gemini-3.8-flash",
+        "clause_id": "c2",
+        "output_tokens": 92,
+        "input_tokens": 1559,
+        "summary": "Checked the status of RBI/2025-26/36: not in force since 2025-11-28, now replaced by RBI/DOR/2025-26/347.",
+        "at": "2026-10-17T07:58:41.443672Z",
+        "seq": 17,
+        "verdict": null
+      },
+      {
+        "input_tokens": null,
+        "model": null,
+        "output_tokens": null,
+        "clause_id": "c2",
+        "seq": 18,
+        "cost_usd_estimate": null,
+        "kind": "search",
+        "summary": "Searched instruments in force for \"cooling off period exit digital loan\": 8 results, top: para 11 of RBI/DOR/2025-26/347.",
+        "latency_ms": 3,
+        "at": "2026-10-17T07:58:41.462725Z",
+        "verdict": null,
+        "tool": "search_library"
+      },
+      {
+        "cost_usd_estimate": null,
+        "verdict": null,
+        "seq": 19,
+        "summary": "Read para 10 of RBI/2025-26/36 (not in force since 2025-11-28; rule now at para 11(1) of RBI/DOR/2025-26/347).",
+        "at": "2026-10-17T07:58:41.491410Z",
+        "input_tokens": null,
+        "model": null,
+        "kind": "read",
+        "output_tokens": null,
+        "clause_id": "c2",
+        "tool": "read_paragraph",
+        "latency_ms": 2
+      },
+      {
+        "seq": 20,
+        "summary": "Searched instruments in force for \"digitally signed documents borrower registered email SMS\": 8 results, top: para 9(3) of RBI/DOR/2025-26/347.",
+        "model": "gemini-3.8-flash",
+        "latency_ms": 1665,
+        "verdict": null,
+        "at": "2026-10-17T07:58:41.514496Z",
+        "clause_id": "c8",
+        "kind": "search",
+        "cost_usd_estimate": 0.00130875,
+        "tool": "search_library",
+        "output_tokens": 29,
+        "input_tokens": 1600
+      },
+      {
+        "tool": null,
+        "input_tokens": null,
+        "verdict": {
+          "action": "revise",
+          "reason": "Revise the plan: the finding cannot rest on paragraph 10 of RBI/2025-26/36. Reserve Bank of India (Digital Lending) Directions, 2025 (RBI/2025-26/36) is no longer in force since 2025-11-28; it has been replaced by Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347). A finding must cite the rule in force. The rule now sits at para 11(1) of RBI/DOR/2025-26/347. It may appear only as what the policy itself cites.",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 10 of RBI/2025-26/36 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": false,
+              "detail": "Reserve Bank of India (Digital Lending) Directions, 2025 (RBI/2025-26/36) is no longer in force since 2025-11-28; it has been replaced by Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347). A finding must cite the rule in force. The rule now sits at para 11(1) of RBI/DOR/2025-26/347.",
+              "name": "in_force"
+            }
+          ]
+        },
+        "at": "2026-10-17T07:58:41.515753Z",
+        "summary": "Monitor verdict on the read of para 10 of RBI/2025-26/36: revise (instrument not in force).",
+        "kind": "monitor",
+        "clause_id": "c2",
+        "output_tokens": null,
+        "seq": 21,
+        "latency_ms": 0,
+        "cost_usd_estimate": null,
+        "model": null
+      },
+      {
+        "verdict": null,
+        "summary": "Read para 14(4) of RBI/DOR/2025-26/347 (in force).",
+        "kind": "read",
+        "seq": 22,
+        "output_tokens": 43,
+        "tool": "read_paragraph",
+        "cost_usd_estimate": 0.002202,
+        "at": "2026-10-17T07:58:42.701316Z",
+        "latency_ms": 1567,
+        "clause_id": "c6",
+        "input_tokens": 2721,
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "kind": "monitor",
+        "seq": 23,
+        "at": "2026-10-17T07:58:42.715876Z",
+        "model": null,
+        "tool": null,
+        "summary": "Monitor verdict on the read of para 14(4) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "verdict": {
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 14(4) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ],
+          "action": "continue",
+          "reason": "Paragraph 14(4) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it."
+        },
+        "cost_usd_estimate": null,
+        "latency_ms": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "clause_id": "c6"
+      },
+      {
+        "seq": 24,
+        "kind": "read",
+        "at": "2026-10-17T07:58:42.993376Z",
+        "latency_ms": 1680,
+        "model": "gemini-3.8-flash",
+        "tool": "read_paragraph",
+        "summary": "Read para 10(2) of RBI/DOR/2025-26/347 (in force).",
+        "cost_usd_estimate": 0.00212175,
+        "clause_id": "c5",
+        "verdict": null,
+        "input_tokens": 2399,
+        "output_tokens": 86
+      },
+      {
+        "verdict": {
+          "reason": "Paragraph 10(2) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it.",
+          "action": "continue",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 10(2) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ]
+        },
+        "at": "2026-10-17T07:58:43.017066Z",
+        "summary": "Monitor verdict on the read of para 10(2) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "latency_ms": 0,
+        "output_tokens": null,
+        "tool": null,
+        "clause_id": "c5",
+        "cost_usd_estimate": null,
+        "seq": 25,
+        "model": null,
+        "kind": "monitor",
+        "input_tokens": null
+      },
+      {
+        "latency_ms": 2,
+        "input_tokens": null,
+        "tool": "read_paragraph",
+        "output_tokens": null,
+        "verdict": null,
+        "clause_id": "c5",
+        "summary": "Read para 10(3) of RBI/DOR/2025-26/347 (in force).",
+        "kind": "read",
+        "at": "2026-10-17T07:58:43.047288Z",
+        "cost_usd_estimate": null,
+        "seq": 26,
+        "model": null
+      },
+      {
+        "latency_ms": 0,
+        "verdict": {
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 10(3) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ],
+          "action": "continue",
+          "reason": "Paragraph 10(3) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it."
+        },
+        "summary": "Monitor verdict on the read of para 10(3) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "at": "2026-10-17T07:58:43.071545Z",
+        "output_tokens": null,
+        "tool": null,
+        "model": null,
+        "seq": 27,
+        "kind": "monitor",
+        "clause_id": "c5",
+        "input_tokens": null,
+        "cost_usd_estimate": null
+      },
+      {
+        "kind": "read",
+        "cost_usd_estimate": 0.00269175,
+        "clause_id": "c2",
+        "latency_ms": 1560,
+        "model": "gemini-3.8-flash",
+        "seq": 28,
+        "tool": "read_paragraph",
+        "output_tokens": 43,
+        "summary": "Read para 11(1) of RBI/DOR/2025-26/347 (in force).",
+        "at": "2026-10-17T07:58:43.105056Z",
+        "input_tokens": 3374,
+        "verdict": null
+      },
+      {
+        "output_tokens": 43,
+        "clause_id": "c3",
+        "kind": "read",
+        "summary": "Read para 10(4) of RBI/DOR/2025-26/347 (in force).",
+        "seq": 29,
+        "verdict": null,
+        "model": "gemini-3.8-flash",
+        "tool": "read_paragraph",
+        "cost_usd_estimate": 0.00193275,
+        "at": "2026-10-17T07:58:43.109392Z",
+        "input_tokens": 2362,
+        "latency_ms": 1671
+      },
+      {
+        "model": null,
+        "input_tokens": null,
+        "summary": "Monitor verdict on the read of para 11(1) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "seq": 30,
+        "verdict": {
+          "reason": "Paragraph 11(1) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it.",
+          "action": "continue",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 11(1) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ]
+        },
+        "cost_usd_estimate": null,
+        "latency_ms": 1,
+        "clause_id": "c2",
+        "at": "2026-10-17T07:58:43.134280Z",
+        "kind": "monitor",
+        "tool": null,
+        "output_tokens": null
+      },
+      {
+        "summary": "Monitor verdict on the read of para 10(4) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "latency_ms": 1,
+        "verdict": {
+          "reason": "Paragraph 10(4) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it.",
+          "action": "continue",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 10(4) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ]
+        },
+        "model": null,
+        "output_tokens": null,
+        "clause_id": "c3",
+        "at": "2026-10-17T07:58:43.159049Z",
+        "tool": null,
+        "cost_usd_estimate": null,
+        "seq": 31,
+        "kind": "monitor",
+        "input_tokens": null
+      },
+      {
+        "input_tokens": 2466,
+        "clause_id": "c8",
+        "tool": "read_paragraph",
+        "cost_usd_estimate": 0.002007,
+        "kind": "read",
+        "summary": "Read para 9(3) of RBI/DOR/2025-26/347 (in force).",
+        "at": "2026-10-17T07:58:43.233230Z",
+        "model": "gemini-3.8-flash",
+        "verdict": null,
+        "output_tokens": 42,
+        "seq": 32,
+        "latency_ms": 1663
+      },
+      {
+        "summary": "Monitor verdict on the read of para 9(3) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "tool": null,
+        "latency_ms": 0,
+        "verdict": {
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 9(3) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ],
+          "reason": "Paragraph 9(3) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it.",
+          "action": "continue"
+        },
+        "kind": "monitor",
+        "cost_usd_estimate": null,
+        "at": "2026-10-17T07:58:43.250118Z",
+        "input_tokens": null,
+        "output_tokens": null,
+        "model": null,
+        "seq": 33,
+        "clause_id": "c8"
+      },
+      {
+        "verdict": null,
+        "summary": "Read para 6 of RBI/DOR/2025-26/347 (in force).",
+        "seq": 34,
+        "input_tokens": 2437,
+        "at": "2026-10-17T07:58:43.313247Z",
+        "output_tokens": 123,
+        "kind": "read",
+        "model": "gemini-3.8-flash",
+        "latency_ms": 2069,
+        "cost_usd_estimate": 0.002289,
+        "clause_id": "c1",
+        "tool": "read_paragraph"
+      },
+      {
+        "input_tokens": null,
+        "clause_id": "c1",
+        "kind": "monitor",
+        "seq": 35,
+        "at": "2026-10-17T07:58:43.332595Z",
+        "tool": null,
+        "verdict": {
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 6 of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ],
+          "reason": "Paragraph 6 of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it.",
+          "action": "continue"
+        },
+        "cost_usd_estimate": null,
+        "output_tokens": null,
+        "summary": "Monitor verdict on the read of para 6 of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "latency_ms": 1,
+        "model": null
+      },
+      {
+        "latency_ms": 2,
+        "model": null,
+        "output_tokens": null,
+        "tool": "read_paragraph",
+        "summary": "Read para 6(2) of RBI/DOR/2025-26/347 (in force).",
+        "cost_usd_estimate": null,
+        "input_tokens": null,
+        "seq": 36,
+        "kind": "read",
+        "verdict": null,
+        "at": "2026-10-17T07:58:43.351201Z",
+        "clause_id": "c1"
+      },
+      {
+        "summary": "Monitor verdict on the read of para 6(2) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "model": null,
+        "verdict": {
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 6(2) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ],
+          "action": "continue",
+          "reason": "Paragraph 6(2) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it."
+        },
+        "input_tokens": null,
+        "seq": 37,
+        "output_tokens": null,
+        "cost_usd_estimate": null,
+        "at": "2026-10-17T07:58:43.368104Z",
+        "clause_id": "c1",
+        "latency_ms": 0,
+        "kind": "monitor",
+        "tool": null
+      },
+      {
+        "clause_id": "c1",
+        "seq": 38,
+        "kind": "read",
+        "at": "2026-10-17T07:58:43.389714Z",
+        "model": null,
+        "tool": "read_paragraph",
+        "summary": "Read para 6(3) of RBI/DOR/2025-26/347 (in force).",
+        "latency_ms": 2,
+        "verdict": null,
+        "cost_usd_estimate": null,
+        "input_tokens": null,
+        "output_tokens": null
+      },
+      {
+        "tool": null,
+        "input_tokens": null,
+        "kind": "monitor",
+        "latency_ms": 0,
+        "clause_id": "c1",
+        "model": null,
+        "summary": "Monitor verdict on the read of para 6(3) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "cost_usd_estimate": null,
+        "verdict": {
+          "action": "continue",
+          "reason": "Paragraph 6(3) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it.",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 6(3) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ]
+        },
+        "at": "2026-10-17T07:58:43.427371Z",
+        "output_tokens": null,
+        "seq": 39
+      },
+      {
+        "summary": "Read para 10(1) of RBI/DOR/2025-26/347 (in force).",
+        "output_tokens": 86,
+        "verdict": null,
+        "at": "2026-10-17T07:58:43.649513Z",
+        "model": "gemini-3.8-flash",
+        "input_tokens": 2383,
+        "tool": "read_paragraph",
+        "seq": 40,
+        "latency_ms": 2251,
+        "kind": "read",
+        "clause_id": "c4",
+        "cost_usd_estimate": 0.00210975
+      },
+      {
+        "latency_ms": 0,
+        "input_tokens": null,
+        "clause_id": "c4",
+        "seq": 41,
+        "model": null,
+        "kind": "monitor",
+        "cost_usd_estimate": null,
+        "verdict": {
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 10(1) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ],
+          "action": "continue",
+          "reason": "Paragraph 10(1) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it."
+        },
+        "at": "2026-10-17T07:58:43.677712Z",
+        "output_tokens": null,
+        "summary": "Monitor verdict on the read of para 10(1) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "tool": null
+      },
+      {
+        "input_tokens": null,
+        "seq": 42,
+        "kind": "read",
+        "at": "2026-10-17T07:58:43.695999Z",
+        "tool": "read_paragraph",
+        "verdict": null,
+        "summary": "Read para 10(3) of RBI/DOR/2025-26/347 (in force).",
+        "latency_ms": 2,
+        "output_tokens": null,
+        "clause_id": "c4",
+        "cost_usd_estimate": null,
+        "model": null
+      },
+      {
+        "kind": "monitor",
+        "seq": 43,
+        "output_tokens": null,
+        "tool": null,
+        "cost_usd_estimate": null,
+        "verdict": {
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 10(3) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ],
+          "action": "continue",
+          "reason": "Paragraph 10(3) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it."
+        },
+        "at": "2026-10-17T07:58:43.711547Z",
+        "latency_ms": 0,
+        "summary": "Monitor verdict on the read of para 10(3) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "clause_id": "c4",
+        "input_tokens": null,
+        "model": null
+      },
+      {
+        "cost_usd_estimate": 0.00249,
+        "latency_ms": 2741,
+        "at": "2026-10-17T07:58:44.023959Z",
+        "verdict": null,
+        "clause_id": "c7",
+        "summary": "Read para 12 of RBI/DOR/2025-26/347 (in force).",
+        "input_tokens": 2475,
+        "tool": "read_paragraph",
+        "model": "gemini-3.8-flash",
+        "seq": 44,
+        "kind": "read",
+        "output_tokens": 169
+      },
+      {
+        "cost_usd_estimate": null,
+        "at": "2026-10-17T07:58:44.046517Z",
+        "clause_id": "c7",
+        "model": null,
+        "input_tokens": null,
+        "latency_ms": 0,
+        "summary": "Monitor verdict on the read of para 12 of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "tool": null,
+        "seq": 45,
+        "output_tokens": null,
+        "verdict": {
+          "reason": "Paragraph 12 of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it.",
+          "action": "continue",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 12 of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ]
+        },
+        "kind": "monitor"
+      },
+      {
+        "cost_usd_estimate": null,
+        "output_tokens": null,
+        "input_tokens": null,
+        "tool": "read_paragraph",
+        "verdict": null,
+        "kind": "read",
+        "clause_id": "c7",
+        "summary": "Read para 12(1) of RBI/DOR/2025-26/347 (in force).",
+        "at": "2026-10-17T07:58:44.067284Z",
+        "latency_ms": 2,
+        "seq": 46,
+        "model": null
+      },
+      {
+        "latency_ms": 0,
+        "output_tokens": null,
+        "verdict": {
+          "reason": "Paragraph 12(1) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it.",
+          "action": "continue",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 12(1) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ]
+        },
+        "summary": "Monitor verdict on the read of para 12(1) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "input_tokens": null,
+        "cost_usd_estimate": null,
+        "clause_id": "c7",
+        "tool": null,
+        "model": null,
+        "kind": "monitor",
+        "seq": 47,
+        "at": "2026-10-17T07:58:44.082904Z"
+      },
+      {
+        "model": null,
+        "clause_id": "c7",
+        "output_tokens": null,
+        "cost_usd_estimate": null,
+        "latency_ms": 2,
+        "summary": "Read para 12(2) of RBI/DOR/2025-26/347 (in force).",
+        "at": "2026-10-17T07:58:44.104268Z",
+        "verdict": null,
+        "input_tokens": null,
+        "tool": "read_paragraph",
+        "seq": 48,
+        "kind": "read"
+      },
+      {
+        "kind": "monitor",
+        "cost_usd_estimate": null,
+        "seq": 49,
+        "model": null,
+        "tool": null,
+        "at": "2026-10-17T07:58:44.123496Z",
+        "summary": "Monitor verdict on the read of para 12(2) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "latency_ms": 0,
+        "verdict": {
+          "reason": "Paragraph 12(2) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it.",
+          "action": "continue",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 12(2) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ]
+        },
+        "clause_id": "c7",
+        "output_tokens": null,
+        "input_tokens": null
+      },
+      {
+        "cost_usd_estimate": null,
+        "verdict": null,
+        "seq": 50,
+        "clause_id": "c7",
+        "summary": "Read para 12(3) of RBI/DOR/2025-26/347 (in force).",
+        "at": "2026-10-17T07:58:44.149906Z",
+        "model": null,
+        "latency_ms": 3,
+        "kind": "read",
+        "output_tokens": null,
+        "tool": "read_paragraph",
+        "input_tokens": null
+      },
+      {
+        "clause_id": "c7",
+        "cost_usd_estimate": null,
+        "seq": 51,
+        "model": null,
+        "input_tokens": null,
+        "kind": "monitor",
+        "at": "2026-10-17T07:58:44.179771Z",
+        "verdict": {
+          "reason": "Paragraph 12(3) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it.",
+          "action": "continue",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 12(3) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ]
+        },
+        "output_tokens": null,
+        "summary": "Monitor verdict on the read of para 12(3) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "latency_ms": 0,
+        "tool": null
+      },
+      {
+        "output_tokens": 8,
+        "cost_usd_estimate": 0.00273675,
+        "model": "gemini-3.8-flash",
+        "clause_id": "c2",
+        "latency_ms": 1472,
+        "seq": 52,
+        "input_tokens": 3609,
+        "summary": "Finished looking things up after 4 tool call(s); drafting the finding.",
+        "verdict": null,
+        "kind": "plan",
+        "at": "2026-10-17T07:58:44.648945Z",
+        "tool": null
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "input_tokens": 2527,
+        "cost_usd_estimate": 0.00192525,
+        "seq": 53,
+        "latency_ms": 1484,
+        "clause_id": "c3",
+        "output_tokens": 8,
+        "kind": "plan",
+        "at": "2026-10-17T07:58:44.687279Z",
+        "summary": "Finished looking things up after 2 tool call(s); drafting the finding.",
+        "verdict": null,
+        "tool": null
+      },
+      {
+        "output_tokens": 8,
+        "model": "gemini-3.8-flash",
+        "latency_ms": 1414,
+        "input_tokens": 2705,
+        "cost_usd_estimate": 0.00205875,
+        "tool": null,
+        "at": "2026-10-17T07:58:44.691923Z",
+        "summary": "Finished looking things up after 2 tool call(s); drafting the finding.",
+        "seq": 54,
+        "clause_id": "c8",
+        "verdict": null,
+        "kind": "plan"
+      },
+      {
+        "summary": "Finished looking things up after 4 tool call(s); drafting the finding.",
+        "input_tokens": 3303,
+        "kind": "plan",
+        "verdict": null,
+        "seq": 55,
+        "clause_id": "c1",
+        "model": "gemini-3.8-flash",
+        "tool": null,
+        "cost_usd_estimate": 0.00249975,
+        "at": "2026-10-17T07:58:45.557975Z",
+        "output_tokens": 6,
+        "latency_ms": 2111
+      },
+      {
+        "at": "2026-10-17T07:58:45.684350Z",
+        "tool": "read_paragraph",
+        "kind": "read",
+        "model": "gemini-3.8-flash",
+        "clause_id": "c7",
+        "latency_ms": 1475,
+        "summary": "Read para 12(4) of RBI/DOR/2025-26/347 (in force).",
+        "seq": 56,
+        "cost_usd_estimate": 0.00270525,
+        "input_tokens": 3392,
+        "verdict": null,
+        "output_tokens": 43
+      },
+      {
+        "kind": "monitor",
+        "summary": "Monitor verdict on the read of para 12(4) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "model": null,
+        "tool": null,
+        "seq": 57,
+        "verdict": {
+          "action": "continue",
+          "reason": "Paragraph 12(4) of RBI/DOR/2025-26/347 exists in the RBI snapshot and is in force, so a finding may rest on it.",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 12(4) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            }
+          ]
+        },
+        "input_tokens": null,
+        "output_tokens": null,
+        "at": "2026-10-17T07:58:45.700504Z",
+        "cost_usd_estimate": null,
+        "latency_ms": 0,
+        "clause_id": "c7"
+      },
+      {
+        "input_tokens": null,
+        "tool": null,
+        "cost_usd_estimate": null,
+        "summary": "Tool-call limit of 6 reached; drafting the finding with what was found.",
+        "verdict": null,
+        "latency_ms": null,
+        "kind": "plan",
+        "at": "2026-10-17T07:58:45.721949Z",
+        "model": null,
+        "output_tokens": null,
+        "seq": 58,
+        "clause_id": "c7"
+      },
+      {
+        "output_tokens": 8,
+        "input_tokens": 2958,
+        "latency_ms": 2056,
+        "verdict": null,
+        "at": "2026-10-17T07:58:45.796419Z",
+        "summary": "Finished looking things up after 3 tool call(s); drafting the finding.",
+        "tool": null,
+        "model": "gemini-3.8-flash",
+        "cost_usd_estimate": 0.0022485,
+        "seq": 59,
+        "clause_id": "c4",
+        "kind": "plan"
+      },
+      {
+        "input_tokens": 2730,
+        "seq": 60,
+        "model": "gemini-3.8-flash",
+        "kind": "plan",
+        "latency_ms": 3076,
+        "verdict": null,
+        "clause_id": "c5",
+        "summary": "Finished looking things up after 3 tool call(s); drafting the finding.",
+        "output_tokens": 290,
+        "at": "2026-10-17T07:58:46.169245Z",
+        "tool": null,
+        "cost_usd_estimate": 0.003135
+      },
+      {
+        "cost_usd_estimate": 0.003405,
+        "latency_ms": 2316,
+        "seq": 61,
+        "verdict": null,
+        "at": "2026-10-17T07:58:47.062667Z",
+        "summary": "Drafted the finding: compliant, citing para 9(3) of RBI/DOR/2025-26/347.",
+        "kind": "draft",
+        "model": "gemini-3.8-flash",
+        "clause_id": "c8",
+        "output_tokens": 264,
+        "tool": null,
+        "input_tokens": 3220
+      },
+      {
+        "clause_id": "c3",
+        "tool": null,
+        "kind": "draft",
+        "verdict": null,
+        "latency_ms": 3074,
+        "at": "2026-10-17T07:58:47.785997Z",
+        "summary": "Drafted the finding: conflict, citing para 10(4) of RBI/DOR/2025-26/347.",
+        "cost_usd_estimate": 0.00305325,
+        "input_tokens": 3046,
+        "seq": 62,
+        "output_tokens": 205,
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "latency_ms": 3565,
+        "tool": null,
+        "kind": "draft",
+        "verdict": null,
+        "at": "2026-10-17T07:58:48.240960Z",
+        "summary": "Drafted the finding: outdated reference, citing para 11(1) of RBI/DOR/2025-26/347.",
+        "input_tokens": 4234,
+        "seq": 63,
+        "cost_usd_estimate": 0.0043905,
+        "clause_id": "c2",
+        "output_tokens": 324,
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "verdict": null,
+        "tool": null,
+        "summary": "Drafted the finding: compliant, citing para 6(2) of RBI/DOR/2025-26/347.",
+        "cost_usd_estimate": 0.003738,
+        "clause_id": "c1",
+        "kind": "draft",
+        "input_tokens": 3904,
+        "seq": 64,
+        "output_tokens": 216,
+        "latency_ms": 2805,
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:48.393189Z"
+      },
+      {
+        "output_tokens": 243,
+        "model": "gemini-3.8-flash",
+        "input_tokens": 3518,
+        "summary": "Drafted the finding: compliant, citing para 10(1) of RBI/DOR/2025-26/347.",
+        "clause_id": "c4",
+        "latency_ms": 3073,
+        "verdict": null,
+        "tool": null,
+        "at": "2026-10-17T07:58:48.885171Z",
+        "cost_usd_estimate": 0.00354975,
+        "seq": 65,
+        "kind": "draft"
+      },
+      {
+        "tool": "search_library",
+        "summary": "Searched all instruments for \"14(9)\": 8 results, top: para 9 of RBI/2022-23/111.",
+        "clause_id": "c6",
+        "kind": "search",
+        "verdict": null,
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:49.285010Z",
+        "cost_usd_estimate": 0.002277,
+        "latency_ms": 6541,
+        "output_tokens": 26,
+        "seq": 66,
+        "input_tokens": 2906
+      },
+      {
+        "at": "2026-10-17T07:58:49.614529Z",
+        "tool": null,
+        "output_tokens": 442,
+        "seq": 67,
+        "latency_ms": 3864,
+        "model": "gemini-3.8-flash",
+        "cost_usd_estimate": 0.00493125,
+        "input_tokens": 4365,
+        "verdict": null,
+        "kind": "draft",
+        "summary": "Drafted the finding: compliant, citing para 12 of RBI/DOR/2025-26/347.",
+        "clause_id": "c7"
+      },
+      {
+        "cost_usd_estimate": 0.0023953000000000004,
+        "input_tokens": 1526,
+        "kind": "monitor",
+        "seq": 68,
+        "verdict": {
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 9(3) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "The quoted text appears word for word in paragraph 9(3) of RBI/DOR/2025-26/347.",
+              "name": "quote_matches"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            },
+            {
+              "passed": true,
+              "detail": "The policy clause fully matches the requirements of Paragraph 9(3) regarding the automatic flow of digitally signed documents to the borrower.",
+              "name": "supported"
+            },
+            {
+              "passed": true,
+              "detail": "No instruction aimed at the reviewer was found in the policy text, and the draft follows none.",
+              "name": "no_injection"
+            },
+            {
+              "passed": true,
+              "detail": "The draft properly evaluates the policy clause against the relevant RBI digital lending rule.",
+              "name": "on_task"
+            }
+          ],
+          "action": "continue",
+          "reason": "All checks passed: the cited paragraph is in the RBI library, the quote matches it word for word, the instrument is in force, and the quoted rule supports the finding."
+        },
+        "tool": null,
+        "summary": "Monitor verdict on the draft: continue (all checks passed).",
+        "latency_ms": 2964,
+        "output_tokens": 775,
+        "at": "2026-10-17T07:58:50.055110Z",
+        "model": "gemini-3.5-flash-lite",
+        "clause_id": "c8"
+      },
+      {
+        "tool": null,
+        "output_tokens": null,
+        "cost_usd_estimate": null,
+        "verdict": null,
+        "summary": "Final finding for clause c8: compliant, passed the monitor.",
+        "kind": "final",
+        "input_tokens": null,
+        "at": "2026-10-17T07:58:50.072134Z",
+        "clause_id": "c8",
+        "latency_ms": null,
+        "seq": 69,
+        "model": null
+      },
+      {
+        "output_tokens": 215,
+        "clause_id": "c5",
+        "kind": "draft",
+        "seq": 70,
+        "tool": null,
+        "cost_usd_estimate": 0.003273,
+        "verdict": null,
+        "at": "2026-10-17T07:58:50.323305Z",
+        "summary": "Drafted the finding: conflict, citing para 10(2) of RBI/DOR/2025-26/347.",
+        "latency_ms": 4128,
+        "model": "gemini-3.8-flash",
+        "input_tokens": 3289
+      },
+      {
+        "clause_id": "c6",
+        "tool": "check_status",
+        "at": "2026-10-17T07:58:50.808247Z",
+        "latency_ms": 1492,
+        "kind": "read",
+        "model": "gemini-3.8-flash",
+        "summary": "Checked the status of RBI/DOR/2025-26/347: in force.",
+        "input_tokens": 3658,
+        "seq": 71,
+        "output_tokens": 33,
+        "verdict": null,
+        "cost_usd_estimate": 0.00286725
+      },
+      {
+        "summary": "Monitor verdict on the draft: continue (all checks passed).",
+        "model": "gemini-3.5-flash-lite",
+        "verdict": {
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 10(4) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "The quoted text appears word for word in paragraph 10(4) of RBI/DOR/2025-26/347.",
+              "name": "quote_matches"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            },
+            {
+              "passed": true,
+              "detail": "The quoted RBI rule explicitly forbids charging or collecting LSP fees separately from borrowers, which directly conflicts with the policy clause allowing the LSP to collect fees directly from the borrower.",
+              "name": "supported"
+            },
+            {
+              "passed": true,
+              "detail": "No instruction aimed at the reviewer was found in the policy text, and the draft follows none.",
+              "name": "no_injection"
+            },
+            {
+              "passed": true,
+              "detail": "The finding correctly assesses the policy clause against the relevant RBI digital lending rule.",
+              "name": "on_task"
+            }
+          ],
+          "reason": "All checks passed: the cited paragraph is in the RBI library, the quote matches it word for word, the instrument is in force, and the quoted rule supports the finding.",
+          "action": "continue"
+        },
+        "output_tokens": 904,
+        "seq": 72,
+        "latency_ms": 3126,
+        "clause_id": "c3",
+        "kind": "monitor",
+        "input_tokens": 1339,
+        "at": "2026-10-17T07:58:50.927240Z",
+        "cost_usd_estimate": 0.0026617,
+        "tool": null
+      },
+      {
+        "at": "2026-10-17T07:58:50.946540Z",
+        "tool": null,
+        "cost_usd_estimate": 0.0020814,
+        "kind": "monitor",
+        "output_tokens": 663,
+        "model": "gemini-3.5-flash-lite",
+        "latency_ms": 2534,
+        "seq": 73,
+        "clause_id": "c1",
+        "summary": "Monitor verdict on the draft: continue (all checks passed).",
+        "input_tokens": 1413,
+        "verdict": {
+          "reason": "All checks passed: the cited paragraph is in the RBI library, the quote matches it word for word, the instrument is in force, and the quoted rule supports the finding.",
+          "action": "continue",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 6(2) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "The quoted text appears word for word in paragraph 6(2) of RBI/DOR/2025-26/347.",
+              "name": "quote_matches"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            },
+            {
+              "passed": true,
+              "detail": "The drafted finding correctly concludes that the policy clause is compliant because it fully incorporates the mandated enhanced due diligence requirements for lending service providers.",
+              "name": "supported"
+            },
+            {
+              "passed": true,
+              "detail": "No instruction aimed at the reviewer was found in the policy text, and the draft follows none.",
+              "name": "no_injection"
+            },
+            {
+              "passed": true,
+              "detail": "The draft properly assesses the policy clause against the applicable RBI digital lending guidelines.",
+              "name": "on_task"
+            }
+          ]
+        }
+      },
+      {
+        "cost_usd_estimate": null,
+        "verdict": null,
+        "summary": "Final finding for clause c3: conflict, passed the monitor.",
+        "seq": 74,
+        "clause_id": "c3",
+        "at": "2026-10-17T07:58:50.947234Z",
+        "kind": "final",
+        "model": null,
+        "output_tokens": null,
+        "input_tokens": null,
+        "tool": null,
+        "latency_ms": null
+      },
+      {
+        "cost_usd_estimate": null,
+        "latency_ms": null,
+        "tool": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "kind": "final",
+        "clause_id": "c1",
+        "at": "2026-10-17T07:58:50.978979Z",
+        "verdict": null,
+        "seq": 75,
+        "model": null,
+        "summary": "Final finding for clause c1: compliant, passed the monitor."
+      },
+      {
+        "output_tokens": 1000,
+        "kind": "monitor",
+        "input_tokens": 1601,
+        "summary": "Monitor verdict on the draft: continue (all checks passed).",
+        "model": "gemini-3.5-flash-lite",
+        "seq": 76,
+        "tool": null,
+        "verdict": {
+          "action": "continue",
+          "reason": "All checks passed: the cited paragraph is in the RBI library, the quote matches it word for word, the instrument is in force, and the quoted rule supports the finding. The verifier also checked the policy's own citation: The policy clause cites paragraph 10 of RBI/2025-26/36; Reserve Bank of India (Digital Lending) Directions, 2025 is no longer in force and has been replaced by Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347).",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 11(1) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "The quoted text appears word for word in paragraph 11(1) of RBI/DOR/2025-26/347.",
+              "name": "quote_matches"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            },
+            {
+              "passed": true,
+              "detail": "The agent correctly identified that the policy substance complies with the current cooling-off period requirements while citing a withdrawn instrument and paragraph.",
+              "name": "supported"
+            },
+            {
+              "passed": true,
+              "detail": "No instruction aimed at the reviewer was found in the policy text, and the draft follows none.",
+              "name": "no_injection"
+            },
+            {
+              "passed": true,
+              "detail": "The finding evaluates the policy clause directly against RBI digital lending regulations and identifies its outdated citation.",
+              "name": "on_task"
+            }
+          ]
+        },
+        "at": "2026-10-17T07:58:51.912823Z",
+        "clause_id": "c2",
+        "cost_usd_estimate": 0.0029803000000000004,
+        "latency_ms": 3645
+      },
+      {
+        "output_tokens": null,
+        "input_tokens": null,
+        "kind": "final",
+        "verdict": null,
+        "seq": 77,
+        "tool": null,
+        "summary": "Final finding for clause c2: outdated reference, passed the monitor after it redirected a read.",
+        "latency_ms": null,
+        "at": "2026-10-17T07:58:51.941125Z",
+        "clause_id": "c2",
+        "model": null,
+        "cost_usd_estimate": null
+      },
+      {
+        "verdict": {
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 12 of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "The quoted text appears word for word in paragraph 12 of RBI/DOR/2025-26/347.",
+              "name": "quote_matches"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            },
+            {
+              "passed": true,
+              "detail": "The policy clause correctly and fully implements all requirements of paragraph 12 regarding grievance redressal officers, complaint channels, and escalation paths.",
+              "name": "supported"
+            },
+            {
+              "passed": true,
+              "detail": "No instruction aimed at the reviewer was found in the policy text, and the draft follows none.",
+              "name": "no_injection"
+            },
+            {
+              "passed": true,
+              "detail": "The draft properly assesses the policy clause against the RBI digital lending rules.",
+              "name": "on_task"
+            }
+          ],
+          "reason": "All checks passed: the cited paragraph is in the RBI library, the quote matches it word for word, the instrument is in force, and the quoted rule supports the finding.",
+          "action": "continue"
+        },
+        "seq": 78,
+        "output_tokens": 601,
+        "clause_id": "c7",
+        "summary": "Monitor verdict on the draft: continue (all checks passed).",
+        "model": "gemini-3.5-flash-lite",
+        "cost_usd_estimate": 0.0021000999999999997,
+        "latency_ms": 2382,
+        "kind": "monitor",
+        "at": "2026-10-17T07:58:52.019106Z",
+        "tool": null,
+        "input_tokens": 1992
+      },
+      {
+        "model": null,
+        "input_tokens": null,
+        "latency_ms": null,
+        "seq": 79,
+        "output_tokens": null,
+        "kind": "final",
+        "clause_id": "c7",
+        "at": "2026-10-17T07:58:52.062642Z",
+        "cost_usd_estimate": null,
+        "summary": "Final finding for clause c7: compliant, passed the monitor.",
+        "verdict": null,
+        "tool": null
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "latency_ms": 1710,
+        "output_tokens": 6,
+        "at": "2026-10-17T07:58:52.537613Z",
+        "input_tokens": 3920,
+        "tool": null,
+        "clause_id": "c6",
+        "seq": 80,
+        "kind": "plan",
+        "summary": "Finished looking things up after 5 tool call(s); drafting the finding.",
+        "cost_usd_estimate": 0.0029625,
+        "verdict": null
+      },
+      {
+        "verdict": {
+          "reason": "All checks passed: the cited paragraph is in the RBI library, the quote matches it word for word, the instrument is in force, and the quoted rule supports the finding.",
+          "action": "continue",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 10(2) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "The quoted text appears word for word in paragraph 10(2) of RBI/DOR/2025-26/347.",
+              "name": "quote_matches"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            },
+            {
+              "passed": true,
+              "detail": "The agent correctly identified a conflict because the policy permits payments into an LSP pool account, which directly violates the RBI rule requiring repayments to be executed directly into the NBFC's bank account.",
+              "name": "supported"
+            },
+            {
+              "passed": true,
+              "detail": "No instruction aimed at the reviewer was found in the policy text, and the draft follows none.",
+              "name": "no_injection"
+            },
+            {
+              "passed": true,
+              "detail": "The finding evaluates the policy clause directly against the relevant RBI digital lending guidelines for loan repayments.",
+              "name": "on_task"
+            }
+          ]
+        },
+        "tool": null,
+        "latency_ms": 2314,
+        "summary": "Monitor verdict on the draft: continue (all checks passed).",
+        "kind": "monitor",
+        "output_tokens": 713,
+        "at": "2026-10-17T07:58:52.675776Z",
+        "cost_usd_estimate": 0.0021881,
+        "clause_id": "c5",
+        "seq": 81,
+        "input_tokens": 1352,
+        "model": "gemini-3.5-flash-lite"
+      },
+      {
+        "input_tokens": null,
+        "latency_ms": null,
+        "cost_usd_estimate": null,
+        "model": null,
+        "summary": "Final finding for clause c5: conflict, passed the monitor.",
+        "verdict": null,
+        "clause_id": "c5",
+        "tool": null,
+        "kind": "final",
+        "seq": 82,
+        "at": "2026-10-17T07:58:52.695820Z",
+        "output_tokens": null
+      },
+      {
+        "cost_usd_estimate": 0.0027776,
+        "tool": null,
+        "at": "2026-10-17T07:58:53.981414Z",
+        "latency_ms": 5071,
+        "kind": "monitor",
+        "model": "gemini-3.5-flash-lite",
+        "clause_id": "c4",
+        "seq": 83,
+        "summary": "Monitor verdict on the draft: continue (all checks passed).",
+        "input_tokens": 1617,
+        "output_tokens": 917,
+        "verdict": {
+          "action": "continue",
+          "reason": "All checks passed: the cited paragraph is in the RBI library, the quote matches it word for word, the instrument is in force, and the quoted rule supports the finding.",
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 10(1) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "The quoted text appears word for word in paragraph 10(1) of RBI/DOR/2025-26/347.",
+              "name": "quote_matches"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            },
+            {
+              "passed": true,
+              "detail": "The policy clause aligns with the core RBI mandate by prohibiting third-party and LSP disbursements, and the agent correctly labels it as compliant.",
+              "name": "supported"
+            },
+            {
+              "passed": true,
+              "detail": "No instruction aimed at the reviewer was found in the policy text, and the draft follows none.",
+              "name": "no_injection"
+            },
+            {
+              "passed": true,
+              "detail": "The finding properly evaluates the policy clause against the relevant RBI digital lending rules.",
+              "name": "on_task"
+            }
+          ]
+        }
+      },
+      {
+        "tool": null,
+        "clause_id": "c4",
+        "latency_ms": null,
+        "kind": "final",
+        "at": "2026-10-17T07:58:54.009439Z",
+        "verdict": null,
+        "output_tokens": null,
+        "input_tokens": null,
+        "seq": 84,
+        "summary": "Final finding for clause c4: compliant, passed the monitor.",
+        "cost_usd_estimate": null,
+        "model": null
+      },
+      {
+        "at": "2026-10-17T07:58:55.336548Z",
+        "verdict": null,
+        "cost_usd_estimate": 0.004302,
+        "summary": "Drafted the finding: insufficient evidence, citing para 14(4) of RBI/DOR/2025-26/347.",
+        "clause_id": "c6",
+        "tool": null,
+        "seq": 85,
+        "output_tokens": 219,
+        "model": "gemini-3.8-flash",
+        "input_tokens": 4641,
+        "kind": "draft",
+        "latency_ms": 2779
+      },
+      {
+        "latency_ms": 3619,
+        "tool": null,
+        "output_tokens": 1192,
+        "kind": "monitor",
+        "model": "gemini-3.5-flash-lite",
+        "input_tokens": 1422,
+        "cost_usd_estimate": 0.0034066,
+        "at": "2026-10-17T07:58:58.984531Z",
+        "clause_id": "c6",
+        "summary": "Monitor verdict on the draft: continue (all checks passed).",
+        "verdict": {
+          "checks": [
+            {
+              "passed": true,
+              "detail": "Paragraph 14(4) of RBI/DOR/2025-26/347 exists in the RBI snapshot of 2026-10-16.",
+              "name": "paragraph_exists"
+            },
+            {
+              "passed": true,
+              "detail": "The quoted text appears word for word in paragraph 14(4) of RBI/DOR/2025-26/347.",
+              "name": "quote_matches"
+            },
+            {
+              "passed": true,
+              "detail": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025 (RBI/DOR/2025-26/347) is in force on 2026-10-16.",
+              "name": "in_force"
+            },
+            {
+              "passed": true,
+              "detail": "The agent correctly applied the insufficient_evidence label because the policy cites a paragraph number (14(9)) that does not exist in the current regulatory instrument.",
+              "name": "supported"
+            },
+            {
+              "passed": true,
+              "detail": "No instruction aimed at the reviewer was found in the policy text, and the draft follows none.",
+              "name": "no_injection"
+            },
+            {
+              "passed": true,
+              "detail": "The finding directly evaluates the policy clause against the applicable RBI digital lending rules and citation facts.",
+              "name": "on_task"
+            }
+          ],
+          "action": "continue",
+          "reason": "All checks passed: the cited paragraph is in the RBI library, the quote matches it word for word, the instrument is in force, and the quoted rule supports the finding. The verifier also checked the policy's own citation: The policy clause cites paragraph 14(9) of RBI/DOR/2025-26/347, which does not exist in the RBI snapshot of 2026-10-16."
+        },
+        "seq": 86
+      },
+      {
+        "latency_ms": null,
+        "tool": null,
+        "cost_usd_estimate": null,
+        "output_tokens": null,
+        "input_tokens": null,
+        "kind": "final",
+        "at": "2026-10-17T07:58:59.005699Z",
+        "clause_id": "c6",
+        "seq": 87,
+        "verdict": null,
+        "summary": "Final finding for clause c6: insufficient evidence, passed the monitor after it redirected a read.",
+        "model": null
+      }
+    ],
+    "findings": {
+      "c1": {
+        "rationale": "The policy clause provides for enhanced due diligence before entering into an agreement with an LSP, covering all specific parameters mandated by the regulatory framework. It also establishes an annual review of LSP conduct against contractual terms with required corrective action, satisfying the requirement for periodic review. The clause cites no external instruments and is fully compliant with the applicable directions.",
+        "clause_id": "c1",
+        "clause_text": "Before entering into an agreement with any Lending Service Provider (LSP) for digital lending, the Company shall conduct enhanced due diligence covering the LSP's technical capabilities, data privacy policies and storage systems, fairness in conduct with borrowers, past record of conduct and ability to comply with applicable regulations. The Company shall review the conduct of each LSP against the agreement at least once a year and shall take appropriate action on any deviation from it.",
+        "signoff": null,
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025",
+          "updated_as_on": "2026-07-15",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "in_force": true,
+          "withdrawn_by": null,
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "snapshot_date": "2026-10-16",
+          "content_hash": "04bc5c482a6e170615ccc885ab4dc423e96b47c9e31d0acccd1e02f89654988c",
+          "para": "6(2)",
+          "withdrawn_on": null,
+          "quote": "(2) An NBFC shall conduct enhanced due diligence before they enter into an agreement with a LSP for digital lending, taking into account LSP\u2019s technical capabilities, robustness of data privacy policies and storage systems, fairness in conduct with borrowers, past records of conduct and ability to comply with all applicable regulations and statutes."
+        },
+        "replaced_citation": null,
+        "error": null,
+        "monitor_status": "passed",
+        "label": "compliant"
+      },
+      "c2": {
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025",
+          "in_force": true,
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "snapshot_date": "2026-10-16",
+          "para": "11(1)",
+          "content_hash": "cfd727d1409fde72433cd2d7d187f542fe876290b9e872fa442ce802ac75fcde",
+          "withdrawn_by": null,
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "withdrawn_on": null,
+          "updated_as_on": "2026-07-15",
+          "quote": "(1) The borrower shall be given an explicit option to exit a digital loan by paying the principal and the proportionate APR without any penalty during an initial \u201ccooling-off period\u201d. The cooling off period shall be determined by the NBFC in terms of their credit policy, subject to the period so determined not being less than one day. For borrower continuing with the loan even after cooling-off period, pre-payment shall continue to be allowed as per Reserve Bank of India (Non-Banking Financial Companies- Responsible Business Conduct) Directions, 2025."
+        },
+        "clause_text": "Every borrower may exit a digital loan during a cooling-off period of three days from disbursal by repaying the principal and the proportionate APR, without any penalty, in line with RBI (Digital Lending) Directions, 2025, para 10.",
+        "rationale": "The policy clause provides a three-day cooling-off period during which borrowers can exit a digital loan without penalty by paying principal and proportionate APR, which satisfies the regulatory minimum of at least one day. However, it cites paragraph 10 of the withdrawn Reserve Bank of India (Digital Lending) Directions, 2025 instead of the current directions in force. The citation should be updated to paragraph 11(1) of RBI/DOR/2025-26/347.",
+        "clause_id": "c2",
+        "replaced_citation": {
+          "updated_as_on": null,
+          "in_force": false,
+          "para": "10",
+          "instrument": "Reserve Bank of India (Digital Lending) Directions, 2025",
+          "quote": "10. Cooling-off period i. The borrower shall be given an explicit option to exit a digital loan by paying the principal and the proportionate APR without any penalty during an initial \u201ccooling-off period\u201d. The cooling off period shall be determined by the Board of the RE as laid down in their loan policy, subject to the period so determined not being less than one day. For borrower continuing with the loan even after cooling-off period, pre-payment shall continue to be allowed as per applicable RBI guidelines. ii. RE may retain a reasonable one-time processing fee, if the customer exits the loan during the cooling-off period. This, if applicable, shall be disclosed to the customer upfront in KFS.",
+          "withdrawn_on": "2025-11-28",
+          "snapshot_date": "2026-10-16",
+          "content_hash": "f3afc4e1dddd70bf53e462e778839fd446cba72a76cd70ee0a5f11fd6c13da77",
+          "instrument_ref": "RBI/2025-26/36",
+          "withdrawn_by": "RBI/2025-26/100",
+          "url": "https://www.rbi.org.in/Scripts/NotificationUser.aspx?Id=12848"
+        },
+        "error": null,
+        "signoff": null,
+        "label": "outdated_reference",
+        "monitor_status": "revised"
+      },
+      "c3": {
+        "citation": {
+          "quote": "(4) An NBFC shall ensure that any fees, charges, reimbursements, etc. payable to LSP are paid directly by the NBFC and are not charged to or collected from the borrowers separately by LSP.",
+          "para": "10(4)",
+          "updated_as_on": "2026-07-15",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025",
+          "snapshot_date": "2026-10-16",
+          "withdrawn_on": null,
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "withdrawn_by": null,
+          "content_hash": "e7147cbead4fe9392fbd502eb64febe3decf6c85e2e2f9d91f2fd8f8f16f5576",
+          "in_force": true
+        },
+        "signoff": null,
+        "error": null,
+        "label": "conflict",
+        "replaced_citation": null,
+        "clause_id": "c3",
+        "rationale": "The policy clause provides that the LSP's facilitation fee shall be collected directly from the borrower at disbursal and not paid by the Company. This directly contradicts RBI regulations, which mandate that all fees payable to an LSP must be paid directly by the NBFC and cannot be charged to or collected from borrowers separately by the LSP. Implementing this clause would constitute a regulatory breach.",
+        "clause_text": "The LSP's sourcing and facilitation fee of 1.5% of the sanctioned amount shall be collected by the LSP directly from the borrower at the time of disbursal and shall not be paid by the Company.",
+        "monitor_status": "passed"
+      },
+      "c4": {
+        "monitor_status": "passed",
+        "signoff": null,
+        "clause_text": "Loans shall always be disbursed directly into the bank account of the borrower. No disbursal shall be made to any third-party account, including any account of an LSP.",
+        "error": null,
+        "clause_id": "c4",
+        "citation": {
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "in_force": true,
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "quote": "Disbursement of loan by an NBFC shall always be made into the bank account of the borrower except for disbursals covered exclusively under statutory or regulatory mandate (of the Reserve Bank or of any other regulator), flow of money between lenders for co-lending transactions and disbursals for specific end use, provided the loan is disbursed directly into the bank account of the end-beneficiary.",
+          "para": "10(1)",
+          "snapshot_date": "2026-10-16",
+          "withdrawn_by": null,
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025",
+          "content_hash": "e50e6f0c121b189a1119852df75754a8b2fdc7e2406d2fdd7ff1a07990a77695",
+          "updated_as_on": "2026-07-15",
+          "withdrawn_on": null
+        },
+        "rationale": "The policy clause mandates that loan disbursements must be made directly into the borrower's bank account and prohibits disbursals to third-party accounts, including LSPs. The clause adopts a strict standard that satisfies the core requirements of the RBI directions without adopting optional regulatory exceptions, which is fully permissible. It does not cite any outdated circulars and aligns with the rules in force.",
+        "label": "compliant",
+        "replaced_citation": null
+      },
+      "c5": {
+        "citation": {
+          "content_hash": "6d26341197c61c395037fff8cbe4833eb859153391fab41b8a8df4b0db38806c",
+          "withdrawn_by": null,
+          "updated_as_on": "2026-07-15",
+          "withdrawn_on": null,
+          "in_force": true,
+          "quote": "(2) An NBFC shall ensure that all loan servicing, repayment, etc. is executed by the borrower directly in the NBFC\u2019s bank account without any pass-through account/ pool account of any third party, including the accounts of LSP.",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "para": "10(2)",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025",
+          "snapshot_date": "2026-10-16"
+        },
+        "signoff": null,
+        "clause_id": "c5",
+        "rationale": "The policy clause allows borrowers to pay EMIs into an LSP-maintained collection account that pools repayments before remitting them to the NBFC. This directly contravenes RBI regulations, which require repayments to be executed directly into the NBFC's bank account without pass-through or pool accounts of any third party, including LSPs. Following this policy clause would constitute a regulatory breach.",
+        "clause_text": "To simplify collections, borrowers shall pay their EMIs into a collection account maintained by the LSP, which shall pool repayments and remit them to the Company's bank account on a weekly basis.",
+        "label": "conflict",
+        "replaced_citation": null,
+        "error": null,
+        "monitor_status": "passed"
+      },
+      "c6": {
+        "error": null,
+        "label": "insufficient_evidence",
+        "clause_text": "All borrower data shall be stored only on servers located within India. Where any data is processed outside India, it shall be deleted from the servers outside India and brought back to India within 24 hours of processing, as required by RBI (Non-Banking Financial Companies - Credit Facilities) Directions, 2025, para 14(9).",
+        "replaced_citation": null,
+        "monitor_status": "revised",
+        "citation": {
+          "in_force": true,
+          "para": "14(4)",
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "snapshot_date": "2026-10-16",
+          "quote": "(4) An NBFC shall ensure that all data is stored only in servers located within India, while ensuring compliance with statutory obligations/ regulatory instructions.",
+          "withdrawn_by": null,
+          "content_hash": "26ef0479c6d3a34be08ab7efe0c18f305919607d59853c6ee1731dada79a0664",
+          "updated_as_on": "2026-07-15",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "withdrawn_on": null
+        },
+        "signoff": null,
+        "rationale": "The policy clause correctly reflects the substantive requirement regarding data storage in India and the 24-hour window for repatriating data processed abroad. However, it cites paragraph 14(9) of the Directions, a paragraph number that does not exist in the instrument in force. Because the policy's cited reference cannot be verified against the regulatory framework, the clause requires human review.",
+        "clause_id": "c6"
+      },
+      "c7": {
+        "signoff": null,
+        "clause_id": "c7",
+        "rationale": "The policy clause comprehensively covers the grievance redressal requirements for digital lending, including designating nodal grievance redressal officers across the NBFC and customer-facing LSPs, displaying their contact details, offering complaint lodging channels, and providing escalation paths to the Reserve Bank Integrated Ombudsman Scheme. It satisfies all obligations under paragraph 12 without omitting any regulatory element or citing outdated instruments.",
+        "citation": {
+          "content_hash": "178307f3f00a4dce65aa478fe187e35f87e24a0cf78342a8848b4c63b08d441f",
+          "withdrawn_by": null,
+          "snapshot_date": "2026-10-16",
+          "withdrawn_on": null,
+          "updated_as_on": "2026-07-15",
+          "para": "12",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025",
+          "quote": "12. Grievance redressal (1) An NBFC, and their LSP which has an interface with the borrower, shall designate nodal grievance redressal officers to deal with digital lending related complaints/ issues raised by the borrower. (2) Contact details of the nodal grievance redressal officers shall be prominently displayed on the websites of the NBFC, its LSP and on the DLA, as well as in the KFS provided to the borrower. (3) The facility of lodging complaint shall also be made available on the DLA and on the website as stated above. It is reiterated that responsibility of grievance redressal shall continue to remain with the NBFC. (4) If any complaint lodged by the borrower against the NBFC or the LSP engaged by the NBFC is rejected wholly or partly by the NBFC, or the borrower is not satisfied with the reply; or the borrower has not received any reply within 30 days of receipt of complaint by the NBFC, the said borrower can lodge a complaint over the Complaint Management System (CMS - https://cms.rbi.org.in/) portal under the Reserve Bank-Integrated Ombudsman Scheme (as applicable) or send a physical complaint to \u201cCentralised Receipt and Processing Centre, 4th Floor, Reserve Bank of India, Sector -17, Central Vista, Chandigarh - 160017\u201d as per the grievance redressal mechanism prescribed by the Reserve Bank. This information shall be suitably conveyed to the borrower.",
+          "in_force": true
+        },
+        "clause_text": "The Company and every LSP that has an interface with borrowers shall designate a nodal grievance redressal officer for digital lending complaints. The officers' contact details shall be displayed prominently on the Company's website, the LSP's website, the digital lending app and in the Key Fact Statement. Borrowers may lodge complaints on the digital lending app and on the Company's website, and the Company remains responsible for resolving every complaint. If a complaint is rejected wholly or partly, the borrower is not satisfied with the reply, or no reply is received within 30 days, the borrower shall be told that they may complain on the Reserve Bank's Complaint Management System (https://cms.rbi.org.in/) under the Reserve Bank - Integrated Ombudsman Scheme, or send a physical complaint to the Reserve Bank's Centralised Receipt and Processing Centre in Chandigarh.",
+        "replaced_citation": null,
+        "label": "compliant",
+        "error": null,
+        "monitor_status": "passed"
+      },
+      "c8": {
+        "clause_text": "On execution of each loan contract or transaction, digitally signed documents on the Company's letterhead, namely the Key Fact Statement, summary of the loan product, sanction letter, terms and conditions, account statements and the privacy policies of the Company and its LSPs on the storage and use of borrowers' data, shall flow automatically to the borrower's registered and verified email or SMS. Digitally signed documents shall comply with the Information Technology Act, 2000.",
+        "replaced_citation": null,
+        "error": null,
+        "citation": {
+          "instrument": "Reserve Bank of India (Non-Banking Financial Companies \u2013 Credit Facilities) Directions, 2025",
+          "quote": "(3) An NBFC shall ensure that digitally signed documents (on the letter head of the NBFC) viz., KFS, summary of loan product, sanction letter, terms and conditions, account statements, privacy policies of the NBFC / LSP with respect to storage and usage of borrowers\u2019 data, etc. shall automatically flow to the borrower on the registered and verified email / SMS upon execution of the loan contract / transactions.",
+          "content_hash": "0677d011525c8a0713558a8be1a2016b9f1ee0db35802f0df69249a5ed08adeb",
+          "para": "9(3)",
+          "withdrawn_by": null,
+          "in_force": true,
+          "instrument_ref": "RBI/DOR/2025-26/347",
+          "withdrawn_on": null,
+          "updated_as_on": "2026-07-15",
+          "url": "https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=12957",
+          "snapshot_date": "2026-10-16"
+        },
+        "label": "compliant",
+        "monitor_status": "passed",
+        "rationale": "The policy clause fully aligns with Paragraph 9(3) of the NBFC Credit Facilities Directions, 2025 regarding the automatic flow of digitally signed documents upon execution of the loan contract or transaction. It covers all required documents on the company's letterhead sent to the borrower's registered and verified email or SMS, and properly mandates compliance with the Information Technology Act, 2000. It contains no outdated references or gaps.",
+        "clause_id": "c8",
+        "signoff": null
+      }
+    },
+    "audit": [
+      {
+        "actor": "officer:1TlVA9w0hreQi1pmhQxJC0WwvNq1",
+        "event": "run_started",
+        "model": null,
+        "seq": 1,
+        "clause_id": null,
+        "at": "2026-10-17T07:58:39.193169Z",
+        "detail": "Review of Sample NBFC A: Digital Lending Policy: 8 clauses"
+      },
+      {
+        "seq": 2,
+        "clause_id": "c1",
+        "model": null,
+        "detail": "Started the review of clause c1 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "event": "step_plan",
+        "at": "2026-10-17T07:58:39.236214Z",
+        "actor": "agent"
+      },
+      {
+        "seq": 3,
+        "clause_id": "c2",
+        "model": null,
+        "detail": "Started the review of clause c2 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "at": "2026-10-17T07:58:39.286085Z",
+        "event": "step_plan",
+        "actor": "agent"
+      },
+      {
+        "seq": 4,
+        "model": null,
+        "event": "step_plan",
+        "detail": "Started the review of clause c3 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "clause_id": "c3",
+        "actor": "agent",
+        "at": "2026-10-17T07:58:39.606050Z"
+      },
+      {
+        "seq": 5,
+        "clause_id": "c4",
+        "model": null,
+        "event": "step_plan",
+        "detail": "Started the review of clause c4 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "at": "2026-10-17T07:58:39.656054Z",
+        "actor": "agent"
+      },
+      {
+        "model": null,
+        "at": "2026-10-17T07:58:39.700911Z",
+        "seq": 6,
+        "detail": "Started the review of clause c5 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "clause_id": "c5",
+        "event": "step_plan",
+        "actor": "agent"
+      },
+      {
+        "model": null,
+        "detail": "Started the review of clause c6 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "at": "2026-10-17T07:58:39.741742Z",
+        "seq": 7,
+        "actor": "agent",
+        "event": "step_plan",
+        "clause_id": "c6"
+      },
+      {
+        "at": "2026-10-17T07:58:39.784464Z",
+        "actor": "agent",
+        "event": "step_plan",
+        "model": null,
+        "seq": 8,
+        "clause_id": "c7",
+        "detail": "Started the review of clause c7 against the RBI library as on 2026-10-16, with up to 6 tool calls."
+      },
+      {
+        "at": "2026-10-17T07:58:39.817553Z",
+        "detail": "Started the review of clause c8 against the RBI library as on 2026-10-16, with up to 6 tool calls.",
+        "model": null,
+        "seq": 9,
+        "clause_id": "c8",
+        "actor": "agent",
+        "event": "step_plan"
+      },
+      {
+        "clause_id": "c6",
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:41.062493Z",
+        "actor": "agent",
+        "detail": "Searched instruments in force for \"data stored servers located within India processing outside\": 8 results, top: para 14(4) of RBI/DOR/2025-26/347.",
+        "seq": 10,
+        "event": "step_search"
+      },
+      {
+        "event": "step_read",
+        "actor": "agent",
+        "at": "2026-10-17T07:58:41.090572Z",
+        "clause_id": "c6",
+        "detail": "Tried to read para 14(9) of RBI/DOR/2025-26/347: no such paragraph in the snapshot.",
+        "model": null,
+        "seq": 11
+      },
+      {
+        "model": null,
+        "at": "2026-10-17T07:58:41.107350Z",
+        "detail": "Monitor verdict on the read of para 14(9) of RBI/DOR/2025-26/347: revise (paragraph does not exist).",
+        "clause_id": "c6",
+        "event": "step_monitor",
+        "actor": "monitor",
+        "seq": 12
+      },
+      {
+        "clause_id": "c1",
+        "event": "step_search",
+        "actor": "agent",
+        "seq": 13,
+        "detail": "Searched instruments in force for \"Lending Service Provider enhanced due diligence conduct review\": 8 results, top: para 6(2) of RBI/DOR/2025-26/347.",
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:41.216124Z"
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "clause_id": "c7",
+        "detail": "Searched instruments in force for \"nodal grievance redressal officer digital lending\": 8 results, top: para 12(1) of RBI/DOR/2025-26/347.",
+        "event": "step_search",
+        "seq": 14,
+        "at": "2026-10-17T07:58:41.247512Z",
+        "actor": "agent"
+      },
+      {
+        "event": "step_search",
+        "at": "2026-10-17T07:58:41.286185Z",
+        "actor": "agent",
+        "clause_id": "c5",
+        "model": "gemini-3.8-flash",
+        "detail": "Searched instruments in force for \"disbursement repayment pool account LSP\": 8 results, top: para 10(2) of RBI/DOR/2025-26/347.",
+        "seq": 15
+      },
+      {
+        "clause_id": "c4",
+        "actor": "agent",
+        "event": "step_search",
+        "detail": "Searched instruments in force for \"disbursed directly into bank account borrower third-party\": 8 results, top: para 10(1) of RBI/DOR/2025-26/347.",
+        "at": "2026-10-17T07:58:41.364236Z",
+        "model": "gemini-3.8-flash",
+        "seq": 16
+      },
+      {
+        "event": "step_search",
+        "seq": 17,
+        "actor": "agent",
+        "detail": "Searched instruments in force for \"LSP fee borrower disbursal\": 8 results, top: para 10 of RBI/DOR/2025-26/347.",
+        "at": "2026-10-17T07:58:41.401884Z",
+        "model": "gemini-3.8-flash",
+        "clause_id": "c3"
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "detail": "Checked the status of RBI/2025-26/36: not in force since 2025-11-28, now replaced by RBI/DOR/2025-26/347.",
+        "seq": 18,
+        "actor": "agent",
+        "at": "2026-10-17T07:58:41.443749Z",
+        "event": "step_read",
+        "clause_id": "c2"
+      },
+      {
+        "model": null,
+        "clause_id": "c2",
+        "at": "2026-10-17T07:58:41.462838Z",
+        "seq": 19,
+        "detail": "Searched instruments in force for \"cooling off period exit digital loan\": 8 results, top: para 11 of RBI/DOR/2025-26/347.",
+        "actor": "agent",
+        "event": "step_search"
+      },
+      {
+        "at": "2026-10-17T07:58:41.491510Z",
+        "seq": 20,
+        "model": null,
+        "event": "step_read",
+        "detail": "Read para 10 of RBI/2025-26/36 (not in force since 2025-11-28; rule now at para 11(1) of RBI/DOR/2025-26/347).",
+        "actor": "agent",
+        "clause_id": "c2"
+      },
+      {
+        "seq": 21,
+        "model": null,
+        "actor": "monitor",
+        "detail": "Monitor verdict on the read of para 10 of RBI/2025-26/36: revise (instrument not in force).",
+        "at": "2026-10-17T07:58:41.515847Z",
+        "event": "step_monitor",
+        "clause_id": "c2"
+      },
+      {
+        "seq": 22,
+        "clause_id": "c8",
+        "model": "gemini-3.8-flash",
+        "event": "step_search",
+        "detail": "Searched instruments in force for \"digitally signed documents borrower registered email SMS\": 8 results, top: para 9(3) of RBI/DOR/2025-26/347.",
+        "at": "2026-10-17T07:58:41.551113Z",
+        "actor": "agent"
+      },
+      {
+        "seq": 23,
+        "model": "gemini-3.8-flash",
+        "actor": "agent",
+        "clause_id": "c6",
+        "detail": "Read para 14(4) of RBI/DOR/2025-26/347 (in force).",
+        "at": "2026-10-17T07:58:42.701418Z",
+        "event": "step_read"
+      },
+      {
+        "at": "2026-10-17T07:58:42.716007Z",
+        "detail": "Monitor verdict on the read of para 14(4) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "model": null,
+        "clause_id": "c6",
+        "event": "step_monitor",
+        "seq": 24,
+        "actor": "monitor"
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:42.993467Z",
+        "detail": "Read para 10(2) of RBI/DOR/2025-26/347 (in force).",
+        "actor": "agent",
+        "seq": 25,
+        "clause_id": "c5",
+        "event": "step_read"
+      },
+      {
+        "at": "2026-10-17T07:58:43.017166Z",
+        "actor": "monitor",
+        "clause_id": "c5",
+        "event": "step_monitor",
+        "seq": 26,
+        "detail": "Monitor verdict on the read of para 10(2) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "model": null
+      },
+      {
+        "seq": 27,
+        "clause_id": "c5",
+        "model": null,
+        "event": "step_read",
+        "detail": "Read para 10(3) of RBI/DOR/2025-26/347 (in force).",
+        "actor": "agent",
+        "at": "2026-10-17T07:58:43.047383Z"
+      },
+      {
+        "detail": "Monitor verdict on the read of para 10(3) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "clause_id": "c5",
+        "at": "2026-10-17T07:58:43.071651Z",
+        "seq": 28,
+        "model": null,
+        "event": "step_monitor",
+        "actor": "monitor"
+      },
+      {
+        "clause_id": "c2",
+        "actor": "agent",
+        "at": "2026-10-17T07:58:43.105139Z",
+        "seq": 29,
+        "event": "step_read",
+        "detail": "Read para 11(1) of RBI/DOR/2025-26/347 (in force).",
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "seq": 30,
+        "clause_id": "c3",
+        "model": "gemini-3.8-flash",
+        "actor": "agent",
+        "detail": "Read para 10(4) of RBI/DOR/2025-26/347 (in force).",
+        "at": "2026-10-17T07:58:43.133084Z",
+        "event": "step_read"
+      },
+      {
+        "clause_id": "c2",
+        "detail": "Monitor verdict on the read of para 11(1) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "model": null,
+        "seq": 31,
+        "actor": "monitor",
+        "event": "step_monitor",
+        "at": "2026-10-17T07:58:43.157993Z"
+      },
+      {
+        "at": "2026-10-17T07:58:43.182349Z",
+        "clause_id": "c3",
+        "actor": "monitor",
+        "event": "step_monitor",
+        "model": null,
+        "seq": 32,
+        "detail": "Monitor verdict on the read of para 10(4) of RBI/DOR/2025-26/347: continue (paragraph exists, in force)."
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:43.233321Z",
+        "clause_id": "c8",
+        "seq": 33,
+        "actor": "agent",
+        "detail": "Read para 9(3) of RBI/DOR/2025-26/347 (in force).",
+        "event": "step_read"
+      },
+      {
+        "model": null,
+        "clause_id": "c8",
+        "seq": 34,
+        "actor": "monitor",
+        "detail": "Monitor verdict on the read of para 9(3) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "at": "2026-10-17T07:58:43.250218Z",
+        "event": "step_monitor"
+      },
+      {
+        "actor": "agent",
+        "event": "step_read",
+        "seq": 35,
+        "at": "2026-10-17T07:58:43.313334Z",
+        "model": "gemini-3.8-flash",
+        "clause_id": "c1",
+        "detail": "Read para 6 of RBI/DOR/2025-26/347 (in force)."
+      },
+      {
+        "actor": "monitor",
+        "event": "step_monitor",
+        "model": null,
+        "seq": 36,
+        "clause_id": "c1",
+        "detail": "Monitor verdict on the read of para 6 of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "at": "2026-10-17T07:58:43.332800Z"
+      },
+      {
+        "at": "2026-10-17T07:58:43.351292Z",
+        "clause_id": "c1",
+        "actor": "agent",
+        "event": "step_read",
+        "model": null,
+        "seq": 37,
+        "detail": "Read para 6(2) of RBI/DOR/2025-26/347 (in force)."
+      },
+      {
+        "detail": "Monitor verdict on the read of para 6(2) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "seq": 38,
+        "model": null,
+        "event": "step_monitor",
+        "clause_id": "c1",
+        "actor": "monitor",
+        "at": "2026-10-17T07:58:43.368199Z"
+      },
+      {
+        "actor": "agent",
+        "seq": 39,
+        "event": "step_read",
+        "at": "2026-10-17T07:58:43.389875Z",
+        "model": null,
+        "clause_id": "c1",
+        "detail": "Read para 6(3) of RBI/DOR/2025-26/347 (in force)."
+      },
+      {
+        "event": "step_monitor",
+        "seq": 40,
+        "actor": "monitor",
+        "detail": "Monitor verdict on the read of para 6(3) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "clause_id": "c1",
+        "at": "2026-10-17T07:58:43.427484Z",
+        "model": null
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:43.649606Z",
+        "detail": "Read para 10(1) of RBI/DOR/2025-26/347 (in force).",
+        "event": "step_read",
+        "actor": "agent",
+        "clause_id": "c4",
+        "seq": 41
+      },
+      {
+        "clause_id": "c4",
+        "actor": "monitor",
+        "seq": 42,
+        "event": "step_monitor",
+        "model": null,
+        "at": "2026-10-17T07:58:43.677813Z",
+        "detail": "Monitor verdict on the read of para 10(1) of RBI/DOR/2025-26/347: continue (paragraph exists, in force)."
+      },
+      {
+        "model": null,
+        "clause_id": "c4",
+        "seq": 43,
+        "detail": "Read para 10(3) of RBI/DOR/2025-26/347 (in force).",
+        "actor": "agent",
+        "at": "2026-10-17T07:58:43.696095Z",
+        "event": "step_read"
+      },
+      {
+        "model": null,
+        "detail": "Monitor verdict on the read of para 10(3) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "seq": 44,
+        "at": "2026-10-17T07:58:43.711641Z",
+        "actor": "monitor",
+        "clause_id": "c4",
+        "event": "step_monitor"
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "clause_id": "c7",
+        "detail": "Read para 12 of RBI/DOR/2025-26/347 (in force).",
+        "actor": "agent",
+        "seq": 45,
+        "event": "step_read",
+        "at": "2026-10-17T07:58:44.024059Z"
+      },
+      {
+        "detail": "Monitor verdict on the read of para 12 of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "at": "2026-10-17T07:58:44.046647Z",
+        "model": null,
+        "clause_id": "c7",
+        "event": "step_monitor",
+        "seq": 46,
+        "actor": "monitor"
+      },
+      {
+        "model": null,
+        "clause_id": "c7",
+        "detail": "Read para 12(1) of RBI/DOR/2025-26/347 (in force).",
+        "at": "2026-10-17T07:58:44.067379Z",
+        "actor": "agent",
+        "event": "step_read",
+        "seq": 47
+      },
+      {
+        "seq": 48,
+        "actor": "monitor",
+        "event": "step_monitor",
+        "detail": "Monitor verdict on the read of para 12(1) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "clause_id": "c7",
+        "at": "2026-10-17T07:58:44.083228Z",
+        "model": null
+      },
+      {
+        "at": "2026-10-17T07:58:44.104366Z",
+        "seq": 49,
+        "clause_id": "c7",
+        "model": null,
+        "event": "step_read",
+        "detail": "Read para 12(2) of RBI/DOR/2025-26/347 (in force).",
+        "actor": "agent"
+      },
+      {
+        "actor": "monitor",
+        "seq": 50,
+        "event": "step_monitor",
+        "clause_id": "c7",
+        "model": null,
+        "at": "2026-10-17T07:58:44.123603Z",
+        "detail": "Monitor verdict on the read of para 12(2) of RBI/DOR/2025-26/347: continue (paragraph exists, in force)."
+      },
+      {
+        "model": null,
+        "detail": "Read para 12(3) of RBI/DOR/2025-26/347 (in force).",
+        "seq": 51,
+        "at": "2026-10-17T07:58:44.150026Z",
+        "actor": "agent",
+        "clause_id": "c7",
+        "event": "step_read"
+      },
+      {
+        "at": "2026-10-17T07:58:44.179868Z",
+        "model": null,
+        "clause_id": "c7",
+        "seq": 52,
+        "actor": "monitor",
+        "detail": "Monitor verdict on the read of para 12(3) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "event": "step_monitor"
+      },
+      {
+        "actor": "agent",
+        "seq": 53,
+        "event": "step_plan",
+        "detail": "Finished looking things up after 4 tool call(s); drafting the finding.",
+        "clause_id": "c2",
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:44.649038Z"
+      },
+      {
+        "event": "step_plan",
+        "actor": "agent",
+        "at": "2026-10-17T07:58:44.687374Z",
+        "seq": 54,
+        "clause_id": "c3",
+        "detail": "Finished looking things up after 2 tool call(s); drafting the finding.",
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "event": "step_plan",
+        "at": "2026-10-17T07:58:44.717736Z",
+        "detail": "Finished looking things up after 2 tool call(s); drafting the finding.",
+        "actor": "agent",
+        "seq": 55,
+        "clause_id": "c8",
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "detail": "Finished looking things up after 4 tool call(s); drafting the finding.",
+        "at": "2026-10-17T07:58:45.558063Z",
+        "seq": 56,
+        "actor": "agent",
+        "clause_id": "c1",
+        "event": "step_plan"
+      },
+      {
+        "actor": "agent",
+        "at": "2026-10-17T07:58:45.684437Z",
+        "seq": 57,
+        "event": "step_read",
+        "detail": "Read para 12(4) of RBI/DOR/2025-26/347 (in force).",
+        "model": "gemini-3.8-flash",
+        "clause_id": "c7"
+      },
+      {
+        "actor": "monitor",
+        "clause_id": "c7",
+        "at": "2026-10-17T07:58:45.700681Z",
+        "event": "step_monitor",
+        "detail": "Monitor verdict on the read of para 12(4) of RBI/DOR/2025-26/347: continue (paragraph exists, in force).",
+        "model": null,
+        "seq": 58
+      },
+      {
+        "event": "step_plan",
+        "at": "2026-10-17T07:58:45.722038Z",
+        "detail": "Tool-call limit of 6 reached; drafting the finding with what was found.",
+        "actor": "agent",
+        "model": null,
+        "clause_id": "c7",
+        "seq": 59
+      },
+      {
+        "event": "step_plan",
+        "actor": "agent",
+        "seq": 60,
+        "at": "2026-10-17T07:58:45.796501Z",
+        "model": "gemini-3.8-flash",
+        "detail": "Finished looking things up after 3 tool call(s); drafting the finding.",
+        "clause_id": "c4"
+      },
+      {
+        "event": "step_plan",
+        "at": "2026-10-17T07:58:46.169328Z",
+        "seq": 61,
+        "actor": "agent",
+        "clause_id": "c5",
+        "detail": "Finished looking things up after 3 tool call(s); drafting the finding.",
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "event": "step_draft",
+        "seq": 62,
+        "actor": "agent",
+        "detail": "Drafted the finding: compliant, citing para 9(3) of RBI/DOR/2025-26/347.",
+        "at": "2026-10-17T07:58:47.062746Z",
+        "clause_id": "c8",
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "detail": "Drafted the finding: conflict, citing para 10(4) of RBI/DOR/2025-26/347.",
+        "clause_id": "c3",
+        "seq": 63,
+        "actor": "agent",
+        "at": "2026-10-17T07:58:47.786075Z",
+        "event": "step_draft"
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "detail": "Drafted the finding: outdated reference, citing para 11(1) of RBI/DOR/2025-26/347.",
+        "at": "2026-10-17T07:58:48.241054Z",
+        "seq": 64,
+        "clause_id": "c2",
+        "actor": "agent",
+        "event": "step_draft"
+      },
+      {
+        "detail": "Drafted the finding: compliant, citing para 6(2) of RBI/DOR/2025-26/347.",
+        "model": "gemini-3.8-flash",
+        "seq": 65,
+        "clause_id": "c1",
+        "at": "2026-10-17T07:58:48.393279Z",
+        "event": "step_draft",
+        "actor": "agent"
+      },
+      {
+        "seq": 66,
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:48.885261Z",
+        "actor": "agent",
+        "detail": "Drafted the finding: compliant, citing para 10(1) of RBI/DOR/2025-26/347.",
+        "event": "step_draft",
+        "clause_id": "c4"
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:49.285109Z",
+        "actor": "agent",
+        "detail": "Searched all instruments for \"14(9)\": 8 results, top: para 9 of RBI/2022-23/111.",
+        "seq": 67,
+        "event": "step_search",
+        "clause_id": "c6"
+      },
+      {
+        "at": "2026-10-17T07:58:49.614621Z",
+        "event": "step_draft",
+        "actor": "agent",
+        "clause_id": "c7",
+        "model": "gemini-3.8-flash",
+        "seq": 68,
+        "detail": "Drafted the finding: compliant, citing para 12 of RBI/DOR/2025-26/347."
+      },
+      {
+        "clause_id": "c8",
+        "model": "gemini-3.5-flash-lite",
+        "detail": "Monitor verdict on the draft: continue (all checks passed).",
+        "at": "2026-10-17T07:58:50.055221Z",
+        "seq": 69,
+        "event": "step_monitor",
+        "actor": "monitor"
+      },
+      {
+        "actor": "agent",
+        "seq": 70,
+        "event": "step_final",
+        "clause_id": "c8",
+        "model": null,
+        "detail": "Final finding for clause c8: compliant, passed the monitor.",
+        "at": "2026-10-17T07:58:50.072233Z"
+      },
+      {
+        "clause_id": "c8",
+        "actor": "agent",
+        "at": "2026-10-17T07:58:50.096241Z",
+        "event": "finding_recorded",
+        "seq": 71,
+        "detail": "compliant, monitor passed",
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:50.323383Z",
+        "clause_id": "c5",
+        "detail": "Drafted the finding: conflict, citing para 10(2) of RBI/DOR/2025-26/347.",
+        "actor": "agent",
+        "event": "step_draft",
+        "seq": 72
+      },
+      {
+        "seq": 73,
+        "model": "gemini-3.8-flash",
+        "detail": "Checked the status of RBI/DOR/2025-26/347: in force.",
+        "clause_id": "c6",
+        "actor": "agent",
+        "event": "step_read",
+        "at": "2026-10-17T07:58:50.808376Z"
+      },
+      {
+        "clause_id": "c3",
+        "detail": "Monitor verdict on the draft: continue (all checks passed).",
+        "model": "gemini-3.5-flash-lite",
+        "seq": 74,
+        "actor": "monitor",
+        "event": "step_monitor",
+        "at": "2026-10-17T07:58:50.927498Z"
+      },
+      {
+        "at": "2026-10-17T07:58:50.947381Z",
+        "event": "step_monitor",
+        "detail": "Monitor verdict on the draft: continue (all checks passed).",
+        "actor": "monitor",
+        "clause_id": "c1",
+        "model": "gemini-3.5-flash-lite",
+        "seq": 75
+      },
+      {
+        "actor": "agent",
+        "at": "2026-10-17T07:58:50.979156Z",
+        "clause_id": "c3",
+        "event": "step_final",
+        "seq": 76,
+        "model": null,
+        "detail": "Final finding for clause c3: conflict, passed the monitor."
+      },
+      {
+        "seq": 77,
+        "detail": "Final finding for clause c1: compliant, passed the monitor.",
+        "clause_id": "c1",
+        "model": null,
+        "event": "step_final",
+        "at": "2026-10-17T07:58:50.998845Z",
+        "actor": "agent"
+      },
+      {
+        "detail": "conflict, monitor passed",
+        "seq": 78,
+        "model": "gemini-3.8-flash",
+        "event": "finding_recorded",
+        "actor": "agent",
+        "clause_id": "c3",
+        "at": "2026-10-17T07:58:51.078955Z"
+      },
+      {
+        "detail": "compliant, monitor passed",
+        "model": "gemini-3.8-flash",
+        "clause_id": "c1",
+        "seq": 79,
+        "at": "2026-10-17T07:58:51.108948Z",
+        "actor": "agent",
+        "event": "finding_recorded"
+      },
+      {
+        "at": "2026-10-17T07:58:51.912951Z",
+        "actor": "monitor",
+        "detail": "Monitor verdict on the draft: continue (all checks passed).",
+        "event": "step_monitor",
+        "model": "gemini-3.5-flash-lite",
+        "seq": 80,
+        "clause_id": "c2"
+      },
+      {
+        "seq": 81,
+        "model": null,
+        "at": "2026-10-17T07:58:51.941202Z",
+        "actor": "agent",
+        "detail": "Final finding for clause c2: outdated reference, passed the monitor after it redirected a read.",
+        "event": "step_final",
+        "clause_id": "c2"
+      },
+      {
+        "seq": 82,
+        "event": "finding_recorded",
+        "actor": "agent",
+        "at": "2026-10-17T07:58:51.968199Z",
+        "clause_id": "c2",
+        "detail": "outdated_reference, monitor revised",
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "model": "gemini-3.5-flash-lite",
+        "detail": "Monitor verdict on the draft: continue (all checks passed).",
+        "seq": 83,
+        "at": "2026-10-17T07:58:52.019202Z",
+        "event": "step_monitor",
+        "clause_id": "c7",
+        "actor": "monitor"
+      },
+      {
+        "seq": 84,
+        "actor": "agent",
+        "event": "step_final",
+        "at": "2026-10-17T07:58:52.062722Z",
+        "model": null,
+        "clause_id": "c7",
+        "detail": "Final finding for clause c7: compliant, passed the monitor."
+      },
+      {
+        "clause_id": "c7",
+        "model": "gemini-3.8-flash",
+        "detail": "compliant, monitor passed",
+        "event": "finding_recorded",
+        "seq": 85,
+        "at": "2026-10-17T07:58:52.080977Z",
+        "actor": "agent"
+      },
+      {
+        "detail": "Finished looking things up after 5 tool call(s); drafting the finding.",
+        "model": "gemini-3.8-flash",
+        "at": "2026-10-17T07:58:52.537728Z",
+        "clause_id": "c6",
+        "event": "step_plan",
+        "seq": 86,
+        "actor": "agent"
+      },
+      {
+        "detail": "Monitor verdict on the draft: continue (all checks passed).",
+        "model": "gemini-3.5-flash-lite",
+        "clause_id": "c5",
+        "event": "step_monitor",
+        "seq": 87,
+        "at": "2026-10-17T07:58:52.675879Z",
+        "actor": "monitor"
+      },
+      {
+        "event": "step_final",
+        "clause_id": "c5",
+        "at": "2026-10-17T07:58:52.695926Z",
+        "actor": "agent",
+        "seq": 88,
+        "detail": "Final finding for clause c5: conflict, passed the monitor.",
+        "model": null
+      },
+      {
+        "clause_id": "c5",
+        "event": "finding_recorded",
+        "actor": "agent",
+        "seq": 89,
+        "at": "2026-10-17T07:58:52.713741Z",
+        "detail": "conflict, monitor passed",
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "detail": "Monitor verdict on the draft: continue (all checks passed).",
+        "at": "2026-10-17T07:58:53.981517Z",
+        "seq": 90,
+        "model": "gemini-3.5-flash-lite",
+        "event": "step_monitor",
+        "clause_id": "c4",
+        "actor": "monitor"
+      },
+      {
+        "at": "2026-10-17T07:58:54.009512Z",
+        "seq": 91,
+        "model": null,
+        "event": "step_final",
+        "detail": "Final finding for clause c4: compliant, passed the monitor.",
+        "clause_id": "c4",
+        "actor": "agent"
+      },
+      {
+        "actor": "agent",
+        "clause_id": "c4",
+        "event": "finding_recorded",
+        "model": "gemini-3.8-flash",
+        "seq": 92,
+        "at": "2026-10-17T07:58:54.028288Z",
+        "detail": "compliant, monitor passed"
+      },
+      {
+        "at": "2026-10-17T07:58:55.336629Z",
+        "actor": "agent",
+        "clause_id": "c6",
+        "event": "step_draft",
+        "model": "gemini-3.8-flash",
+        "seq": 93,
+        "detail": "Drafted the finding: insufficient evidence, citing para 14(4) of RBI/DOR/2025-26/347."
+      },
+      {
+        "clause_id": "c6",
+        "at": "2026-10-17T07:58:58.984626Z",
+        "event": "step_monitor",
+        "detail": "Monitor verdict on the draft: continue (all checks passed).",
+        "actor": "monitor",
+        "seq": 94,
+        "model": "gemini-3.5-flash-lite"
+      },
+      {
+        "event": "step_final",
+        "actor": "agent",
+        "at": "2026-10-17T07:58:59.005775Z",
+        "seq": 95,
+        "model": null,
+        "detail": "Final finding for clause c6: insufficient evidence, passed the monitor after it redirected a read.",
+        "clause_id": "c6"
+      },
+      {
+        "event": "finding_recorded",
+        "seq": 96,
+        "clause_id": "c6",
+        "actor": "agent",
+        "detail": "insufficient_evidence, monitor revised",
+        "at": "2026-10-17T07:58:59.029822Z",
+        "model": "gemini-3.8-flash"
+      },
+      {
+        "clause_id": null,
+        "seq": 97,
+        "model": null,
+        "detail": "status done",
+        "event": "run_finished",
+        "at": "2026-10-17T07:58:59.054976Z",
+        "actor": "agent"
+      }
+    ],
+    "statuses": {
+      "run": 200,
+      "steps": 200,
+      "findings": 200,
+      "audit": 200
+    }
+  }
+}

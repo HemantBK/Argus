@@ -1,0 +1,201 @@
+{
+  "gate": "PROMOTED-RULES",
+  "command": "scripts/cloud_e2e.py --out <workspace>/verification/2026-10-17/release --gate-id PROMOTED-RULES rules",
+  "git_sha": "7c3072da50046ee9fe2a5264b30dfd46694a9389",
+  "revision": "argus-api-00008-nev",
+  "started_utc": "2026-10-17T14:33:37+00:00",
+  "exit_code": 0,
+  "pass": true,
+  "details": {
+    "run_id": "69eaa7ca0c1144fb8266651b09a99ad3",
+    "owner_available": true,
+    "other_uid": "nmOfbjynVvW9H4DjOts8qOFwrNA2",
+    "probe_doc_id": "rules-probe-3a24281e05bb",
+    "criteria": [
+      {
+        "name": "owner_read_run",
+        "ok": true,
+        "observed": 200,
+        "expected": 200
+      },
+      {
+        "name": "owner_read_steps",
+        "ok": true,
+        "observed": {
+          "status": 200,
+          "docs": 76
+        },
+        "expected": "200 with docs"
+      },
+      {
+        "name": "owner_read_findings",
+        "ok": true,
+        "observed": {
+          "status": 200,
+          "docs": 8
+        },
+        "expected": "200 with docs"
+      },
+      {
+        "name": "owner_read_audit",
+        "ok": true,
+        "observed": {
+          "status": 200,
+          "docs": 86
+        },
+        "expected": "200 with docs"
+      },
+      {
+        "name": "owner_write_own_run_child",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "other_user_read_run",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "other_user_read_steps",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "other_user_read_findings",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "other_user_read_audit",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "other_user_list_all_runs",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "no_token_read_run",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "no_token_read_steps",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "no_token_read_findings",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "no_token_read_audit",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "no_token_read_config_limits",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "other_user_read_config_limits",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "other_user_read_usage",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "other_user_read_smoke",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "client_write_runs",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "no_token_write_runs",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "client_write_samples",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "no_token_write_samples",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "client_write_config",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "no_token_write_config",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "client_write_eval_results",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "no_token_write_eval_results",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "client_write_other_run_child",
+        "ok": true,
+        "observed": 403,
+        "expected": 403
+      },
+      {
+        "name": "public_read_samples",
+        "ok": true,
+        "observed": 200,
+        "expected": 200
+      },
+      {
+        "name": "public_read_eval_results",
+        "ok": true,
+        "observed": 200,
+        "expected": 200
+      }
+    ],
+    "failed_criteria": []
+  }
+}

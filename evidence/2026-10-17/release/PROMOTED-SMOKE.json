@@ -1,0 +1,154 @@
+{
+  "gate": "PROMOTED-SMOKE",
+  "command": "scripts/cloud_e2e.py --api https://argus-api-419264532549.asia-south1.run.app --out <workspace>/verification/2026-10-17/release --gate-id PROMOTED-SMOKE smoke",
+  "git_sha": "7c3072da50046ee9fe2a5264b30dfd46694a9389",
+  "revision": "argus-api-00008-nev",
+  "started_utc": "2026-10-17T14:32:11+00:00",
+  "exit_code": 0,
+  "pass": true,
+  "details": {
+    "health": {
+      "status": "ok",
+      "git_sha": "7c3072da50046ee9fe2a5264b30dfd46694a9389",
+      "mode": "cloud",
+      "provider": "vertex",
+      "agent_model": "gemini-3.8-flash",
+      "monitor_model": "gemini-3.5-flash-lite",
+      "location": "global",
+      "corpus_hash": "4ba88a4ca44614a09e911c0ecb990db82c7cd25a9d1b34c97c1d7944b9ac6db6",
+      "agent_breaker": "half_open"
+    },
+    "uid": "aDfobEYp1ccizyPWsP9Mewx930s1",
+    "run_id": "69eaa7ca0c1144fb8266651b09a99ad3",
+    "reviewers": "strong 0 / fallback 8",
+    "primary_completed": 0,
+    "label_agreement": {
+      "agree": 6,
+      "n": 8,
+      "clauses": {
+        "c1": {
+          "expected": "compliant",
+          "got": "compliant"
+        },
+        "c2": {
+          "expected": "outdated_reference",
+          "got": "gap"
+        },
+        "c3": {
+          "expected": "conflict",
+          "got": "conflict"
+        },
+        "c4": {
+          "expected": "compliant",
+          "got": "compliant"
+        },
+        "c5": {
+          "expected": "conflict",
+          "got": "conflict"
+        },
+        "c6": {
+          "expected": "insufficient_evidence",
+          "got": "insufficient_evidence"
+        },
+        "c7": {
+          "expected": "compliant",
+          "got": "gap"
+        },
+        "c8": {
+          "expected": "compliant",
+          "got": "compliant"
+        }
+      }
+    },
+    "run": {
+      "status": "done",
+      "error": null,
+      "summary": {
+        "failed": 0,
+        "fallback_clauses": 8,
+        "outdated_reference": 0,
+        "gap": 2,
+        "monitor_revisions": 1,
+        "insufficient_evidence": 1,
+        "monitor_stops": 0,
+        "conflict": 2,
+        "clauses": 8,
+        "compliant": 3
+      },
+      "latency_ms": 41729,
+      "cost_usd_estimate": null,
+      "agent_model": "gemini-3.8-flash",
+      "monitor_model": "gemini-3.5-flash-lite",
+      "provider": "vertex"
+    },
+    "criteria": [
+      {
+        "name": "health_mode_cloud_vertex",
+        "ok": true,
+        "observed": [
+          "cloud",
+          "vertex"
+        ],
+        "expected": [
+          "cloud",
+          "vertex"
+        ]
+      },
+      {
+        "name": "deployed_sha_is_head",
+        "ok": true,
+        "observed": "7c3072da50046ee9fe2a5264b30dfd46694a9389",
+        "expected": "7c3072da50046ee9fe2a5264b30dfd46694a9389"
+      },
+      {
+        "name": "local_corpus_matches_deployed",
+        "ok": true,
+        "observed": "4ba88a4ca44614a09e911c0ecb990db82c7cd25a9d1b34c97c1d7944b9ac6db6",
+        "expected": "4ba88a4ca44614a09e911c0ecb990db82c7cd25a9d1b34c97c1d7944b9ac6db6"
+      },
+      {
+        "name": "post_200",
+        "ok": true,
+        "observed": 200,
+        "expected": 200
+      },
+      {
+        "name": "status_done",
+        "ok": true,
+        "observed": "done",
+        "expected": "done"
+      },
+      {
+        "name": "smoke.no_our_code_errors",
+        "ok": true,
+        "observed": {
+          "our_code": {},
+          "summary.failed": 0
+        },
+        "expected": "every clause reviewed, or failed only because Gemini was busy"
+      },
+      {
+        "name": "smoke.no_provider_capacity_failures",
+        "ok": true,
+        "observed": {},
+        "expected": "no clause failed because Gemini was busy on both models"
+      },
+      {
+        "name": "no_model_turn_error",
+        "ok": true,
+        "observed": [],
+        "expected": []
+      },
+      {
+        "name": "smoke.quotes_verbatim",
+        "ok": true,
+        "observed": {
+          "checked": 8,
+          "failed": []
+        },
+        "expected": "every quote verbatim"
+      }
+    ],
+    "failed_criteria": []
+  }
+}

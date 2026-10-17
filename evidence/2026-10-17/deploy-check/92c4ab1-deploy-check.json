@@ -1,0 +1,185 @@
+{
+  "stage": "deploy",
+  "git_sha": "92c4ab1aba80147ded6b366e93f7da22ad9291e4",
+  "worktree_dirty": true,
+  "utc": "2026-10-17T07:58:19Z",
+  "fast": false,
+  "skipped": [],
+  "exit_code": 1,
+  "summary": {
+    "PASS": 12,
+    "FAIL": 2,
+    "WARN": 1,
+    "HUMAN": 1,
+    "BLOCKED": 0
+  },
+  "results": [
+    {
+      "id": "D-HEALTH",
+      "rules": [
+        "S-03",
+        "B-01",
+        "B-02"
+      ],
+      "status": "PASS",
+      "reason": "https://argus-api-419264532549.asia-south1.run.app/health: sha 92c4ab1aba80, cloud/vertex, gemini-3.8-flash + gemini-3.5-flash-lite, location global, corpus 4ba88a4ca446; corpus hash equals scripts/corpus_hash.py; sha equals --expect-sha",
+      "details": []
+    },
+    {
+      "id": "D-WEB",
+      "rules": [
+        "S-03",
+        "B-03"
+      ],
+      "status": "PASS",
+      "reason": "https://argus-aibc.web.app/ 200; 2 assets, index.html and every asset equal web/dist; 1 source map(s) also served",
+      "details": []
+    },
+    {
+      "id": "D-WEB-SECRETS",
+      "rules": [
+        "ENG-E7",
+        "S-03",
+        "G1"
+      ],
+      "status": "PASS",
+      "reason": "4 served files scanned (4951 KiB): only the Firebase web apiKey and the API URL",
+      "details": []
+    },
+    {
+      "id": "D-CORS",
+      "rules": [
+        "S-03",
+        "G9"
+      ],
+      "status": "PASS",
+      "reason": "https://argus-aibc.web.app allowed; https://evil.example refused (400)",
+      "details": []
+    },
+    {
+      "id": "D-NO-TOKEN",
+      "rules": [
+        "S-03",
+        "ENG-E9"
+      ],
+      "status": "PASS",
+      "reason": "POST /api/runs without a token returned 401",
+      "details": []
+    },
+    {
+      "id": "D-RUN-CONFIG",
+      "rules": [
+        "S-03",
+        "B-01",
+        "B-02",
+        "ENG-E7"
+      ],
+      "status": "PASS",
+      "reason": "argus-api revision argus-api-00003-6xj: mode=cloud min=0 (allowed by --allow-min-zero) max=3 timeout=300s sa=argus-api@argus-aibc.iam.gserviceaccount.com; env names clean",
+      "details": []
+    },
+    {
+      "id": "D-SA-ROLES",
+      "rules": [
+        "B-02",
+        "ENG-E7"
+      ],
+      "status": "PASS",
+      "reason": "argus-api@argus-aibc.iam.gserviceaccount.com has roles/aiplatform.user, roles/datastore.user, roles/firebaseauth.viewer, roles/logging.logWriter (exactly the 4 expected)",
+      "details": []
+    },
+    {
+      "id": "D-RULES",
+      "rules": [
+        "B-09",
+        "S-03",
+        "G4"
+      ],
+      "status": "PASS",
+      "reason": "302cf646-5a8c-46ea-bb0b-efcf0c40d6d3: deployed sha256 aca7804d1887, repo aca7804d1887 (equal)",
+      "details": []
+    },
+    {
+      "id": "D-ANON-AUTH",
+      "rules": [
+        "S-03",
+        "B-03"
+      ],
+      "status": "PASS",
+      "reason": "Anonymous sign-in enabled; argus-aibc.web.app is an authorized domain (Identity Toolkit)",
+      "details": []
+    },
+    {
+      "id": "D-API-KEY",
+      "rules": [
+        "ENG-E7",
+        "ENG-E9",
+        "S-03"
+      ],
+      "status": "FAIL",
+      "reason": "Browser key (auto created by Firebase) (ba7f3a46-1fa0-4fc9-95d7-f8e3c7de6af0)",
+      "details": [
+        "no HTTP referrer restriction: any site can use the key"
+      ]
+    },
+    {
+      "id": "D-FIRESTORE-CORPUS",
+      "rules": [
+        "B-03",
+        "S-03"
+      ],
+      "status": "PASS",
+      "reason": "rbi_paragraphs 365, rbi_instruments 4, supersession 15; paragraphs hash 4ba88a4ca446 equals the repo library",
+      "details": []
+    },
+    {
+      "id": "D-LIMITS",
+      "rules": [
+        "S-03",
+        "ENG-E9"
+      ],
+      "status": "PASS",
+      "reason": "config/limits = {'daily_run_cap': 60, 'enabled': True, 'hourly_run_cap': 20, 'per_user_daily_run_cap': 5}",
+      "details": []
+    },
+    {
+      "id": "D-BUDGET",
+      "rules": [
+        "S-03",
+        "ENG-E9"
+      ],
+      "status": "PASS",
+      "reason": "1 budget(s) cover argus-aibc: argus-real-cost: 200 INR",
+      "details": []
+    },
+    {
+      "id": "D-UPTIME",
+      "rules": [
+        "S-03"
+      ],
+      "status": "FAIL",
+      "reason": "no uptime check on https://argus-api-419264532549.asia-south1.run.app/health in argus-aibc: create one (Monitoring > Uptime checks, path /health) with an email alert policy",
+      "details": []
+    },
+    {
+      "id": "D-SAMPLES",
+      "rules": [
+        "S-03",
+        "B-01",
+        "B-09"
+      ],
+      "status": "WARN",
+      "reason": "samples/ in argus-aibc is empty: the app has no saved run",
+      "details": []
+    },
+    {
+      "id": "H-UPTIME",
+      "rules": [
+        "S-03"
+      ],
+      "status": "HUMAN",
+      "reason": "uptime check scheduled and watched until Nov 6; nobody redeploys a broken build",
+      "details": []
+    }
+  ]
+}

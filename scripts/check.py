@@ -1050,10 +1050,16 @@ BANNED_PHRASES = (
     "always opens",
     "will be switched on",
     "FREE-AI compliant",
+    # The retired empty-citation sentence: a failed or missing citation shows only that Argus did not verify
+    # one, not that no RBI paragraph supports the clause (web/src/review/view.ts NO_VERIFIED_CITATION).
+    "No RBI paragraph supports",
 )
 # These are wrong in any sentence: the first is itself the absolute claim, the second the retired label, the
-# third a live-status claim that a negation does not fix ("not in force today" still claims to know today).
-NEVER_NEGATED = frozenset({"no finding rests", "snapshot as on", "in force today"})
+# third a live-status claim that a negation does not fix ("not in force today" still claims to know today),
+# the fourth an absence claim that begins with its own negation.
+NEVER_NEGATED = frozenset(
+    {"no finding rests", "snapshot as on", "in force today", "No RBI paragraph supports"}
+)
 # A retired feature may be named to say it is absent: "there are no embeddings", "keyword search, not vector
 # search". The negation must sit in the same sentence, within NEGATION_WINDOW words before the phrase.
 NEGATION = re.compile(

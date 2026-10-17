@@ -451,6 +451,14 @@ VIOLATIONS: list[tuple[str, Callable[[Any], Any], dict[str, str | None]]] = [
         {"docs/architecture.md": "Files live in Cloud\nStorage.\n"},
     ),
     (
+        "banned-retired-empty-citation-sentence",
+        check.check_banned_phrases,
+        {
+            "web/src/review/view.ts": "export const NO_VERIFIED_CITATION =\n"
+            '  "No RBI paragraph supports a conclusion for this clause. Argus does not guess.";\n'
+        },
+    ),
+    (
         "banned-absolute-claim-negated",
         check.check_banned_phrases,
         {"web/src/App.tsx": "export const t = 'Each step is checked, so no finding rests on a guess';\n"},

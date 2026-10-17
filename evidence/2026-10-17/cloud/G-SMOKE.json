@@ -1,0 +1,138 @@
+{
+  "gate": "G-SMOKE",
+  "command": "scripts/cloud_e2e.py --gate-id G-SMOKE smoke",
+  "git_sha": "92c4ab1aba80147ded6b366e93f7da22ad9291e4",
+  "revision": "argus-api-00003-6xj",
+  "started_utc": "2026-10-17T07:58:34+00:00",
+  "exit_code": 0,
+  "pass": true,
+  "details": {
+    "health": {
+      "status": "ok",
+      "git_sha": "92c4ab1aba80147ded6b366e93f7da22ad9291e4",
+      "mode": "cloud",
+      "provider": "vertex",
+      "agent_model": "gemini-3.8-flash",
+      "monitor_model": "gemini-3.5-flash-lite",
+      "location": "global",
+      "corpus_hash": "4ba88a4ca44614a09e911c0ecb990db82c7cd25a9d1b34c97c1d7944b9ac6db6"
+    },
+    "uid": "1TlVA9w0hreQi1pmhQxJC0WwvNq1",
+    "run_id": "95c9f5f8ccc748c4865ff5daef0d676a",
+    "label_agreement": {
+      "agree": 8,
+      "n": 8,
+      "clauses": {
+        "c1": {
+          "expected": "compliant",
+          "got": "compliant"
+        },
+        "c2": {
+          "expected": "outdated_reference",
+          "got": "outdated_reference"
+        },
+        "c3": {
+          "expected": "conflict",
+          "got": "conflict"
+        },
+        "c4": {
+          "expected": "compliant",
+          "got": "compliant"
+        },
+        "c5": {
+          "expected": "conflict",
+          "got": "conflict"
+        },
+        "c6": {
+          "expected": "insufficient_evidence",
+          "got": "insufficient_evidence"
+        },
+        "c7": {
+          "expected": "compliant",
+          "got": "compliant"
+        },
+        "c8": {
+          "expected": "compliant",
+          "got": "compliant"
+        }
+      }
+    },
+    "run": {
+      "status": "done",
+      "error": null,
+      "summary": {
+        "gap": 0,
+        "failed": 0,
+        "monitor_stops": 0,
+        "conflict": 2,
+        "compliant": 4,
+        "monitor_revisions": 2,
+        "clauses": 8,
+        "insufficient_evidence": 1,
+        "outdated_reference": 1
+      },
+      "latency_ms": 19862,
+      "cost_usd_estimate": 0.10523760000000001,
+      "agent_model": "gemini-3.8-flash",
+      "monitor_model": "gemini-3.5-flash-lite",
+      "provider": "vertex"
+    },
+    "criteria": [
+      {
+        "name": "health_mode_cloud_vertex",
+        "ok": true,
+        "observed": [
+          "cloud",
+          "vertex"
+        ],
+        "expected": [
+          "cloud",
+          "vertex"
+        ]
+      },
+      {
+        "name": "deployed_sha_is_head",
+        "ok": true,
+        "observed": "92c4ab1aba80147ded6b366e93f7da22ad9291e4",
+        "expected": "92c4ab1aba80147ded6b366e93f7da22ad9291e4"
+      },
+      {
+        "name": "local_corpus_matches_deployed",
+        "ok": true,
+        "observed": "4ba88a4ca44614a09e911c0ecb990db82c7cd25a9d1b34c97c1d7944b9ac6db6",
+        "expected": "4ba88a4ca44614a09e911c0ecb990db82c7cd25a9d1b34c97c1d7944b9ac6db6"
+      },
+      {
+        "name": "post_200",
+        "ok": true,
+        "observed": 200,
+        "expected": 200
+      },
+      {
+        "name": "zero_failed_clauses",
+        "ok": true,
+        "observed": {
+          "status": "done",
+          "errors": {}
+        },
+        "expected": "status done, no clause errors"
+      },
+      {
+        "name": "no_model_turn_error",
+        "ok": true,
+        "observed": [],
+        "expected": []
+      },
+      {
+        "name": "smoke.quotes_verbatim",
+        "ok": true,
+        "observed": {
+          "checked": 9,
+          "failed": []
+        },
+        "expected": "every quote verbatim"
+      }
+    ],
+    "failed_criteria": []
+  }
+}

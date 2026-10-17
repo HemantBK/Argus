@@ -76,7 +76,8 @@ won by stopping everything.
    365 paragraphs pasted into its prompt.
 2. The tool-using agent is accurate and hard to fool on its own.
 3. The monitor is a fail-safe for when the agent is weaker or wrong, as the cheaper model is here: attack success
-   fell from 8/36 to 0/36 with 0/32 false stops, for about 3-5 s more per clause.
+   fell from 8/36 to 0/36 with 0/32 false stops, while the median time per clause rose from 6.3 s to 9.0 s (base
+   set, n=48 per condition, run `20261016T162211Z-1536fa`).
 4. **We do not claim the monitor improves the shipped agent.** It was neutral on Gemini 3.8 Flash.
 
 ## Live runs on the deployed stack (not an evaluation)

@@ -1,0 +1,51 @@
+{
+  "gate": "G-BROWSER",
+  "command": "cd argus/web && npx playwright test --project=cloud --reporter=list ; ARGUS_CLOUD_LIVE=1 npx playwright test --project=cloud -g C2 --reporter=list",
+  "git_sha": "92c4ab1aba80147ded6b366e93f7da22ad9291e4",
+  "revision": "argus-api-00003-6xj",
+  "started_utc": "2026-10-17T08:01:39.842Z",
+  "exit_code": 0,
+  "pass": true,
+  "details": {
+    "pass_rule": "every sub-gate C1,C3,C5,C2 has pass==true (Playwright status passed)",
+    "sub": {
+      "C1": {
+        "pass": true,
+        "exit_code": 0,
+        "started_utc": "2026-10-17T08:01:39.842Z"
+      },
+      "C3": {
+        "pass": true,
+        "exit_code": 0,
+        "started_utc": "2026-10-17T08:01:45.112Z"
+      },
+      "C5": {
+        "pass": true,
+        "exit_code": 0,
+        "started_utc": "2026-10-17T08:01:47.417Z"
+      },
+      "C2": {
+        "pass": true,
+        "exit_code": 0,
+        "started_utc": "2026-10-17T08:01:55.438Z"
+      }
+    },
+    "c2": {
+      "run_id": "ec209b07c4784727b00eb45ca63cc6b8",
+      "first_finding_ms": 20565,
+      "first_finding_limit_ms": 60000,
+      "run_done_ms": 43669,
+      "findings": 8,
+      "clauses": 8,
+      "console_errors": []
+    },
+    "raw": [
+      "G-BROWSER.C1C3C5.stdout.log",
+      "G-BROWSER.C2.stdout.log",
+      "C1.log",
+      "C3.log",
+      "C5.log",
+      "C2.log"
+    ]
+  }
+}

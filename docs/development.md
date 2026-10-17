@@ -40,3 +40,8 @@ provider or with emulator settings.
 | `web/src/` | React app: start, review workspace, audit log, evaluation |
 | `scripts/check.py`, `scripts/cloud_e2e.py` | Commit, deploy and submission checks; live tests against the deployed stack |
 | `firestore.rules`, `firebase.json` | Security rules and Hosting config |
+
+## Decision ids in comments
+
+Some code comments cite a decision id such as `(D-33)`. These point to the team's private decision log, which is
+not part of this repository; each comment states the decision it relies on, so the id is only a cross-reference.
