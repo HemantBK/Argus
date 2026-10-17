@@ -1,10 +1,13 @@
 """Write one clearly labelled FAKE run to Firestore so the web app can be built before the agent exists.
 
 Usage (local, emulator running):  make seed
-Every text field says FAKE; nothing here is an RBI fact or a measured result.
+Every text field says FAKE; nothing here is an RBI fact or a measured result. The run is marked seeded, so
+save_sample refuses it. Refuses to run, before any Firestore client exists, unless FIRESTORE_EMULATOR_HOST is
+set: a FAKE run must never reach the real database, where samples/ is public.
 """
 
 import hashlib
+import os
 from datetime import UTC, datetime, timedelta
 
 from google.cloud import firestore
@@ -26,6 +29,17 @@ from argus_api.schema import (
     StepKind,
     Verdict,
 )
+
+EMULATOR_ENV = "FIRESTORE_EMULATOR_HOST"
+
+
+def require_emulator() -> str:
+    """The emulator host, or SystemExit when it is not set. Called before anything touches Firestore."""
+    host = os.environ.get(EMULATOR_ENV, "").strip()
+    if not host:
+        raise SystemExit(f"seed_fake_run refused: {EMULATOR_ENV} is not set; it writes only to the emulator")
+    return host
+
 
 RUN_ID = "fake-run-0001"
 CLAUSES = {"c1": "FAKE clause citing a withdrawn instrument.", "c2": "FAKE compliant clause."}
@@ -55,6 +69,7 @@ def build() -> tuple[Run, list[Step], list[Finding], list[AuditEvent]]:
         policy_id="sample-a",
         policy_title="FAKE sample policy A",
         saved=True,
+        seeded=True,
         status=RunStatus.DONE,
         started_at=t0,
         finished_at=t0 + timedelta(seconds=12),
@@ -121,6 +136,7 @@ def build() -> tuple[Run, list[Step], list[Finding], list[AuditEvent]]:
 
 
 def write(db: firestore.Client) -> None:
+    require_emulator()
     run, steps, findings, audit = build()
     for root in ("runs", "samples"):
         ref = db.collection(root).document(run.run_id)
@@ -133,8 +149,12 @@ def write(db: firestore.Client) -> None:
             ref.collection("audit").document(f"{a.seq:04d}").set(a.model_dump(mode="json"))
 
 
-if __name__ == "__main__":
-    import os
-
+def main() -> int:
+    host = require_emulator()  # first: no Firestore client exists before this check
     write(firestore.Client(project=os.environ["GOOGLE_CLOUD_PROJECT"]))
-    print(f"Seeded {RUN_ID} into runs/ and samples/")
+    print(f"Seeded {RUN_ID} into runs/ and samples/ of the emulator at {host}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -40,7 +40,7 @@ describe("MonitorBadge", () => {
   it("Revised: shows before -> after and which check failed", () => {
     const t = text(renderBadge("c2", true));
     expect(t).toContain(`${BADGE_TEXT.revised.icon} ${BADGE_TEXT.revised.label}`);
-    expect(t).toContain(`Before ${CHECK_TEXT.paragraph_exists}: failed. FAKE: para III.47(3) is not in the snapshot.`);
+    expect(t).toContain(`Before ${CHECK_TEXT.paragraph_exists}: failed. FAKE: para III.47(3) is not in the RBI library.`);
     expect(t).toContain("After Cites FAKE Credit Facilities Directions, para III.10(2)");
     expect(t).toContain("FAKE: cite an existing paragraph.");
   });
@@ -51,7 +51,7 @@ describe("MonitorBadge", () => {
     expect(out).toContain('aria-expanded="true"');
     expect(t).toContain(`${BADGE_TEXT.stopped.icon} ${BADGE_TEXT.stopped.label}`);
     expect(t).toContain("FAKE: the policy contains an instruction aimed at the reviewer.");
-    expect(t).toContain(`“${INJECTED}”`);
+    expect(t).toContain(`Text found in the sample policy: “${INJECTED}”`);
     expect(t).toContain("did not follow that instruction and did not mark the clause compliant");
     expect(out).toContain('class="badge badge-gap"');
   });

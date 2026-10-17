@@ -1,8 +1,11 @@
 // Right pane (UI_SPEC 3.2): the RBI source behind the selected citation. Instrument, official paragraph number
-// (monospace), the verbatim quote, the snapshot date, a short content hash and a link to the RBI page. A
-// withdrawn instrument gets a Withdrawn banner with the withdrawing circular, its date and the replacement.
+// (monospace), the verbatim quote, the library dates (libraryLabel: RBI's update date and the fetch date), a short
+// content hash and a link to the RBI page. A withdrawn instrument gets a Withdrawn banner with the withdrawing
+// circular, its date and the replacement.
 import type { ReactNode } from "react";
+import { withdrawalOf } from "../data/convert";
 import type { Citation, FindingDoc } from "../data/types";
+import { citationLibrary, libraryLabel } from "../shell/format";
 import { HASH_EXPLAINED, formatIsoDate, paraLabel, shortHash, sourceLinkLabel } from "./view";
 
 interface Props {
@@ -35,23 +38,16 @@ function emptyText(finding: FindingDoc | null): string {
 }
 
 function SourceBody({ citation, replacement, onShowReplacement }: Omit<Props, "finding" | "citation"> & { citation: Citation }): ReactNode {
-  const withdrawn = !citation.in_force;
+  const withdrawal = withdrawalOf(citation);
   return (
     <div className="source">
-      {withdrawn && (
+      {withdrawal && (
         <div className="withdrawn-banner" role="note">
           <p className="withdrawn-title">
             <span aria-hidden="true">⟲ </span>Withdrawn
           </p>
           <p>
-            {citation.withdrawn_by ? (
-              <>
-                Withdrawn by <span className="mono">{citation.withdrawn_by}</span>
-              </>
-            ) : (
-              "Withdrawn; the withdrawing circular is not recorded in the library"
-            )}
-            {citation.withdrawn_on && <> on {formatIsoDate(citation.withdrawn_on)}</>}. It is not in force.
+            Withdrawn by <span className="mono">{withdrawal.by}</span> on {formatIsoDate(withdrawal.on)}. It is not in force.
           </p>
           {replacement && (
             <button type="button" className="link-button" onClick={onShowReplacement}>
@@ -71,8 +67,8 @@ function SourceBody({ citation, replacement, onShowReplacement }: Omit<Props, "f
       </blockquote>
 
       <dl className="source-facts">
-        <dt>Snapshot taken</dt>
-        <dd>{formatIsoDate(citation.snapshot_date)}</dd>
+        <dt>Dates</dt>
+        <dd className="source-dates">{libraryLabel(citationLibrary(citation))}</dd>
         <dt>Content hash</dt>
         <dd>
           <span className="mono" title={`${citation.content_hash}\n${HASH_EXPLAINED}`}>

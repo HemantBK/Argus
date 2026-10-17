@@ -19,6 +19,8 @@ from typing import Any
 
 import pytest
 
+from argus_api.runs import SAMPLE_PROVIDER
+
 REPO = Path(__file__).resolve().parents[2]
 VENV_BIN = Path(sys.executable).parent
 DATE = "2026-10-16T12:00:00+05:30"
@@ -60,6 +62,52 @@ def git(repo: Path, *args: str, date: str = DATE) -> str:
     return proc.stdout
 
 
+# The real copy.ts, so the tagline checks run against the tagline the product ships.
+COPY_TS = (REPO / "web" / "src" / "start" / "copy.ts").read_text(encoding="utf-8")
+TAGLINE = check.read_tagline(COPY_TS)
+assert TAGLINE is not None
+
+# Seed scripts in the two shapes the real ones use: a guard called first in main(), and one called on import.
+SEED_FAKE_RUN = '''"""Writes one FAKE run."""
+
+import os
+
+from google.cloud import firestore
+
+EMULATOR_ENV = "FIRESTORE_EMULATOR_HOST"
+LABEL = "FAKE run"
+
+
+def require_emulator() -> str:
+    host = os.environ.get(EMULATOR_ENV, "").strip()
+    if not host:
+        raise SystemExit("seed refused: emulator only")
+    return host
+
+
+def main() -> int:
+    require_emulator()
+    firestore.Client(project="tiny")
+    return 0
+'''
+SEED_DEMO = """import os
+
+
+def require_emulator() -> str:
+    if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        raise SystemExit("seed refused")
+    return os.environ["FIRESTORE_EMULATOR_HOST"]
+
+
+EMULATOR_HOST = require_emulator()
+
+from google.cloud import firestore  # noqa: E402
+
+
+def main() -> None:
+    firestore.Client(project="tiny")
+"""
+
 CLEAN_FILES: dict[str, str] = {
     "README.md": "# Tiny\n\nA clean repo for the checker tests.\n",
     "firestore.rules": """rules_version = '2';
@@ -93,7 +141,9 @@ strict = true
     "backend/.env.example": "ARGUS_MODE=local\nOPENROUTER_API_KEY=\nGEMINI_API_KEY=\n",
     "backend/argus_api/__init__.py": "",
     "backend/argus_api/app.py": "def add(a: int, b: int) -> int:\n    return a + b\n",
-    "backend/argus_api/seed_fake_run.py": '"""Writes one FAKE run."""\n\nLABEL = "FAKE run"\n',
+    "backend/argus_api/seed_fake_run.py": SEED_FAKE_RUN,
+    "web/scripts/seed_demo.py": SEED_DEMO,
+    "web/src/start/copy.ts": COPY_TS,
     "backend/argus_api/samples/policy_a.json": json.dumps({"synthetic": True, "title": "Sample NBFC A"}),
     "backend/argus_api/eval/cases/clauses.json": json.dumps(
         [
@@ -379,6 +429,77 @@ VIOLATIONS: list[tuple[str, Callable[[Any], Any], dict[str, str | None]]] = [
         {"firestore.rules": GOOD_RULES.replace("match /samples/{runId}", "match /other/{runId}")},
     ),
     ("rules-missing", check.check_firestore_rules, {"firestore.rules": None}),
+    ("fake-in-web-src", check.check_synthetic, {"web/src/App.tsx": "export const title = 'FAKE run';\n"}),
+    ("fake-in-web-src-markdown", check.check_synthetic, {"web/src/start/NOTES.md": "Shows a FAKE run.\n"}),
+    *[
+        (
+            f"banned-{phrase}",
+            check.check_banned_phrases,
+            {"web/src/App.tsx": f"export const title = 'Argus uses {phrase} for every review';\n"},
+        )
+        for phrase in check.BANNED_PHRASES
+    ],
+    (
+        "banned-in-readme",
+        check.check_banned_phrases,
+        {"README.md": f"# Tiny\n\nArgus is {check.BANNED_PHRASES[-1]}.\n"},
+    ),
+    ("banned-in-web-readme", check.check_banned_phrases, {"web/README.md": "Search uses vector search.\n"}),
+    (
+        "banned-in-docs",
+        check.check_banned_phrases,
+        {"docs/architecture.md": "Files live in Cloud\nStorage.\n"},
+    ),
+    (
+        "banned-absolute-claim-negated",
+        check.check_banned_phrases,
+        {"web/src/App.tsx": "export const t = 'Each step is checked, so no finding rests on a guess';\n"},
+    ),
+    (
+        "tagline-copied-in-web-src",
+        check.check_tagline,
+        {"web/src/Hero.tsx": f"export const h = {TAGLINE!r};\n"},
+    ),
+    (
+        "tagline-copied-in-readme-reflowed",
+        check.check_tagline,
+        {"README.md": "# Tiny\n\n> " + TAGLINE[:120].replace(" ", "\n> ", 3) + "\n"},
+    ),
+    ("tagline-file-missing", check.check_tagline, {"web/src/start/copy.ts": None}),
+    (
+        "tagline-not-a-literal",
+        check.check_tagline,
+        {"web/src/start/copy.ts": "export const TAGLINE = make();\n"},
+    ),
+    (
+        "seed-without-guard",
+        check.check_seed_guard,
+        {"backend/argus_api/seed_fake_run.py": SEED_FAKE_RUN.replace("raise SystemExit", "print")},
+    ),
+    (
+        "seed-guard-after-client",
+        check.check_seed_guard,
+        {
+            "backend/argus_api/seed_fake_run.py": SEED_FAKE_RUN.replace(
+                '    require_emulator()\n    firestore.Client(project="tiny")',
+                '    firestore.Client(project="tiny")\n    require_emulator()',
+            )
+        },
+    ),
+    (
+        "seed-guard-never-called",
+        check.check_seed_guard,
+        {
+            "web/scripts/seed_demo.py": SEED_DEMO.replace(
+                "EMULATOR_HOST = require_emulator()", "EMULATOR_HOST = ''"
+            )
+        },
+    ),
+    (
+        "seed-client-at-import-before-guard",
+        check.check_seed_guard,
+        {"web/scripts/seed_more.py": "from google.cloud import firestore\n\nDB = firestore.Client()\n"},
+    ),
 ]
 
 
@@ -457,6 +578,96 @@ def test_staged_but_uncommitted_violation_is_caught(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     write(repo, {"backend/.env": "GEMINI_API_KEY=x\n"})  # staged only
     assert run_one(repo, check.check_forbidden_files).status == check.FAIL
+
+
+# ------------------------------------------------------------------------------------------- copy checks
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Search is keyword search (BM25) over the library; there are no embeddings.",
+        "Argus uses keyword search, not vector search.",
+        "No embeddings, no vector search and no Cloud Storage.",
+        "Runs on gemini-3.8-flash rather than Gemini Pro.",
+        "The monitor does not claim it prevents injection.",
+        "Argus is not FREE-AI compliant; it is a review aid.",
+        "Policies are reviewed whole, without clause splitting.",
+        "There is no uploaded policy: Argus reviews the two sample files.",
+        "Argus never splits the policy; the sample files are already split into clauses.",
+    ],
+)
+def test_negated_mentions_of_retired_features_pass(tmp_path: Path, sentence: str) -> None:
+    assert check.banned_phrase_hits(sentence) == []
+    repo = make_repo(tmp_path, {"README.md": f"# Tiny\n\n## Limitations\n\n{sentence}\n"})
+    assert run_one(repo, check.check_banned_phrases).status == check.PASS
+
+
+def test_negation_in_an_earlier_sentence_does_not_excuse(tmp_path: Path) -> None:
+    text = "There is no upload button. Argus stores policies in Cloud Storage."
+    assert [phrase for _, phrase, _ in check.banned_phrase_hits(text)] == ["Cloud Storage"]
+    for phrase in check.NEVER_NEGATED:
+        assert check.banned_phrase_hits(f"It is not true that {phrase} anything.") != [], phrase
+
+
+def test_banned_phrases_allowed_outside_the_shipped_copy(tmp_path: Path) -> None:
+    """Tests may name a phrase to assert it is gone, and backend prompts are not product copy."""
+    repo = make_repo(
+        tmp_path,
+        {
+            "web/src/start/copy.test.ts": "// 'no finding rests on' is gone\nexport {};\n",
+            "backend/argus_api/notes.py": '"""The library is a snapshot as on a date."""\n',
+        },
+    )
+    assert run_one(repo, check.check_banned_phrases).status == check.PASS
+
+
+def test_tagline_is_read_from_the_real_copy_file() -> None:
+    assert TAGLINE == " ".join(TAGLINE.split()) and len(TAGLINE) > check.TAGLINE_PIECE
+    assert check.read_tagline("export const TAGLINE =\n  \"One \" +\n  'two';\n") == "One two"
+
+
+def test_tagline_may_be_imported_and_quoted_in_tests(tmp_path: Path) -> None:
+    repo = make_repo(
+        tmp_path,
+        {
+            "web/src/start/Start.tsx": 'import { TAGLINE } from "./copy";\nexport const t = TAGLINE;\n',
+            "web/src/start/copy.test.ts": f"export const expected = {TAGLINE!r};\n",
+        },
+    )
+    assert run_one(repo, check.check_tagline).status == check.PASS
+
+
+def test_real_seed_scripts_have_the_emulator_guard() -> None:
+    for rel in ("backend/argus_api/seed_fake_run.py", "web/scripts/seed_demo.py"):
+        assert check.seed_guard_problems((REPO / rel).read_text(encoding="utf-8")) == [], rel
+
+
+def test_no_seed_script_is_a_warning(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path, {"backend/argus_api/seed_fake_run.py": None, "web/scripts/seed_demo.py": None})
+    assert run_one(repo, check.check_seed_guard).status == check.WARN
+
+
+def test_submission_markdown_is_read_as_the_description(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    desc = tmp_path / "SUBMISSION.md"
+    desc.write_text("Argus runs Gemini on Cloud Run with Firestore and Firebase. It prevents injection.\n")
+    result = run_one(repo, check.check_submission_phrases, submission=str(desc))
+    assert result.status == check.FAIL and "prevents injection" in result.details[0]
+    desc.write_text("Argus runs Gemini on Cloud Run with Firestore and Firebase; no embeddings.\n")
+    result = run_one(repo, check.check_submission_phrases, submission=str(desc))
+    assert result.status == check.BLOCKED  # the deck was not given, so the check is not complete
+    assert run_one(repo, check.check_description, submission=str(desc)).status == check.PASS
+
+
+def test_submission_phrases_read_the_deck(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    (tmp_path / "SUBMISSION.md").write_text("Gemini, Cloud Run, Firestore, Firebase.\n")
+    sub = tmp_path / "submission.json"
+    sub.write_text(json.dumps({"description_file": "SUBMISSION.md", "deck_pdf": "deck.pdf"}))
+    (tmp_path / "deck.pdf").write_bytes(make_pdf([FILLED_SLIDE1, ["Architecture", "Gemini Pro agent"]]))
+    result = run_one(repo, check.check_submission_phrases, submission=str(sub))
+    assert result.status == check.FAIL and "Gemini Pro" in " ".join(result.details)
+    (tmp_path / "deck.pdf").write_bytes(make_pdf([FILLED_SLIDE1, ["Architecture", "Gemini Flash agent"]]))
+    assert run_one(repo, check.check_submission_phrases, submission=str(sub)).status == check.PASS
 
 
 # ------------------------------------------------------------------------------------------- history
@@ -815,3 +1026,91 @@ def test_run_config_reads_the_service_description(
 def test_deploy_without_project_is_blocked(tmp_path: Path) -> None:
     for item in check.DEPLOY_CHECKS:
         assert run_one(tmp_path, item.fn, project=None, service_url=None).status == check.BLOCKED
+
+
+# ---------------------------------------------------------------------------------- deploy: public samples
+def firestore_doc(run_id: str, **fields: Any) -> dict[str, Any]:
+    def value(v: Any) -> dict[str, Any]:
+        if v is None:
+            return {"nullValue": None}
+        return {"booleanValue": v} if isinstance(v, bool) else {"stringValue": v}
+
+    return {
+        "name": f"projects/p/databases/(default)/documents/samples/{run_id}",
+        "fields": {k: value(v) for k, v in fields.items()},
+    }
+
+
+@pytest.mark.parametrize(
+    ("docs", "expected"),
+    [
+        ([firestore_doc("r1", seeded=False, provider=SAMPLE_PROVIDER)], check.PASS),
+        ([firestore_doc("r1", seeded=True, provider=SAMPLE_PROVIDER)], check.FAIL),
+        ([firestore_doc("r1", seeded=False, provider="openrouter")], check.FAIL),
+        ([firestore_doc("r1", seeded=False, provider=None)], check.FAIL),
+        ([firestore_doc("r1")], check.FAIL),  # written before provider existed: not shown to be a Vertex run
+        ([], check.WARN),
+    ],
+    ids=["vertex", "seeded", "openrouter", "provider-null", "provider-missing", "empty"],
+)
+def test_deploy_samples_reads_production_samples(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, docs: list[dict[str, Any]], expected: str
+) -> None:
+    pages = [docs[:1], docs[1:]] if len(docs) > 1 else [docs]
+    seen: list[str] = []
+
+    def fake_http(ctx: Any, url: str, **kwargs: Any) -> Any:
+        seen.append(url)
+        i = len(seen) - 1
+        body: dict[str, Any] = {"documents": pages[i]} if pages[i] else {}
+        if i + 1 < len(pages):
+            body["nextPageToken"] = "next"
+        return check.HttpResult(200, url, {}, json.dumps(body).encode())
+
+    monkeypatch.setattr(check.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(check, "_gcloud_token", lambda ctx: "token")
+    monkeypatch.setattr(check, "http", fake_http)
+    result = run_one(tmp_path, check.check_deploy_samples, project="p")
+    assert result.status == expected, (result.reason, result.details)
+    assert all("/projects/p/databases/(default)/documents/samples?" in u for u in seen)
+
+
+def test_deploy_samples_pages_through_the_collection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pages = [
+        [firestore_doc("r1", seeded=False, provider=SAMPLE_PROVIDER)],
+        [firestore_doc("r2", seeded=True)],
+    ]
+    calls: list[str] = []
+
+    def fake_http(ctx: Any, url: str, **kwargs: Any) -> Any:
+        calls.append(url)
+        body: dict[str, Any] = {"documents": pages[len(calls) - 1]}
+        if len(calls) < len(pages):
+            body["nextPageToken"] = "tok2"
+        return check.HttpResult(200, url, {}, json.dumps(body).encode())
+
+    monkeypatch.setattr(check.shutil, "which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(check, "_gcloud_token", lambda ctx: "token")
+    monkeypatch.setattr(check, "http", fake_http)
+    result = run_one(tmp_path, check.check_deploy_samples, project="p")
+    assert result.status == check.FAIL and len(calls) == 2 and "pageToken=tok2" in calls[1]
+    assert [d.split(":")[0] for d in result.details] == ["samples/r2", "samples/r2"]
+
+
+@pytest.mark.parametrize("problem", ["no-gcloud", "no-token", "http-403", "unreachable"])
+def test_deploy_samples_blocked_without_access(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, problem: str
+) -> None:
+    monkeypatch.setattr(check.shutil, "which", lambda name: None if problem == "no-gcloud" else "/x/" + name)
+    monkeypatch.setattr(check, "_gcloud_token", lambda ctx: None if problem == "no-token" else "token")
+    status = {"http-403": 403, "unreachable": None}.get(problem, 200)
+    monkeypatch.setattr(
+        check,
+        "http",
+        lambda ctx, url, **kw: check.HttpResult(status, url, {}, b"{}", "" if status else "down"),
+    )
+    assert run_one(tmp_path, check.check_deploy_samples, project="p").status == check.BLOCKED
+
+
+def test_sample_provider_matches_the_backend() -> None:
+    assert check.SAMPLE_PROVIDER == SAMPLE_PROVIDER

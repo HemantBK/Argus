@@ -35,6 +35,9 @@ async function seededSample() {
 describe("seeded demo data (emulator)", () => {
   it("covers the five hero moments through the app's selectors", async () => {
     const { sample, findings, steps } = await seededSample();
+    // FAKE data is marked seeded (save_sample refuses it) and carries both library dates, as a real run does.
+    expect(sample.seeded).toBe(true);
+    expect(sample.rbi_as_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const rows = clauseRows(sample, findings);
     expect(rows.every((r) => r.state === "done")).toBe(true);
     expect(rows).toHaveLength(sample.clauses.length);
@@ -48,6 +51,7 @@ describe("seeded demo data (emulator)", () => {
 
     const chain = findings.map(outdatedChain).find((c) => c !== null);
     expect(chain?.withdrawal?.by).toBeTruthy();
+    expect(chain?.withdrawal?.on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(chain?.current?.in_force).toBe(true);
 
     const badges = findings.map((f) => badgeFor(f, steps));
@@ -82,6 +86,7 @@ describe("seeded demo data (emulator)", () => {
         return { run, rows: clauseRows(run, findings, { findingsLoaded: true, steps }), findings };
       }),
     );
+    expect(runs.every((r) => r.run.seeded)).toBe(true);
     const running = runs.find((r) => r.run.status === "running");
     // The clause the trace shows in progress spins; the ones with no step yet say they are waiting.
     expect(running?.rows.filter((r) => r.state === "reviewing")).toHaveLength(1);

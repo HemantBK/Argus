@@ -5,7 +5,7 @@ Run from the repository root:
 
     backend/.venv/bin/python scripts/check.py commit [--fast]
     backend/.venv/bin/python scripts/check.py deploy --project P --service-url URL --hosting-origin ORIGIN
-    backend/.venv/bin/python scripts/check.py submission --submission submission.json
+    backend/.venv/bin/python scripts/check.py submission --submission submission.json   # or ../SUBMISSION.md
     backend/.venv/bin/python scripts/check.py rules-coverage [--rules-file RULES.md]
 
 Each check prints one line: ID, the rule IDs it covers, a status and a one-line reason.
@@ -20,6 +20,7 @@ of the engineering standard; G1..G10 are the verification gates.
 from __future__ import annotations
 
 import argparse
+import ast
 import dataclasses
 import datetime as dt
 import hashlib
@@ -363,6 +364,10 @@ class Ctx:
             p = Path(path)
             if not p.is_file():
                 raise Blocked(f"submission file not found: {p}")
+            if p.suffix.lower() == ".md":
+                # A submission text (SUBMISSION.md) on its own: it is the description, nothing else is known.
+                self._submission = {"description_file": p.name, "_base": str(p.resolve().parent)}
+                return self._submission
             data = json.loads(p.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
                 raise Blocked("submission JSON must be an object")
@@ -850,6 +855,7 @@ def check_placeholders(ctx: Ctx) -> Result:
 
 # The seed scripts write labelled FAKE data; this checker has to name the word to look for it.
 FAKE_ALLOWED = {"backend/argus_api/seed_fake_run.py", "web/scripts/seed_demo.py", "scripts/check.py"}
+WEB_SRC = "web/src/"
 
 
 def synthetic_data_files(ctx: Ctx) -> list[str]:
@@ -926,7 +932,7 @@ def check_synthetic(ctx: Ctx) -> Result:
         if text is None or not re.search(r"\bFAKE\b", text):
             continue
         line = next(i for i, ln in enumerate(text.splitlines(), 1) if re.search(r"\bFAKE\b", ln))
-        if path.endswith(".md"):
+        if path.endswith(".md") and not path.startswith(WEB_SRC):  # web/src ships to users: always a FAIL
             warns.append(f"{path}:{line}: FAKE mentioned in documentation")
         else:
             fails.append(f"{path}:{line}: FAKE outside the seed scripts and tests")
@@ -1021,6 +1027,257 @@ def check_firestore_rules(ctx: Ctx) -> Result:
     )
 
 
+# Claims the product does not make (plan step 5): retired features (clause splitting and upload: policies are
+# the pre-split sample files), an absolute claim, a live-status claim (CLAIMS_LEDGER N2) and a stale UI label.
+# Matched case-insensitively, across line breaks, as whole words.
+BANNED_PHRASES = (
+    "no finding rests",
+    "snapshot as on",
+    "Gemini Pro",
+    "vector search",
+    "embeddings",
+    "Cloud Storage",
+    "clause splitting",
+    "splits the policy",
+    "splitting the policy",
+    "uploaded policy",
+    "in force today",
+    "prevents injection",
+    "FREE-AI compliant",
+)
+# These are wrong in any sentence: the first is itself the absolute claim, the second the retired label, the
+# third a live-status claim that a negation does not fix ("not in force today" still claims to know today).
+NEVER_NEGATED = frozenset({"no finding rests", "snapshot as on", "in force today"})
+# A retired feature may be named to say it is absent: "there are no embeddings", "keyword search, not vector
+# search". The negation must sit in the same sentence, within NEGATION_WINDOW words before the phrase.
+NEGATION = re.compile(
+    r"(?i)\b(?:no|not|without|never|nor|neither|none|instead of|rather than|no longer)\b|n't\b"
+)
+NEGATION_WINDOW = 6
+SENTENCE_BREAK = re.compile(r"[.!?;|](?=\s)|\n\s*\n|\n\s*(?:[-*+]|\d+\.)\s")
+
+
+def _phrase_pattern(phrase: str) -> re.Pattern[str]:
+    return re.compile(r"(?<![\w-])" + r"\s+".join(map(re.escape, phrase.split())) + r"(?![\w-])", re.I)
+
+
+BANNED_PATTERNS = [(phrase, _phrase_pattern(phrase)) for phrase in BANNED_PHRASES]
+
+
+def _negated(text: str, start: int) -> bool:
+    before = text[max(0, start - 300) : start]
+    breaks = list(SENTENCE_BREAK.finditer(before))
+    sentence = before[breaks[-1].end() :] if breaks else before
+    window = " ".join(sentence.split()[-NEGATION_WINDOW:])
+    return NEGATION.search(window) is not None
+
+
+def banned_phrase_hits(text: str) -> list[tuple[int, str, str]]:
+    """(line, phrase, context) of each banned phrase in `text` that the negation allowlist does not excuse."""
+    hits = []
+    for phrase, pattern in BANNED_PATTERNS:
+        for m in pattern.finditer(text):
+            if phrase not in NEVER_NEGATED and _negated(text, m.start()):
+                continue
+            line = text.count("\n", 0, m.start()) + 1
+            context = " ".join(text[max(0, m.start() - 40) : m.end() + 40].split())
+            hits.append((line, phrase, context))
+    return sorted(hits)
+
+
+def banned_phrase_scope(path: str) -> bool:
+    if path in {"README.md", "web/README.md"} or path.startswith("docs/"):
+        return True
+    return path.startswith(WEB_SRC) and not is_test_path(path)
+
+
+def check_banned_phrases(ctx: Ctx) -> Result:
+    rules = ("ENG-E13", "G1")
+    scanned = [p for p in ctx.tracked() if banned_phrase_scope(p)]
+    hits = []
+    for path in scanned:
+        for line, phrase, context in banned_phrase_hits(ctx.text(path) or ""):
+            hits.append(f"{path}:{line}: {phrase!r}: ...{context}...")
+    ctx.internal("banned-phrases", "\n".join(hits) or "ok")
+    if hits:
+        return Result("C-BANNED-PHRASES", rules, FAIL, f"{len(hits)} banned phrases", hits)
+    return Result(
+        "C-BANNED-PHRASES",
+        rules,
+        PASS,
+        f"none of {len(BANNED_PHRASES)} banned phrases in {len(scanned)} files (web/src, READMEs, docs/)",
+    )
+
+
+TAGLINE_FILE = "web/src/start/copy.ts"
+TAGLINE_DECL = re.compile(r"export\s+const\s+TAGLINE\s*(?::\s*string\s*)?=\s*")
+TS_STRING = re.compile(r"\s*(?:\"((?:[^\"\\\n]|\\.)*)\"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\$]|\\.)*)`)\s*")
+TAGLINE_PIECE = 40  # any run this long counts as a copy, as start/copy.test.ts does for web/src
+
+
+def read_tagline(source: str) -> str | None:
+    """The TAGLINE string of copy.ts: one literal or literals joined with +, whitespace collapsed."""
+    decl = TAGLINE_DECL.search(source)
+    if decl is None:
+        return None
+    pos, parts = decl.end(), []
+    while True:
+        m = TS_STRING.match(source, pos)
+        if m is None:
+            break
+        raw = next(g for g in m.groups() if g is not None)
+        parts.append(re.sub(r"\\(.)", r"\1", raw))
+        pos = m.end()
+        if not source.startswith("+", pos):
+            break
+        pos += 1
+    text = " ".join("".join(parts).split())
+    return text or None
+
+
+def check_tagline(ctx: Ctx) -> Result:
+    rules = ("ENG-E13", "G1")
+    source = ctx.text(TAGLINE_FILE)
+    if source is None:
+        return Result("C-TAGLINE", rules, FAIL, f"{TAGLINE_FILE} is not tracked")
+    tagline = read_tagline(source)
+    if tagline is None:
+        return Result("C-TAGLINE", rules, FAIL, f"{TAGLINE_FILE} has no string literal TAGLINE")
+    size = min(TAGLINE_PIECE, len(tagline))
+    pieces = {tagline[i : i + size] for i in range(0, len(tagline) - size + 1, size)}
+    pieces.add(tagline[-size:])
+    copies = []
+    for path in ctx.tracked():
+        if path in {TAGLINE_FILE, "scripts/check.py"} or is_test_path(path):
+            continue
+        text = ctx.text(path)
+        if text is None:
+            continue
+        flat = " ".join(text.split())
+        piece = next((p for p in sorted(pieces) if p in flat), None)
+        if piece is not None:
+            copies.append(f"{path}: repeats the tagline: {piece!r}")
+    ctx.internal("tagline", "\n".join(copies) or "ok")
+    if copies:
+        return Result(
+            "C-TAGLINE",
+            rules,
+            FAIL,
+            f"TAGLINE text appears outside {TAGLINE_FILE} in {len(copies)} files",
+            copies,
+        )
+    return Result(
+        "C-TAGLINE", rules, PASS, f"TAGLINE ({len(tagline)} chars) is written out only in {TAGLINE_FILE}"
+    )
+
+
+EMULATOR_ENV = "FIRESTORE_EMULATOR_HOST"
+
+
+def seed_script_paths(ctx: Ctx) -> list[str]:
+    return [p for p in ctx.tracked() if p.endswith(".py") and is_seed_path(p) and not is_test_path(p)]
+
+
+def _call_name(node: ast.Call) -> str | None:
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return None
+
+
+def seed_guard_problems(source: str) -> list[str]:
+    """Why a seed script could write to a real Firestore. Empty when it has an emulator guard (a function
+    that reads FIRESTORE_EMULATOR_HOST and raises SystemExit) that runs before every Firestore client."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        return [f"does not parse: {exc.msg} (line {exc.lineno})"]
+    env_names = {
+        target.id
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Constant)
+        and node.value.value == EMULATOR_ENV
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+
+    def reads_env(fn: ast.AST) -> bool:
+        return any(
+            (isinstance(n, ast.Constant) and n.value == EMULATOR_ENV)
+            or (isinstance(n, ast.Name) and n.id in env_names)
+            for n in ast.walk(fn)
+        )
+
+    def exits(fn: ast.AST) -> bool:
+        for n in ast.walk(fn):
+            if isinstance(n, ast.Raise) and n.exc is not None:
+                exc = n.exc.func if isinstance(n.exc, ast.Call) else n.exc
+                if isinstance(exc, ast.Name) and exc.id == "SystemExit":
+                    return True
+        return False
+
+    functions = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)]
+    guards = {fn.name for fn in functions if reads_env(fn) and exits(fn)}
+    if not guards:
+        return [f"no emulator guard: no function reads {EMULATOR_ENV} and raises SystemExit"]
+
+    def guard_lines(scope: ast.AST) -> list[int]:
+        return [n.lineno for n in ast.walk(scope) if isinstance(n, ast.Call) and _call_name(n) in guards]
+
+    module_guard = [
+        stmt.lineno
+        for stmt in tree.body
+        if isinstance(stmt, ast.Expr | ast.Assign | ast.AnnAssign)
+        and isinstance(stmt.value, ast.Call)
+        and _call_name(stmt.value) in guards
+    ]
+    problems = []
+    if not guard_lines(tree):
+        problems.append(f"emulator guard {sorted(guards)[0]}() is defined but never called")
+    top_level = [
+        s for s in tree.body if not isinstance(s, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+    ]
+    for stmt in top_level:
+        for call in (n for n in ast.walk(stmt) if isinstance(n, ast.Call) and _call_name(n) == "Client"):
+            if not (module_guard and module_guard[0] < call.lineno):
+                problems.append(
+                    f"line {call.lineno}: module creates a Firestore client before the emulator guard"
+                )
+    for fn in functions:
+        if fn.name in guards:
+            continue
+        guarded = guard_lines(fn)
+        for call in (n for n in ast.walk(fn) if isinstance(n, ast.Call) and _call_name(n) == "Client"):
+            if module_guard and module_guard[0] < call.lineno:
+                continue
+            if not any(line <= call.lineno for line in guarded):
+                problems.append(
+                    f"line {call.lineno}: {fn.name}() creates a Firestore client before the emulator guard"
+                )
+    return problems
+
+
+def check_seed_guard(ctx: Ctx) -> Result:
+    rules = ("B-09", "G1")
+    seeds = seed_script_paths(ctx)
+    problems = [f"{path}: {why}" for path in seeds for why in seed_guard_problems(ctx.text(path) or "")]
+    ctx.internal("seed-guard", "\n".join(problems) or "\n".join(seeds) or "no seed scripts")
+    if problems:
+        return Result(
+            "C-SEED-GUARD", rules, FAIL, "a seed script could write to the real Firestore", problems
+        )
+    if not seeds:
+        return Result("C-SEED-GUARD", rules, WARN, "no seed*.py script tracked")
+    return Result(
+        "C-SEED-GUARD",
+        rules,
+        PASS,
+        f"{len(seeds)} seed scripts refuse to run without {EMULATOR_ENV}: {', '.join(seeds)}",
+    )
+
+
 COMMIT_CHECKS = [
     Check("C-PY-LINT", ("ENG-E6", "G1"), check_py_lint),
     Check("C-PY-FORMAT", ("ENG-E6", "G1"), check_py_format),
@@ -1039,6 +1296,9 @@ COMMIT_CHECKS = [
     Check("C-SYNTHETIC", ("B-09", "B-08", "G1"), check_synthetic),
     Check("C-GOOGLE-ONLY", ("B-01", "B-02", "G5"), check_google_only),
     Check("C-FIRESTORE-RULES", ("B-09", "S-03", "G4"), check_firestore_rules),
+    Check("C-BANNED-PHRASES", ("ENG-E13", "G1"), check_banned_phrases),
+    Check("C-TAGLINE", ("ENG-E13", "G1"), check_tagline),
+    Check("C-SEED-GUARD", ("B-09", "G1"), check_seed_guard),
 ]
 
 
@@ -1279,15 +1539,10 @@ def check_deploy_cors(ctx: Ctx) -> Result:
     return Result("D-CORS", rules, PASS, f"{origin} allowed; {EVIL_ORIGIN} refused ({evil.status})")
 
 
-def check_deploy_anon_auth(ctx: Ctx) -> Result:
-    rules = ("S-03", "B-03")
-    project, _ = _deploy_inputs(ctx)
-    human = Result(
-        "D-ANON-AUTH", rules, HUMAN, "confirm Firebase Console > Authentication > Anonymous is enabled"
-    )
+def _gcloud_token(ctx: Ctx) -> str | None:
+    """An access token from the active gcloud login, or None. The token never reaches the evidence."""
     if shutil.which("gcloud") is None:
-        human.reason += " (gcloud missing, cannot read Identity Toolkit config)"
-        return human
+        return None
     started = utc_now()
     proc = subprocess.run(
         ["gcloud", "auth", "print-access-token", "--quiet"],
@@ -1296,7 +1551,6 @@ def check_deploy_anon_auth(ctx: Ctx) -> Result:
         check=False,
         timeout=60,
     )
-    # The token itself never reaches the evidence; only the fact that one was obtained.
     ctx.runs.append(
         CmdRun(
             "gcloud auth print-access-token --quiet",
@@ -1308,7 +1562,20 @@ def check_deploy_anon_auth(ctx: Ctx) -> Result:
         )
     )
     token_value = proc.stdout.strip()
-    if proc.returncode != 0 or not token_value:
+    return token_value if proc.returncode == 0 and token_value else None
+
+
+def check_deploy_anon_auth(ctx: Ctx) -> Result:
+    rules = ("S-03", "B-03")
+    project, _ = _deploy_inputs(ctx)
+    human = Result(
+        "D-ANON-AUTH", rules, HUMAN, "confirm Firebase Console > Authentication > Anonymous is enabled"
+    )
+    if shutil.which("gcloud") is None:
+        human.reason += " (gcloud missing, cannot read Identity Toolkit config)"
+        return human
+    token_value = _gcloud_token(ctx)
+    if token_value is None:
         human.reason += " (no gcloud access token)"
         return human
     res = http(
@@ -1325,12 +1592,92 @@ def check_deploy_anon_auth(ctx: Ctx) -> Result:
     return Result("D-ANON-AUTH", rules, PASS, "Anonymous sign-in enabled (Identity Toolkit config API)")
 
 
+SAMPLE_PROVIDER = "vertex"  # runs.SAMPLE_PROVIDER: a public saved run is a real review on Vertex AI
+FIRESTORE_API = "https://firestore.googleapis.com/v1"
+
+
+def _firestore_value(value: dict[str, Any]) -> Any:
+    """One Firestore REST value as Python; only the scalar kinds the sample check reads."""
+    if "booleanValue" in value:
+        return value["booleanValue"]
+    if "stringValue" in value:
+        return value["stringValue"]
+    if "nullValue" in value:
+        return None
+    return value
+
+
+def sample_problems(doc: dict[str, Any]) -> list[str]:
+    """Why one samples/ document (Firestore REST form) may not be public: seeded, or not run on Vertex AI."""
+    fields = doc.get("fields", {})
+    run_id = str(doc.get("name", "?")).rsplit("/", 1)[-1]
+    seeded = _firestore_value(fields["seeded"]) if "seeded" in fields else False
+    provider = _firestore_value(fields["provider"]) if "provider" in fields else None
+    problems = []
+    if seeded is not False:
+        problems.append(f"samples/{run_id}: seeded is {seeded!r} (written by a seed script)")
+    if provider != SAMPLE_PROVIDER:
+        problems.append(f"samples/{run_id}: provider is {provider!r}, not {SAMPLE_PROVIDER!r}")
+    return problems
+
+
+def check_deploy_samples(ctx: Ctx) -> Result:
+    rules = ("S-03", "B-01", "B-09")
+    project = getattr(ctx.args, "project", None)
+    if not project:
+        raise Blocked("needs --project")
+    if shutil.which("gcloud") is None:
+        raise Blocked("gcloud not found on PATH; cannot read the production samples/ collection")
+    token_value = _gcloud_token(ctx)
+    if token_value is None:
+        raise Blocked("no gcloud access token (gcloud auth login)")
+    base = f"{FIRESTORE_API}/projects/{project}/databases/(default)/documents/samples"
+    docs: list[dict[str, Any]] = []
+    page = ""
+    while True:
+        query = urllib.parse.urlencode(
+            {
+                "pageSize": 300,
+                "mask.fieldPaths": ["seeded", "provider"],
+                **({"pageToken": page} if page else {}),
+            },
+            doseq=True,
+        )
+        res = http(
+            ctx,
+            f"{base}?{query}",
+            headers={"Authorization": f"Bearer {token_value}", "x-goog-user-project": project},
+        )
+        if res.status != 200:
+            why = res.error or f"HTTP {res.status}"
+            raise Blocked(f"Firestore REST list of samples/ in {project} failed: {why}")
+        body = json.loads(res.body or b"{}")
+        docs += body.get("documents", [])
+        page = body.get("nextPageToken", "")
+        if not page:
+            break
+    problems = [p for doc in docs for p in sample_problems(doc)]
+    if problems:
+        return Result(
+            "D-SAMPLES", rules, FAIL, f"{len(problems)} problems in {len(docs)} public samples", problems
+        )
+    if not docs:
+        return Result("D-SAMPLES", rules, WARN, f"samples/ in {project} is empty: the app has no saved run")
+    return Result(
+        "D-SAMPLES",
+        rules,
+        PASS,
+        f"all {len(docs)} samples in {project}: not seeded, provider {SAMPLE_PROVIDER}",
+    )
+
+
 DEPLOY_CHECKS = [
     Check("D-HEALTH", ("S-03", "B-02"), check_deploy_health),
     Check("D-RUN-CONFIG", ("S-03", "B-01", "B-02", "ENG-E7"), check_deploy_run_config),
     Check("D-BUDGET", ("S-03", "ENG-E9"), check_deploy_budget),
     Check("D-CORS", ("S-03", "G9"), check_deploy_cors),
     Check("D-ANON-AUTH", ("S-03", "B-03"), check_deploy_anon_auth),
+    Check("D-SAMPLES", ("S-03", "B-01", "B-09"), check_deploy_samples),
 ]
 
 
@@ -1562,6 +1909,43 @@ def check_links(ctx: Ctx) -> Result:
     return Result("S-LINKS", rules, status, f"{len(bad)} of {len(links)} links not publicly reachable", bad)
 
 
+def check_submission_phrases(ctx: Ctx) -> Result:
+    rules = ("ENG-E13", "S-05")
+    texts: dict[str, str] = {}
+    missing = []
+    path = ctx.sub_path("description_file")
+    if path is not None and path.is_file():
+        texts[path.name] = path.read_text(encoding="utf-8")
+    else:
+        missing.append("description_file" if path is None else f"description_file not found: {path}")
+    if ctx.submission().get("deck_pdf"):
+        try:
+            deck, pages = _deck(ctx)
+            texts[deck.name] = "\n\n".join(pages)
+        except Blocked as exc:
+            missing.append(str(exc))
+    else:
+        missing.append("deck_pdf")
+    hits = [
+        f"{name}:{line}: {phrase!r}: ...{context}..."
+        for name, text in texts.items()
+        for line, phrase, context in banned_phrase_hits(text)
+    ]
+    ctx.internal("submission-phrases", "\n".join(hits) or "ok")
+    if hits:
+        return Result("S-BANNED-PHRASES", rules, FAIL, f"{len(hits)} banned phrases", hits + missing)
+    if not texts:
+        raise Blocked("no description_file or deck_pdf to read: " + "; ".join(missing))
+    if missing:
+        return Result(
+            "S-BANNED-PHRASES",
+            rules,
+            BLOCKED,
+            f"no banned phrases in {', '.join(texts)}, but not read: {'; '.join(missing)}",
+        )
+    return Result("S-BANNED-PHRASES", rules, PASS, f"no banned phrases in {', '.join(texts)}")
+
+
 SUBMISSION_CHECKS = [
     Check("S-DECK", ("S-01",), check_deck),
     Check("S-DECK-SLIDE1", ("S-07", "B-06"), check_deck_slide1),
@@ -1572,6 +1956,7 @@ SUBMISSION_CHECKS = [
     Check("S-DESCRIPTION", ("S-05", "B-03"), check_description),
     Check("S-README", ("S-04", "ENG-E13", "G10"), check_readme),
     Check("S-LINKS", ("S-06",), check_links),
+    Check("S-BANNED-PHRASES", ("ENG-E13", "S-05"), check_submission_phrases),
 ]
 
 
@@ -1768,7 +2153,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument(
         "--submission",
         help="submission: JSON with deck_pdf, video_file, video_url, repo_url, "
-        "app_url, description_file, links[], team_name, team_leader",
+        "app_url, description_file, links[], team_name, team_leader; or a .md file, read as description_file",
     )
     p.add_argument("--rules-file", help="rules-coverage: RULES.md to compare the rule IDs with")
     return p.parse_args(argv)

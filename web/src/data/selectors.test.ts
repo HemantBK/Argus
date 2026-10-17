@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FINDING_LABEL_VALUES } from "../generated/schema";
+import { DataError } from "./convert";
 import { check, citation, finding, run, step, T0, verdict } from "./fixtures.test-util";
 import {
   BADGE_TEXT,
@@ -142,9 +143,12 @@ describe("outdatedChain", () => {
     expect(c?.withdrawal).toEqual({ by: old.withdrawn_by, on: old.withdrawn_on });
     expect(c?.current).toBe(now);
   });
-  it("still shows a withdrawal step for an out-of-force citation before the v0.1 fields existed", () => {
-    const old = citation({ in_force: false, withdrawn_by: undefined, withdrawn_on: undefined });
-    expect(outdatedChain(finding({ replaced_citation: old }))?.withdrawal).toEqual({ by: null, on: null });
+  it("has no withdrawal step when the replaced citation is still in force", () => {
+    expect(outdatedChain(finding({ replaced_citation: citation({ para: "9" }) }))?.withdrawal).toBeNull();
+  });
+  it("refuses a withdrawn citation without its withdrawal record instead of showing a gap", () => {
+    const old = citation({ in_force: false, withdrawn_by: null, withdrawn_on: "2025-11-28" });
+    expect(() => outdatedChain(finding({ replaced_citation: old }))).toThrow(DataError);
   });
 });
 

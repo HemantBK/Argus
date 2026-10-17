@@ -98,9 +98,25 @@ function optDate(o: Obj, key: string, path: string): Date | null {
   return v === undefined || v === null ? null : toDate(v, `${path}.${key}`);
 }
 
+/**
+ * When and by which circular a withdrawn citation's instrument was withdrawn; null for one in force. The corpus
+ * records both for every withdrawn instrument (backend corpus/store.py refuses to load otherwise), so a withdrawn
+ * citation without them breaks the contract: parseCitation refuses it, and this throws rather than invent a gap.
+ */
+export function withdrawalOf(c: Citation, path = "citation"): { by: string; on: string } | null {
+  const by = c.withdrawn_by ?? null;
+  const on = c.withdrawn_on ?? null;
+  if (c.in_force) {
+    if (by !== null || on !== null) throw new DataError(path, "an instrument in force cannot have withdrawn_by or withdrawn_on");
+    return null;
+  }
+  if (by === null || on === null) throw new DataError(path, "a withdrawn instrument must record withdrawn_by and withdrawn_on");
+  return { by, on };
+}
+
 export function parseCitation(v: unknown, path: string): Citation {
   const o = obj(v, path);
-  return {
+  const c: Citation = {
     instrument: str(o, "instrument", path),
     instrument_ref: str(o, "instrument_ref", path),
     para: str(o, "para", path),
@@ -111,7 +127,10 @@ export function parseCitation(v: unknown, path: string): Citation {
     in_force: bool(o, "in_force", path),
     withdrawn_by: optStr(o, "withdrawn_by", path),
     withdrawn_on: optStr(o, "withdrawn_on", path),
+    updated_as_on: optStr(o, "updated_as_on", path),
   };
+  withdrawalOf(c, path);
+  return c;
 }
 
 function optCitation(o: Obj, key: string, path: string): Citation | null {
@@ -178,6 +197,9 @@ export function parseRun(data: unknown, path: string): RunDoc {
     agent_model: str(o, "agent_model", path),
     monitor_model: str(o, "monitor_model", path),
     corpus_as_on: str(o, "corpus_as_on", path),
+    rbi_as_on: optStr(o, "rbi_as_on", path),
+    provider: optStr(o, "provider", path),
+    seeded: bool(o, "seeded", path, false),
     clauses: rawClauses.map((c, i) => parseClause(c, `${path}.clauses[${i}]`)),
     summary,
     latency_ms: optNum(o, "latency_ms", path),

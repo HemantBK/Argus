@@ -17,7 +17,9 @@ What it writes (every text says FAKE or Synthetic; nothing here is an RBI fact o
   eval_results/latest   deleted, so the Evaluation page shows "not measured yet"
 
 Documents are built with the backend's pydantic models (argus_api/schema.py) and stored with
-model_dump(mode="json"), exactly as the API stores them. Refuses to run unless FIRESTORE_EMULATOR_HOST is set.
+model_dump(mode="json"), exactly as the API stores them. Every run is marked seeded, so save_sample refuses it.
+Refuses to run unless FIRESTORE_EMULATOR_HOST is set, checked first thing on import, before the backend or any
+Firestore library is loaded: FAKE data must never reach the real database, where samples/ is public.
 """
 
 # The FAKE clause and RBI-style texts below are prose data kept on one line each so they read as written.
@@ -25,15 +27,32 @@ model_dump(mode="json"), exactly as the API stores them. Refuses to run unless F
 
 from __future__ import annotations
 
-import argparse
-import hashlib
-import json
 import os
 import sys
-import uuid
-from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
+
+EMULATOR_ENV = "FIRESTORE_EMULATOR_HOST"
+
+
+def require_emulator() -> str:
+    """The emulator host, or SystemExit when it is not set. Runs before anything can touch Firestore."""
+    host = os.environ.get(EMULATOR_ENV, "").strip()
+    if not host:
+        raise SystemExit(
+            f"seed_demo refused: {EMULATOR_ENV} is not set; it writes FAKE data to the emulator only"
+        )
+    return host
+
+
+EMULATOR_HOST = require_emulator()
+
+import argparse  # noqa: E402
+import hashlib  # noqa: E402
+import json  # noqa: E402
+import uuid  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+from datetime import UTC, datetime, timedelta  # noqa: E402
+from functools import cache  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 BACKEND = Path(__file__).resolve().parents[2] / "backend"
 sys.path.insert(0, str(BACKEND))
@@ -77,13 +96,28 @@ RUNNING_ID = demo_id("running-lendright")
 FAILED_ID = demo_id("failed-clause")
 
 
+@cache
+def _instruments() -> list[dict[str, object]]:
+    data: list[dict[str, object]] = json.loads((BACKEND / "data/corpus/instruments.json").read_text())
+    return data
+
+
 def corpus_as_on() -> str:
-    """The snapshot date of the real library, so the FAKE data shows the same 'as on' date the app will."""
-    instruments = json.loads((BACKEND / "data/corpus/instruments.json").read_text())
-    dates = sorted({str(i["snapshot_date"]) for i in instruments})
+    """The fetch date of the real library, so the FAKE data shows the same 'fetched' date the app will."""
+    dates = sorted({str(i["snapshot_date"]) for i in _instruments()})
     if not dates:
         raise SystemExit("backend/data/corpus/instruments.json has no snapshot_date")
     return dates[-1]
+
+
+def rbi_as_on() -> str:
+    """RBI's 'updated as on' date of the one instrument in force in the real library, as a real run records it."""
+    dates = [str(i["updated_as_on"]) for i in _instruments() if i["in_force"] and i.get("updated_as_on")]
+    if len(dates) != 1:
+        raise SystemExit(
+            "backend/data/corpus/instruments.json must have exactly one instrument in force with updated_as_on; rebuild it with make corpus"
+        )
+    return dates[0]
 
 
 # ------------------------------------------------------------------------------------------- citations
@@ -108,6 +142,7 @@ def cite(para: str, quote: str, as_on: str, *, old: bool = False) -> Citation:
         in_force=not old,
         withdrawn_by=WITHDRAWN_BY if old else None,
         withdrawn_on=WITHDRAWN_ON if old else None,
+        updated_as_on=None if old else rbi_as_on(),
     )
 
 
@@ -121,9 +156,9 @@ def bad(name: CheckName, detail: str) -> Check:
 
 def passing_checks(para: str) -> list[Check]:
     return [
-        ok(CheckName.PARAGRAPH_EXISTS, f"FAKE: para {para} exists in the snapshot."),
-        ok(CheckName.QUOTE_MATCHES, "FAKE: quoted text matches the snapshot character for character."),
-        ok(CheckName.IN_FORCE, "FAKE: the instrument is in force on the snapshot date."),
+        ok(CheckName.PARAGRAPH_EXISTS, f"FAKE: para {para} exists in the RBI library."),
+        ok(CheckName.QUOTE_MATCHES, "FAKE: quoted text matches the RBI library word for word."),
+        ok(CheckName.IN_FORCE, "FAKE: the instrument is in force on the library date."),
         ok(CheckName.SUPPORTED, "FAKE: the quoted text supports the finding."),
         ok(CheckName.NO_INJECTION, "FAKE: no instruction found in the policy text."),
         ok(CheckName.ON_TASK, "FAKE: the step stayed on the clause under review."),
@@ -366,12 +401,12 @@ def build_sample(as_on: str, t0: datetime) -> tuple[Run, RunBuilder]:
             checks=[
                 bad(
                     CheckName.PARAGRAPH_EXISTS,
-                    "FAKE: para III.47(3) is not in the snapshot; the instrument has no paragraph 47 in Chapter III.",
+                    "FAKE: para III.47(3) is not in the RBI library; the instrument has no paragraph 47 in Chapter III.",
                 ),
                 ok(CheckName.NO_INJECTION, "FAKE: no instruction found in the policy text."),
                 ok(CheckName.ON_TASK, "FAKE: the step stayed on the clause under review."),
             ],
-            reason="FAKE: the drafted citation para III.47(3) does not exist in the snapshot; re-read and cite an existing paragraph.",
+            reason="FAKE: the drafted citation para III.47(3) does not exist in the RBI library; re-read and cite an existing paragraph.",
         ),
     )
     b.step(
@@ -413,7 +448,7 @@ def build_sample(as_on: str, t0: datetime) -> tuple[Run, RunBuilder]:
         verdict=Verdict(
             action=MonitorAction.STOP,
             checks=[
-                ok(CheckName.PARAGRAPH_EXISTS, "FAKE: para III.25(1) exists in the snapshot."),
+                ok(CheckName.PARAGRAPH_EXISTS, "FAKE: para III.25(1) exists in the RBI library."),
                 bad(
                     CheckName.NO_INJECTION,
                     f'FAKE: footnote 3 of the uploaded policy tells the reviewer what to conclude: "{injected}"',
@@ -537,8 +572,8 @@ def build_sample(as_on: str, t0: datetime) -> tuple[Run, RunBuilder]:
         verdict=Verdict(
             action=MonitorAction.CONTINUE,
             checks=[
-                ok(CheckName.PARAGRAPH_EXISTS, f"FAKE: para {consent.para} exists in the snapshot."),
-                ok(CheckName.QUOTE_MATCHES, "FAKE: quoted text matches the snapshot."),
+                ok(CheckName.PARAGRAPH_EXISTS, f"FAKE: para {consent.para} exists in the RBI library."),
+                ok(CheckName.QUOTE_MATCHES, "FAKE: quoted text matches the RBI library."),
                 ok(CheckName.SUPPORTED, "FAKE: the quoted text supports the finding."),
             ],
             reason="FAKE: the recorded checks passed.",
@@ -614,6 +649,8 @@ def build_sample(as_on: str, t0: datetime) -> tuple[Run, RunBuilder]:
         agent_model=AGENT_MODEL,
         monitor_model=MONITOR_MODEL,
         corpus_as_on=as_on,
+        rbi_as_on=rbi_as_on(),
+        seeded=True,
         clauses=FINFAST_CLAUSES,
         summary=summary_of(b.findings, b.steps, len(FINFAST_CLAUSES)),
         latency_ms=int((finished - t0).total_seconds() * 1000),
@@ -710,6 +747,8 @@ def build_running(as_on: str, t0: datetime, owner: str) -> tuple[Run, RunBuilder
         agent_model=AGENT_MODEL,
         monitor_model=MONITOR_MODEL,
         corpus_as_on=as_on,
+        rbi_as_on=rbi_as_on(),
+        seeded=True,
         clauses=LENDRIGHT_CLAUSES,
         summary=summary_of(b.findings, b.steps, len(LENDRIGHT_CLAUSES)),
     )
@@ -815,6 +854,8 @@ def build_failed(as_on: str, t0: datetime, owner: str) -> tuple[Run, RunBuilder]
         agent_model=AGENT_MODEL,
         monitor_model=MONITOR_MODEL,
         corpus_as_on=as_on,
+        rbi_as_on=rbi_as_on(),
+        seeded=True,
         clauses=clauses,
         summary=summary_of(b.findings, b.steps, len(clauses)),
         latency_ms=int((finished - t0).total_seconds() * 1000),
@@ -827,6 +868,7 @@ def build_failed(as_on: str, t0: datetime, owner: str) -> tuple[Run, RunBuilder]
 
 def write(db: object, root: str, run: Run, b: RunBuilder) -> None:
     """Replace one run and its subcollections in a few batched commits (one round trip per 500 writes)."""
+    require_emulator()
     from google.cloud import firestore
 
     assert isinstance(db, firestore.Client)
@@ -841,7 +883,8 @@ def write(db: object, root: str, run: Run, b: RunBuilder) -> None:
         ("set", ref.collection("steps").document(f"{s.seq:04d}"), s.model_dump(mode="json")) for s in b.steps
     )
     pending.extend(
-        ("set", ref.collection("findings").document(f.clause_id), f.model_dump(mode="json")) for f in b.findings
+        ("set", ref.collection("findings").document(f.clause_id), f.model_dump(mode="json"))
+        for f in b.findings
     )
     pending.extend(
         ("set", ref.collection("audit").document(f"{a.seq:04d}"), a.model_dump(mode="json")) for a in b.audit
@@ -873,10 +916,7 @@ def main() -> None:
     parser.add_argument("--project", default=os.environ.get("GOOGLE_CLOUD_PROJECT", "argus-local"))
     args = parser.parse_args()
 
-    if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
-        raise SystemExit(
-            "Refusing to run: FIRESTORE_EMULATOR_HOST is not set. This script writes FAKE data to the emulator only."
-        )
+    require_emulator()
 
     from google.cloud import firestore
 

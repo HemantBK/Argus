@@ -107,7 +107,7 @@ function BadgeDetail({ badge, finding, steps, injection }: Omit<Props, "defaultO
           </p>
           {injection && (
             <figure className="injection">
-              <figcaption>Text found in the uploaded policy:</figcaption>
+              <figcaption>Text found in the sample policy:</figcaption>
               <blockquote>
                 <mark>“{injection.quote}”</mark>
               </blockquote>

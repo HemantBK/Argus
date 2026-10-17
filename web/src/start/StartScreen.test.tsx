@@ -4,10 +4,11 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { run, T0 } from "../data/fixtures.test-util";
-import { formatDate, savedRunLabel } from "../shell/format";
+import { libraryLabel, runLibrary, savedRunLabel } from "../shell/format";
 import { href } from "../shell/route";
 import { live } from "../shell/screens.test-util";
 import { DEMO_POLICY_ID } from "./catalog";
+import { HEADLINE, TAGLINE } from "./copy";
 import type { SamplePolicies, SamplePolicy } from "./samplePolicies";
 import { StartScreen } from "./StartScreen";
 
@@ -21,7 +22,6 @@ const savedA = run({
   saved: true,
   clauses: [1, 2, 3].map(clause),
   started_at: new Date(T0.getTime() + 60_000),
-  corpus_as_on: "2026-07-15",
 });
 const NO_FILES: SamplePolicies = { policies: [], invalid: [] };
 const fileA: SamplePolicy = { policyId: DEMO_POLICY_ID, title: "FAKE Sample NBFC A (file)", clauses: 8, synthetic: true, disclaimer: "SYNTHETIC. FAKE." };
@@ -32,8 +32,8 @@ describe("StartScreen", () => {
   it("says what Argus does and starts the demo policy from the big button", () => {
     const onRun = vi.fn();
     render(<StartScreen saved={live.ready({ runs: [savedA, savedB], invalid: [] })} onRun={onRun} />);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Check your digital-lending policy against the RBI rules in force today.");
-    expect(screen.getByText(/Every finding links to the exact RBI paragraph/)).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(HEADLINE);
+    expect(screen.getByText(TAGLINE).tagName).toBe("P");
     fireEvent.click(screen.getByRole("button", { name: "Run demo on a sample NBFC policy" }));
     expect(onRun).toHaveBeenCalledWith(DEMO_POLICY_ID);
   });
@@ -100,10 +100,21 @@ describe("StartScreen", () => {
     expect(older.textContent).toBe(`${many.length - shown.length} older saved runs`);
   });
 
-  it("has the footer with the snapshot date from the newest saved run", () => {
+  it("has the footer with the library dates of the newest saved run", () => {
     render(<StartScreen saved={live.ready({ runs: [savedA, savedB], invalid: [] })} onRun={vi.fn()} />);
     const footer = screen.getByRole("contentinfo");
-    expect(footer.textContent).toBe(`RBI snapshot as on ${formatDate(savedA.corpus_as_on)} · Synthetic data only · Not legal advice`);
+    const library = runLibrary(savedA);
+    if (!library) throw new Error("the fixture run records its library dates");
+    expect(footer.textContent).toBe(`${libraryLabel(library)} · Synthetic data only · Not legal advice`);
+    expect(footer.textContent).toMatch(/^RBI text as updated on .+ · fetched .+ · Synthetic/);
+    expect(document.body.textContent).not.toMatch(/snapshot/i);
+  });
+
+  it("a run recorded before rbi_as_on existed shows only the fetch date, never a guessed update date", () => {
+    const old = { ...savedA, rbi_as_on: null };
+    render(<StartScreen saved={live.ready({ runs: [old], invalid: [] })} onRun={vi.fn()} policies={NO_FILES} />);
+    expect(screen.getByRole("contentinfo").textContent).toBe(`${libraryLabel({ kind: "in_force", updatedAsOn: null, fetchedOn: old.corpus_as_on })} · Synthetic data only · Not legal advice`);
+    expect(screen.getByRole("contentinfo").textContent).not.toMatch(/updated on/);
   });
 
   it("offers no upload and no paste box (D-27)", () => {
@@ -115,7 +126,7 @@ describe("StartScreen", () => {
   it("shows skeleton cards while loading, not blank space", () => {
     render(<StartScreen saved={live.loading} onRun={vi.fn()} policies={NO_FILES} />);
     expect(screen.getByLabelText("Loading sample policies").getAttribute("aria-busy")).toBe("true");
-    expect(screen.getByRole("contentinfo").textContent).toMatch(/RBI snapshot date loading/);
+    expect(screen.getByRole("contentinfo").textContent).toMatch(/RBI library dates loading/);
     // The demo still works while saved runs load.
     expect(screen.getByRole("button", { name: "Run demo on a sample NBFC policy" })).toBeTruthy();
   });
@@ -135,6 +146,6 @@ describe("StartScreen", () => {
   it("says so when nothing is available, and never invents a date", () => {
     render(<StartScreen saved={live.ready({ runs: [], invalid: [] })} onRun={vi.fn()} policies={NO_FILES} />);
     expect(screen.getByText(/No sample policies or saved runs are available/)).toBeTruthy();
-    expect(screen.getByRole("contentinfo").textContent).toMatch(/RBI snapshot date not recorded yet/);
+    expect(screen.getByRole("contentinfo").textContent).toMatch(/RBI library dates not recorded yet/);
   });
 });

@@ -57,6 +57,7 @@ export interface ArgusSchema {
   RunSummary?: RunSummary;
   RunClause?: RunClause;
   Check?: Check;
+  EvalResults?: EvalResults;
 }
 /**
  * This interface was referenced by `ArgusSchema`'s JSON-Schema
@@ -74,9 +75,12 @@ export interface Run {
   owner_uid: string;
   policy_id: string;
   policy_title: string;
+  provider?: string | null;
+  rbi_as_on?: string | null;
   run_id: string;
   saved?: boolean;
   schema_version?: string;
+  seeded?: boolean;
   started_at: string;
   status: RunStatus;
   summary?: RunSummary;
@@ -164,6 +168,7 @@ export interface Citation {
   para: string;
   quote: string;
   snapshot_date: string;
+  updated_as_on?: string | null;
   url: string;
   withdrawn_by?: string | null;
   withdrawn_on?: string | null;
@@ -191,6 +196,63 @@ export interface AuditEvent {
   event: string;
   model?: string | null;
   seq: number;
+}
+/**
+ * This interface was referenced by `ArgusSchema`'s JSON-Schema
+ * via the `definition` "EvalResults".
+ */
+export interface EvalResults {
+  conditions: EvalCondition[];
+  corpus?: EvalCorpus | null;
+  failure_cases?: string[];
+  metrics: EvalMetric[];
+  results: EvalCell[];
+  run_date: string;
+}
+/**
+ * This interface was referenced by `ArgusSchema`'s JSON-Schema
+ * via the `definition` "EvalCondition".
+ */
+export interface EvalCondition {
+  id: string;
+  label: string;
+}
+/**
+ * This interface was referenced by `ArgusSchema`'s JSON-Schema
+ * via the `definition` "EvalCorpus".
+ */
+export interface EvalCorpus {
+  as_on: string;
+  documents: EvalCorpusDocument[];
+  paragraphs: number;
+  supersession_rows: number;
+}
+/**
+ * This interface was referenced by `ArgusSchema`'s JSON-Schema
+ * via the `definition` "EvalCorpusDocument".
+ */
+export interface EvalCorpusDocument {
+  instrument: string;
+  instrument_ref: string;
+}
+/**
+ * This interface was referenced by `ArgusSchema`'s JSON-Schema
+ * via the `definition` "EvalMetric".
+ */
+export interface EvalMetric {
+  id: string;
+  label: string;
+  unit: "ratio" | "seconds" | "usd" | "count";
+}
+/**
+ * This interface was referenced by `ArgusSchema`'s JSON-Schema
+ * via the `definition` "EvalCell".
+ */
+export interface EvalCell {
+  condition: string;
+  metric: string;
+  n_label?: string | null;
+  value?: number | null;
 }
 
 export const SCHEMA_VERSION = "v0.1";

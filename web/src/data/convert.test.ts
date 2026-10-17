@@ -12,7 +12,7 @@ const rawCitation = {
   quote: "FAKE quote",
   snapshot_date: "2026-10-16",
   content_hash: "a".repeat(64),
-  in_force: false,
+  in_force: true,
 };
 
 describe("toDate", () => {
@@ -48,12 +48,20 @@ describe("parseRun", () => {
     expect(r.finished_at).toBeNull();
     expect(r.clauses).toEqual([]);
     expect(r.saved).toBe(false);
+    expect(r.seeded).toBe(false);
+    expect(r.provider).toBeNull();
+    expect(r.rbi_as_on).toBeNull();
     expect(r.summary.gap).toBe(1);
     expect(r.summary.failed).toBe(0);
   });
   it("reads v0.1 clauses", () => {
     const clauses = [{ clause_id: "c1", title: "FAKE", text: "FAKE text" }];
     expect(parseRun({ ...v0, clauses, finished_at: iso }, "runs/r").clauses).toEqual(clauses);
+  });
+  it("reads the provenance and library date fields", () => {
+    const r = parseRun({ ...v0, provider: "vertex", seeded: true, rbi_as_on: "2026-07-15" }, "runs/r");
+    expect([r.provider, r.seeded, r.rbi_as_on]).toEqual(["vertex", true, "2026-07-15"]);
+    expect(() => parseRun({ ...v0, seeded: "yes" }, "runs/r")).toThrow(/runs\/r.seeded/);
   });
   it("rejects an unknown status loudly", () => {
     expect(() => parseRun({ ...v0, status: "paused" }, "runs/r")).toThrow(/runs\/r.status/);
@@ -93,13 +101,16 @@ describe("parseFinding", () => {
     clause_text: "FAKE",
     label: "outdated_reference",
     rationale: "FAKE",
-    citation: { ...rawCitation, in_force: true },
-    replaced_citation: { ...rawCitation, withdrawn_by: "FAKE/W", withdrawn_on: "2025-11-28" },
+    citation: { ...rawCitation, updated_as_on: "2026-07-15" },
+    replaced_citation: { ...rawCitation, in_force: false, withdrawn_by: "FAKE/W", withdrawn_on: "2025-11-28" },
     monitor_status: "passed",
   };
   it("reads citations, v0.1 withdrawal fields and a sign-off time", () => {
     const f = parseFinding({ ...base, signoff: { decision: "edit", by: "officer:u", at: iso, edited_rationale: "FAKE edit" } }, "p");
     expect(f.replaced_citation?.withdrawn_by).toBe("FAKE/W");
+    expect(f.replaced_citation?.withdrawn_on).toBe("2025-11-28");
+    expect(f.replaced_citation?.updated_as_on).toBeNull();
+    expect(f.citation?.updated_as_on).toBe(base.citation.updated_as_on);
     expect(f.signoff?.at).toBeInstanceOf(Date);
     expect(f.signoff?.note).toBe("");
     expect(f.error).toBeNull();
@@ -110,7 +121,23 @@ describe("parseFinding", () => {
     const f = parseFinding(v0, "p");
     expect(f.replaced_citation).toBeNull();
     expect(f.citation?.withdrawn_by).toBeNull();
+    expect(f.citation?.updated_as_on).toBeNull();
     expect(f.signoff).toBeNull();
+  });
+  it("refuses a withdrawn citation that does not record when and by what it was withdrawn", () => {
+    const withdrawn = base.replaced_citation;
+    for (const replaced_citation of [{ ...withdrawn, withdrawn_by: null }, { ...withdrawn, withdrawn_on: undefined }, { ...rawCitation, in_force: false }]) {
+      expect(() => parseFinding({ ...base, replaced_citation }, "runs/r/findings/c1")).toThrow(
+        /runs\/r\/findings\/c1.replaced_citation: a withdrawn instrument must record withdrawn_by and withdrawn_on/,
+      );
+    }
+  });
+  it("refuses a citation in force that carries a withdrawal", () => {
+    for (const extra of [{ withdrawn_by: "FAKE/W" }, { withdrawn_on: "2025-11-28" }]) {
+      expect(() => parseFinding({ ...base, citation: { ...rawCitation, ...extra } }, "p")).toThrow(
+        /p.citation: an instrument in force cannot have withdrawn_by or withdrawn_on/,
+      );
+    }
   });
 });
 

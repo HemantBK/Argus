@@ -192,7 +192,8 @@ test("a refused start (503 from the API) shows the 'Live review is temporarily u
   });
   await page.goto("/");
   await page.getByRole("button", { name: "Run demo on a sample NBFC policy" }).click();
-  await expect(page.getByText("Live review is temporarily unavailable.")).toBeVisible({ timeout: 15_000 });
+  // The banner title, not the API's message under it (which says the same words for a 503).
+  await expect(page.getByRole("alert").locator("strong")).toContainText("Live review is temporarily unavailable.", { timeout: 15_000 });
   await page.screenshot({ path: `${SCREENSHOTS}live-unavailable-stand-in.png` });
   // The browser logs the failed request itself; the app adds nothing else.
   expect(errors.filter((e) => !e.includes("503"))).toEqual([]);

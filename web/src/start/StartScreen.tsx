@@ -5,9 +5,10 @@ import type { ReactNode } from "react";
 import { ErrorBanner } from "../ErrorBoundary";
 import type { LiveRead, SavedRuns } from "../data/hooks";
 import type { RunDoc } from "../data/types";
-import { formatDate, savedRunLabel } from "../shell/format";
+import { libraryLabel, savedRunLabel } from "../shell/format";
 import { href } from "../shell/route";
-import { DEMO_POLICY_ID, latestCorpusAsOn, sampleCards, type SampleCard } from "./catalog";
+import { DEMO_POLICY_ID, latestLibrary, sampleCards, type SampleCard } from "./catalog";
+import { HEADLINE, TAGLINE } from "./copy";
 import { SAMPLE_POLICIES, type SamplePolicies } from "./samplePolicies";
 import "./start.css";
 
@@ -143,12 +144,12 @@ function Samples({ saved, onRun, policies }: StartScreenProps & { policies: Samp
 }
 
 function Footer({ saved }: { saved: LiveRead<SavedRuns> }): ReactNode {
-  const asOn = saved.status === "ready" ? latestCorpusAsOn(saved.data.runs) : null;
-  const snapshot =
-    saved.status === "ready" ? (asOn ? `RBI snapshot as on ${formatDate(asOn)}` : "RBI snapshot date not recorded yet") : "RBI snapshot date loading…";
+  const library = saved.status === "ready" ? latestLibrary(saved.data.runs) : null;
+  const dates =
+    saved.status === "ready" ? (library ? libraryLabel(library) : "RBI library dates not recorded yet") : "RBI library dates loading…";
   return (
     <footer className="start-footer">
-      {snapshot} · Synthetic data only · Not legal advice
+      {dates} · Synthetic data only · Not legal advice
     </footer>
   );
 }
@@ -157,11 +158,8 @@ export function StartScreen({ saved, onRun, policies = SAMPLE_POLICIES }: StartS
   return (
     <div className="start">
       <section className="start-hero" aria-labelledby="start-title">
-        <h1 id="start-title">Check your digital-lending policy against the RBI rules in force today.</h1>
-        <p className="start-sub">
-          Every finding links to the exact RBI paragraph. A second model checks every step, so no finding rests on a made-up or
-          outdated citation.
-        </p>
+        <h1 id="start-title">{HEADLINE}</h1>
+        <p className="start-sub">{TAGLINE}</p>
         <button
           type="button"
           className="primary start-cta"

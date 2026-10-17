@@ -2,6 +2,7 @@
 // plus the saved runs stored in Firestore (UI_SPEC 16.6: names, clause counts and dates come from data, never from
 // the page source). Pure; tested in catalog.test.ts.
 import type { RunDoc } from "../data/types";
+import { runLibrary, type LibraryDates } from "../shell/format";
 import type { SamplePolicy } from "./samplePolicies";
 
 /** The policy the big "Run demo" button reviews (task brief: policy_a). */
@@ -67,8 +68,14 @@ export function savedRunFor(policyId: string, saved: readonly RunDoc[], excludeR
   return [...saved].filter((r) => r.policy_id === policyId && r.run_id !== excludeRunId).sort(newestFirst)[0] ?? null;
 }
 
-/** The RBI snapshot date of the newest saved run, for screens that have no run of their own. */
+/** The RBI fetch date of the newest saved run, for screens that have no run of their own. */
 export function latestCorpusAsOn(saved: readonly RunDoc[]): string | null {
   const newest = [...saved].sort(newestFirst)[0];
   return newest && newest.corpus_as_on.trim() !== "" ? newest.corpus_as_on : null;
+}
+
+/** The library dates (libraryLabel) of the newest saved run, for screens that have no run of their own. */
+export function latestLibrary(saved: readonly RunDoc[]): LibraryDates | null {
+  const newest = [...saved].sort(newestFirst)[0];
+  return newest ? runLibrary(newest) : null;
 }

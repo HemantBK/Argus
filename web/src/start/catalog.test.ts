@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { run, T0 } from "../data/fixtures.test-util";
-import { DEMO_POLICY_ID, clauseCount, latestCorpusAsOn, sampleCards, savedRunFor } from "./catalog";
+import { runLibrary } from "../shell/format";
+import { DEMO_POLICY_ID, clauseCount, latestCorpusAsOn, latestLibrary, sampleCards, savedRunFor } from "./catalog";
 
 const clause = (i: number) => ({ clause_id: `c${i}`, title: `FAKE title ${i}`, text: `FAKE clause ${i}` });
 const at = (minutes: number) => new Date(T0.getTime() + minutes * 60_000);
@@ -43,7 +44,7 @@ describe("clauseCount", () => {
   });
 });
 
-describe("savedRunFor and latestCorpusAsOn", () => {
+describe("savedRunFor, latestCorpusAsOn and latestLibrary", () => {
   const a1 = run({ run_id: "a1", policy_id: "policy_a", started_at: at(0), corpus_as_on: "2026-07-01" });
   const a2 = run({ run_id: "a2", policy_id: "policy_a", started_at: at(1), corpus_as_on: "2026-07-15" });
   const b1 = run({ run_id: "b1", policy_id: "policy_b", started_at: at(2), corpus_as_on: "2026-07-20" });
@@ -53,7 +54,12 @@ describe("savedRunFor and latestCorpusAsOn", () => {
     expect(savedRunFor("policy_a", [a1, a2, b1], "a2")?.run_id).toBe("a1");
     expect(savedRunFor("policy_x", [a1, a2, b1])).toBeNull();
   });
-  it("takes the snapshot date from the newest saved run", () => {
+  it("takes the library dates from the newest saved run", () => {
+    expect(latestLibrary([a1, b1, a2])).toEqual(runLibrary(b1));
+    expect(latestLibrary([])).toBeNull();
+    expect(latestLibrary([run({ corpus_as_on: " " })])).toBeNull();
+  });
+  it("takes the fetch date from the newest saved run", () => {
     expect(latestCorpusAsOn([a1, b1, a2])).toBe(b1.corpus_as_on);
     expect(latestCorpusAsOn([])).toBeNull();
     expect(latestCorpusAsOn([run({ corpus_as_on: " " })])).toBeNull();

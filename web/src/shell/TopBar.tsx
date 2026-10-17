@@ -1,10 +1,11 @@
 // Slim top bar (UI_SPEC 2): Argus, the run name, tabs Review · Audit log · Evaluation, and the persistent
-// "Synthetic data only · Not legal advice · RBI snapshot as on <date>" label (UI_SPEC 13: both visible on every
-// screen; the app reviews only the synthetic sample policies, since upload is cut). The date comes from the run (or the newest saved run).
+// "Synthetic data only · Not legal advice · <library dates>" label (UI_SPEC 13: both visible on every screen; the
+// app reviews only the synthetic sample policies, since upload is cut). The library dates (libraryLabel) come from
+// the run, or the newest saved run.
 import type { ReactNode } from "react";
 import type { LiveRead } from "../data/hooks";
 import type { RunDoc } from "../data/types";
-import { formatDate, recordedAt } from "./format";
+import { libraryLabel, recordedAt, type LibraryDates } from "./format";
 import { href, type Route, type RunRef } from "./route";
 
 export interface TopBarProps {
@@ -13,8 +14,8 @@ export interface TopBarProps {
   runRef: RunRef | null;
   /** Its run document, when there is a run context. */
   run: LiveRead<RunDoc | null> | null;
-  /** RBI snapshot date to show, or null when no data has given one yet. */
-  asOn: string | null;
+  /** The RBI library dates to show, or null when no data has given them yet. */
+  library: LibraryDates | null;
 }
 
 function RunName({ runRef, run }: { runRef: RunRef; run: LiveRead<RunDoc | null> | null }): ReactNode {
@@ -58,7 +59,7 @@ function Tab({ label, to, current, disabledReason }: { label: string; to: string
   );
 }
 
-export function TopBar({ route, runRef, run, asOn }: TopBarProps): ReactNode {
+export function TopBar({ route, runRef, run, library }: TopBarProps): ReactNode {
   const noRun = "Run the demo or open a saved run first.";
   return (
     <header className="topbar">
@@ -74,7 +75,7 @@ export function TopBar({ route, runRef, run, asOn }: TopBarProps): ReactNode {
         </ul>
       </nav>
       <span className="topbar-legal">
-        <span className="tag-synthetic">Synthetic data only</span> · Not legal advice · {asOn ? `RBI snapshot as on ${formatDate(asOn)}` : "RBI snapshot date not loaded yet"}
+        <span className="tag-synthetic">Synthetic data only</span> · Not legal advice · {library ? libraryLabel(library) : "RBI library dates not loaded yet"}
       </span>
     </header>
   );

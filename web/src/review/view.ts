@@ -25,7 +25,7 @@ export function shortHash(hash: string): string {
 }
 
 export const HASH_EXPLAINED =
-  "SHA-256 of the paragraph text in the dated RBI snapshot. If even one character of the text changed, this hash would change, so it proves which exact text Argus checked.";
+  "SHA-256 of the paragraph text in the dated RBI library. If even one character of the text changed, this hash would change, so it proves which exact text Argus checked.";
 
 /** Link text for a source URL: "Open on rbi.org.in" for RBI pages, else the real host (never a label the URL does not match). */
 export function sourceLinkLabel(url: string): string {
@@ -79,7 +79,7 @@ export const STEP_KIND_TEXT: Record<StepDoc["kind"], string> = {
 /** "Reviewing: 3 of 9 clauses finished" while running; null otherwise. No time estimate: none is measured. */
 export function progressText(run: RunDoc | null, counts: SummaryCounts): string | null {
   if (!run || run.status !== "running") return null;
-  if (counts.clauses === 0) return "Reviewing: splitting the policy into clauses";
+  if (counts.clauses === 0) return "Reviewing: loading the sample policy's clauses";
   return `Reviewing: ${counts.finished} of ${plural(counts.clauses, "clause")} finished`;
 }
 

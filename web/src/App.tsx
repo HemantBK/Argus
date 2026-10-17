@@ -18,8 +18,9 @@ import { ReviewScreen } from "./review/ReviewScreen";
 import { RunFailedBanner, StartingNotice, StartProblemBanner } from "./shell/banners";
 import { startProblem } from "./shell/startProblem";
 import { href, navigate, runRefOf, useNavigation, type Route, type RunRef } from "./shell/route";
+import { runLibrary } from "./shell/format";
 import { TopBar } from "./shell/TopBar";
-import { latestCorpusAsOn, savedRunFor } from "./start/catalog";
+import { latestCorpusAsOn, latestLibrary, savedRunFor } from "./start/catalog";
 import { StartScreen } from "./start/StartScreen";
 import "./shell/shell.css";
 
@@ -125,7 +126,7 @@ export function App(): ReactNode {
   const runDoc: RunDoc | null = run.status === "ready" ? run.data : null;
   const savedRuns = saved.status === "ready" ? saved.data.runs : [];
   const savedAsOn = latestCorpusAsOn(savedRuns);
-  const asOn = runDoc && runDoc.corpus_as_on.trim() !== "" ? runDoc.corpus_as_on : savedAsOn;
+  const library = (runDoc && runLibrary(runDoc)) ?? latestLibrary(savedRuns);
 
   const { start } = live;
   const onRun = useCallback(
@@ -148,7 +149,7 @@ export function App(): ReactNode {
       <a className="visually-hidden skip-link" href="#main" onClick={skipToMain}>
         Skip to main content
       </a>
-      <TopBar route={route} runRef={tabsRun} run={tabsRun ? run : null} asOn={asOn} />
+      <TopBar route={route} runRef={tabsRun} run={tabsRun ? run : null} library={library} />
       <div className="shell-banners">
         {signIn.status === "error" && (
           <ErrorBanner title="Could not sign in. Live runs cannot start until sign-in works." error={signIn.error} />

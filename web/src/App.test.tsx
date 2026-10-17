@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { ApiError, messageForStatus } from "./data/api";
 import { run, T0 } from "./data/fixtures.test-util";
 import type { PostState } from "./data/useStartRun";
-import { formatDate, recordedAt } from "./shell/format";
+import { libraryLabel, recordedAt } from "./shell/format";
 import { href } from "./shell/route";
 import { live } from "./shell/screens.test-util";
 import { DEMO_POLICY_ID } from "./start/catalog";
@@ -55,7 +55,7 @@ vi.mock("./review/ReviewScreen", () => ({
 
 const { App } = await import("./App");
 
-const saved = run({ run_id: SAVED_ID, policy_id: DEMO_POLICY_ID, saved: true, policy_title: "FAKE FinFast NBFC (Synthetic)", corpus_as_on: "2026-07-15", started_at: T0 });
+const saved = run({ run_id: SAVED_ID, policy_id: DEMO_POLICY_ID, saved: true, policy_title: "FAKE FinFast NBFC (Synthetic)", started_at: T0 });
 
 function go(hash: string): void {
   act(() => {
@@ -80,10 +80,10 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("App", () => {
-  it("opens on the Start screen with the snapshot date from data", async () => {
+  it("opens on the Start screen with the library dates from data", async () => {
     render(<App />);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/Check your digital-lending policy/);
-    expect(document.querySelector(".topbar-legal")?.textContent).toBe(`Synthetic data only · Not legal advice · RBI snapshot as on ${formatDate(saved.corpus_as_on)}`);
+    expect(document.querySelector(".topbar-legal")?.textContent).toBe(`Synthetic data only · Not legal advice · ${libraryLabel({ kind: "in_force", updatedAsOn: saved.rbi_as_on ?? null, fetchedOn: saved.corpus_as_on })}`);
     await act(async () => {}); // let the FAKE sign-in settle
   });
 

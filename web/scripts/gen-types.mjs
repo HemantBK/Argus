@@ -20,12 +20,13 @@ const python = resolve(backendDir, ".venv/bin/python");
 const outFile = resolve(webDir, "src/generated/schema.ts");
 const check = process.argv.includes("--check");
 
-const MODELS = ["Run", "Step", "Finding", "AuditEvent", "Citation", "Verdict", "Signoff", "RunSummary", "RunClause", "Check"];
+const MODELS = ["Run", "Step", "Finding", "AuditEvent", "Citation", "Verdict", "Signoff", "RunSummary", "RunClause", "Check", "EvalResults"];
 
-// v0.1 fields (D-34): optional on the client whatever the backend marks as required.
+// v0.1 fields (D-34), and the later additive ones (Run.provider / seeded / rbi_as_on, Citation.updated_as_on):
+// optional on the client whatever the backend marks as required, so older documents still type-check.
 const V01_OPTIONAL = {
-  Run: ["clauses"],
-  Citation: ["withdrawn_by", "withdrawn_on"],
+  Run: ["clauses", "provider", "seeded", "rbi_as_on"],
+  Citation: ["withdrawn_by", "withdrawn_on", "updated_as_on"],
   AuditEvent: ["clause_id", "model"],
   Signoff: ["edited_rationale"],
   Finding: ["error"],

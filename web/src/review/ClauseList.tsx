@@ -48,7 +48,7 @@ export function ClauseList({ rows, badges, selectedId, onSelect, skeleton }: Pro
           ))}
         </ol>
       ) : rows.length === 0 ? (
-        <p className="text-muted pane-note">No clauses yet. They appear here as soon as Argus splits the policy.</p>
+        <p className="text-muted pane-note">No clauses yet. They appear here as soon as the run loads the sample policy.</p>
       ) : (
         <ol className="clause-list" ref={listRef} onKeyDown={onKeyDown}>
           {rows.map((row) => {

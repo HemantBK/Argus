@@ -185,17 +185,19 @@ function ChainView({ chain, shown, onShow }: { chain: OutdatedChain; shown: Cita
         >
           <span className="chain-step">
             <span aria-hidden="true">⟲ </span>
-            {cited.in_force ? "Replaced" : "Withdrawn"}
+            {withdrawal ? "Withdrawn" : "Replaced"}
           </span>
           <span className="chain-body">
-            {withdrawal?.by ? (
-              <span className="chain-main">
-                by <span className="mono">{withdrawal.by}</span>
-              </span>
+            {withdrawal ? (
+              <>
+                <span className="chain-main">
+                  by <span className="mono">{withdrawal.by}</span>
+                </span>{" "}
+                <span>on {formatIsoDate(withdrawal.on)}</span>
+              </>
             ) : (
-              <span className="chain-main">Withdrawing circular not recorded in the library</span>
-            )}{" "}
-            {withdrawal?.on && <span>on {formatIsoDate(withdrawal.on)}</span>}
+              <span className="chain-main">The cited instrument is still in force; another paragraph applies</span>
+            )}
           </span>
         </button>
       </li>

@@ -1,6 +1,7 @@
 // Pure functions from stored documents to what the screens show. No React, no Firestore: unit-tested in
 // selectors.test.ts. Every state shown comes from a recorded field; nothing is implied (UI_SPEC 16.2).
 import { FINDING_LABEL_VALUES } from "../generated/schema";
+import { withdrawalOf } from "./convert";
 import type { Check, CheckName, Citation, FindingDoc, FindingLabel, RunClause, RunDoc, StepDoc, Verdict } from "./types";
 
 // ---------------------------------------------------------------- finding type chip (UI_SPEC 4.1)
@@ -162,7 +163,7 @@ export function badgeFor(finding: FindingDoc, steps: readonly StepDoc[]): Badge 
 
 /** Plain-English names for the recorded checks (UI_SPEC 3.2.1 wording). */
 export const CHECK_TEXT: Record<CheckName, string> = {
-  paragraph_exists: "Paragraph exists in snapshot",
+  paragraph_exists: "Paragraph exists in the RBI library",
   quote_matches: "Quote matches the RBI text",
   in_force: "Instrument in force",
   supported: "Text supports the finding",
@@ -175,9 +176,9 @@ export const CHECK_TEXT: Record<CheckName, string> = {
 export interface OutdatedChain {
   /** What the policy cites. */
   cited: Citation;
-  /** Withdrawal record, when the corpus has it (v0.1 fields). */
-  withdrawal: { by: string | null; on: string | null } | null;
-  /** The paragraph in force today, when Argus found one. */
+  /** When and by which circular the cited instrument was withdrawn; null when it is still in force. */
+  withdrawal: { by: string; on: string } | null;
+  /** The paragraph in force on the library date, when Argus found one. */
   current: Citation | null;
 }
 
@@ -185,13 +186,7 @@ export interface OutdatedChain {
 export function outdatedChain(finding: FindingDoc): OutdatedChain | null {
   const cited = finding.replaced_citation;
   if (!cited) return null;
-  const by = cited.withdrawn_by ?? null;
-  const on = cited.withdrawn_on ?? null;
-  return {
-    cited,
-    withdrawal: by !== null || on !== null || !cited.in_force ? { by, on } : null,
-    current: finding.citation,
-  };
+  return { cited, withdrawal: withdrawalOf(cited, `finding ${finding.clause_id}.replaced_citation`), current: finding.citation };
 }
 
 // ---------------------------------------------------------------- injection quote

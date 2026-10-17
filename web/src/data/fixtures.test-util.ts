@@ -15,6 +15,7 @@ export function citation(over: Partial<Citation> = {}): Citation {
     in_force: true,
     withdrawn_by: null,
     withdrawn_on: null,
+    updated_as_on: "2026-07-15",
     ...over,
   };
 }
@@ -71,6 +72,9 @@ export function run(over: Partial<RunDoc> = {}): RunDoc {
     agent_model: "fake-agent",
     monitor_model: "fake-monitor",
     corpus_as_on: "2026-10-16",
+    rbi_as_on: "2026-07-15",
+    provider: null,
+    seeded: false,
     clauses: [],
     summary: {
       clauses: 0,

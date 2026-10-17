@@ -34,6 +34,7 @@ export const OLD_CITATION = citation({
   in_force: false,
   withdrawn_by: OLD_REF,
   withdrawn_on: WITHDRAWN_ON,
+  updated_as_on: null,
 });
 
 export const CURRENT_CITATION = citation({
@@ -101,7 +102,7 @@ export function steps(): StepDoc[] {
       summary: "FAKE: Monitor revised citation: para III.47(3) does not exist",
       verdict: verdict(
         "revise",
-        [check("paragraph_exists", false, "FAKE: para III.47(3) is not in the snapshot.")],
+        [check("paragraph_exists", false, "FAKE: para III.47(3) is not in the RBI library.")],
         "FAKE: cite an existing paragraph.",
       ),
     }),

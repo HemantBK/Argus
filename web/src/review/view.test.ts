@@ -72,7 +72,7 @@ describe("progress", () => {
 
   it("says the policy is being split before clauses exist", () => {
     const r = run({ status: "running" });
-    expect(progressText(r, summarize(r, [], []))).toBe("Reviewing: splitting the policy into clauses");
+    expect(progressText(r, summarize(r, [], []))).toBe("Reviewing: loading the sample policy's clauses");
   });
 
   it("takes the latest sign-off time", () => {

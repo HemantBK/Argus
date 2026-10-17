@@ -4,9 +4,11 @@ import { describe, expect, it } from "vitest";
 import { citation, finding, run, step, verdict } from "../data/fixtures.test-util";
 import { BADGE_TEXT, FAILED_CHIP, LABEL_CHIPS } from "../data/selectors";
 import type { FindingDoc, RunDoc, StepDoc } from "../data/types";
+import { citationLibrary, libraryLabel, runLibrary } from "../shell/format";
 import { ReviewWorkspace, type ReviewWorkspaceProps } from "./ReviewWorkspace";
 import { SourcePane } from "./SourcePane";
-import { CLAUSES, CURRENT_CITATION, HASH, INJECTED, LOADING, OLD_CITATION, OLD_REF, findings, noSignoff, ready, sampleRun, steps } from "./fixtures.test-util";
+import { CLAUSES, CURRENT_CITATION, HASH, INJECTED, LOADING, OLD_CITATION, OLD_REF, WITHDRAWN_ON, findings, noSignoff, ready, sampleRun, steps } from "./fixtures.test-util";
+import { formatIsoDate } from "./view";
 import { count, html, text } from "./render.test-util";
 
 function render(over: Partial<ReviewWorkspaceProps> = {}): string {
@@ -54,10 +56,12 @@ describe("ReviewWorkspace: summary bar (the 5-second answer)", () => {
     expect(t).toContain(`Signed off 0 / ${CLAUSES.length}`);
   });
 
-  it("labels a saved run as saved with its recording time, and the snapshot date from the corpus", () => {
+  it("labels a saved run as saved with its recording time, and the library dates of the run", () => {
     const t = text(render());
     expect(t).toMatch(/Saved run \(recorded .+ IST\)/);
-    expect(t).toContain("RBI snapshot as on 16 Oct 2026");
+    const library = runLibrary(sampleRun());
+    if (!library) throw new Error("the fixture run records its library dates");
+    expect(t).toContain(libraryLabel(library));
     expect(t).toContain("FAKE FinFast NBFC (Synthetic) policy");
   });
 
@@ -223,18 +227,39 @@ describe("ReviewWorkspace: outdated reference chain and RBI source", () => {
     expect(cited).toBeGreaterThanOrEqual(0);
     expect(withdrawn).toBeGreaterThan(cited);
     expect(now).toBeGreaterThan(withdrawn);
-    expect(t).toContain("on 28 Nov 2025");
+    expect(t).toContain(`on ${formatIsoDate(WITHDRAWN_ON)}`);
     expect(t).toContain(`para ${CURRENT_CITATION.para}`);
   });
 
-  it("the source pane shows instrument, para, quote, snapshot date, short hash and the RBI link in a new tab", () => {
+  it("the chain's middle box names the withdrawing circular and the date, from the replaced citation", () => {
+    const out = middle(render());
+    const box = out.slice(out.indexOf('class="chain-box chain-withdrawn">') + 'class="chain-box chain-withdrawn">'.length);
+    const t = text(box.slice(0, box.indexOf("</button>")));
+    expect(t).toBe(`⟲ Withdrawn by ${OLD_CITATION.withdrawn_by ?? ""} on ${formatIsoDate(OLD_CITATION.withdrawn_on ?? "")}`);
+    expect(text(out)).not.toMatch(/not recorded/i);
+  });
+
+  it("a replaced citation still in force: the middle box says so instead of a withdrawal", () => {
+    const stillInForce = { ...OLD_CITATION, in_force: true, withdrawn_by: null, withdrawn_on: null, updated_as_on: "2026-07-15" };
+    const list = findings().map((f) => (f.clause_id === "c1" ? { ...f, replaced_citation: stillInForce } : f));
+    const t = text(middle(render({ findings: ready(list) })));
+    expect(t).toContain("⟲ Replaced The cited instrument is still in force; another paragraph applies");
+    expect(t).not.toContain("Withdrawn by");
+  });
+
+  it("no visible text says snapshot", () => {
+    expect(text(render())).not.toMatch(/snapshot/i);
+    expect(text(html(<SourcePane finding={finding()} citation={OLD_CITATION} replacement={CURRENT_CITATION} onShowReplacement={() => undefined} />))).not.toMatch(/snapshot/i);
+  });
+
+  it("the source pane shows instrument, para, quote, library dates, short hash and the RBI link in a new tab", () => {
     const out = render();
     const src = out.slice(out.indexOf('class="pane pane-source"'));
     const t = text(src);
     expect(t).toContain(CURRENT_CITATION.instrument);
     expect(src).toContain(`<span class="mono">para ${CURRENT_CITATION.para}</span>`);
     expect(t).toContain(CURRENT_CITATION.quote);
-    expect(t).toContain("Snapshot taken 15 Jul 2026");
+    expect(t).toContain(`Dates ${libraryLabel(citationLibrary(CURRENT_CITATION))}`);
     expect(t).toContain(HASH.slice(0, 8));
     expect(t).not.toContain(HASH); // full hash only in the tooltip
     expect(src).toMatch(/href="https:\/\/www\.rbi\.org\.in\/Scripts\/FAKE\.aspx" target="_blank" rel="noopener noreferrer"/);
@@ -247,7 +272,9 @@ describe("ReviewWorkspace: outdated reference chain and RBI source", () => {
       html(<SourcePane finding={finding()} citation={OLD_CITATION} replacement={CURRENT_CITATION} onShowReplacement={() => undefined} />),
     );
     expect(t).toContain("Withdrawn");
-    expect(t).toContain(`Withdrawn by ${OLD_REF} on 28 Nov 2025. It is not in force.`);
+    expect(t).toContain(`Withdrawn by ${OLD_REF} on ${formatIsoDate(WITHDRAWN_ON)}. It is not in force.`);
+    expect(t).toContain(`Dates ${libraryLabel(citationLibrary(OLD_CITATION))}`);
+    expect(t).toContain(`Withdrawn 28 Nov 2025 by ${OLD_REF} · fetched`);
     expect(t).toContain(`Replaced by ${CURRENT_CITATION.instrument}, para ${CURRENT_CITATION.para}`);
   });
 

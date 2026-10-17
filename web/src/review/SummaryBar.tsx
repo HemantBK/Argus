@@ -3,7 +3,8 @@
 import type { ReactNode } from "react";
 import { FAILED_CHIP, LABEL_CHIPS, formatIst, type SummaryCounts } from "../data/selectors";
 import type { FindingLabel, RunDoc } from "../data/types";
-import { formatIsoDate, plural } from "./view";
+import { libraryLabel, runLibrary } from "../shell/format";
+import { plural } from "./view";
 
 /** Label order in the bar: what needs attention first. Gap and conflict share the red chip, each with its own label. */
 const ORDER: FindingLabel[] = ["outdated_reference", "gap", "conflict", "compliant", "insufficient_evidence"];
@@ -17,6 +18,12 @@ interface Props {
   monitorReady: boolean;
   /** The findings have loaded; until then no finding count or sign-off figure is shown (none has been measured). */
   findingsReady: boolean;
+}
+
+/** The run's library dates (libraryLabel), or a plain statement when the run recorded none. */
+function libraryText(run: RunDoc): string {
+  const library = runLibrary(run);
+  return library ? libraryLabel(library) : "RBI library dates not recorded";
 }
 
 /** A count, or a placeholder while it has not been read: an unread count is never shown as 0. */
@@ -37,7 +44,7 @@ export function SummaryBar({ run, counts, progress, completeAt, monitorReady, fi
           ) : (
             <span className="run-kind">Live run, started {formatIst(run.started_at, true)}</span>
           )}
-          <span>RBI snapshot as on {formatIsoDate(run.corpus_as_on)}</span>
+          <span>{libraryText(run)}</span>
           <span>
             Agent <span className="mono">{run.agent_model}</span> · Monitor <span className="mono">{run.monitor_model}</span>
           </span>

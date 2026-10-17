@@ -12,7 +12,7 @@ export const NOT_MEASURED = "not measured yet";
 
 export interface EvalViewProps {
   latest: LiveRead<Record<string, unknown> | null>;
-  /** RBI snapshot date from the saved runs, shown in the corpus box when no evaluation has recorded one. */
+  /** RBI fetch date from the saved runs, shown in the corpus box when no evaluation has recorded one. */
   fallbackAsOn: string | null;
 }
 

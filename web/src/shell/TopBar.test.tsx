@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { run } from "../data/fixtures.test-util";
 import { RunFailedBanner, StartProblemBanner } from "./banners";
-import { formatDate, recordedAt } from "./format";
+import { libraryLabel, recordedAt, runLibrary, type LibraryDates } from "./format";
 import { href } from "./route";
 import { live } from "./screens.test-util";
 import { TopBar } from "./TopBar";
@@ -16,21 +16,35 @@ function runName(): string | null | undefined {
 }
 
 const ID = "0123456789ab4def8123456789abcdef";
-const saved = run({ run_id: ID, saved: true, policy_title: "FAKE FinFast NBFC (Synthetic)", corpus_as_on: "2026-07-15" });
+const saved = run({ run_id: ID, saved: true, policy_title: "FAKE FinFast NBFC (Synthetic)" });
+const savedLibrary = runLibrary(saved);
+const legal = (dates: string): string => `Synthetic data only · Not legal advice · ${dates}`;
 
 describe("TopBar", () => {
   it("without a run: Review and Audit are unavailable, Evaluation links, the legal label is there", () => {
-    render(<TopBar route={{ screen: "start" }} runRef={null} run={null} asOn="2026-07-15" />);
+    render(<TopBar route={{ screen: "start" }} runRef={null} run={null} library={savedLibrary} />);
     expect(screen.getByRole("link", { name: "Argus" }).getAttribute("href")).toBe(href.start());
     expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
     expect(screen.getByText("Review").getAttribute("aria-disabled")).toBe("true");
     expect(screen.getByRole("link", { name: "Evaluation" }).getAttribute("href")).toBe(href.eval());
-    expect(document.querySelector(".topbar-legal")?.textContent).toBe(`Synthetic data only · Not legal advice · RBI snapshot as on ${formatDate("2026-07-15")}`);
+    if (!savedLibrary) throw new Error("the fixture run records its library dates");
+    expect(document.querySelector(".topbar-legal")?.textContent).toBe(legal(libraryLabel(savedLibrary)));
+  });
+
+  it("shows both library dates of a run in force, and the withdrawal of a withdrawn instrument", () => {
+    const inForce: LibraryDates = { kind: "in_force", updatedAsOn: saved.rbi_as_on ?? null, fetchedOn: saved.corpus_as_on };
+    render(<TopBar route={{ screen: "start" }} runRef={null} run={null} library={inForce} />);
+    expect(document.querySelector(".topbar-legal")?.textContent).toBe(legal("RBI text as updated on 15 Jul 2026 · fetched 16 Oct 2026"));
+    cleanup();
+    const withdrawn: LibraryDates = { kind: "withdrawn", withdrawnOn: "2025-11-28", withdrawnBy: "FAKE/2025-26/100", fetchedOn: saved.corpus_as_on };
+    render(<TopBar route={{ screen: "start" }} runRef={null} run={null} library={withdrawn} />);
+    expect(document.querySelector(".topbar-legal")?.textContent).toBe(legal("Withdrawn 28 Nov 2025 by FAKE/2025-26/100 · fetched 16 Oct 2026"));
+    expect(document.body.textContent).not.toMatch(/snapshot/i);
   });
 
   it("names a saved run honestly and marks the current tab", () => {
     const ref = { source: "samples" as const, runId: ID };
-    render(<TopBar route={{ screen: "audit", ...ref }} runRef={ref} run={live.ready(saved)} asOn={saved.corpus_as_on} />);
+    render(<TopBar route={{ screen: "audit", ...ref }} runRef={ref} run={live.ready(saved)} library={savedLibrary} />);
     expect(runName()).toBe(`${saved.policy_title} · saved run (recorded ${recordedAt(saved)})`);
     expect(screen.getByRole("link", { name: "Audit log" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Review" }).getAttribute("href")).toBe(href.review(ref));
@@ -38,11 +52,11 @@ describe("TopBar", () => {
 
   it("labels a live run as live, and a live run not created yet as starting", () => {
     const ref = { source: "runs" as const, runId: ID };
-    render(<TopBar route={{ screen: "review", ...ref }} runRef={ref} run={live.ready({ ...saved, saved: false })} asOn={null} />);
+    render(<TopBar route={{ screen: "review", ...ref }} runRef={ref} run={live.ready({ ...saved, saved: false })} library={null} />);
     expect(runName()).toBe(`${saved.policy_title} · live run`);
-    expect(document.querySelector(".topbar-legal")?.textContent).toBe("Synthetic data only · Not legal advice · RBI snapshot date not loaded yet");
+    expect(document.querySelector(".topbar-legal")?.textContent).toBe(legal("RBI library dates not loaded yet"));
     cleanup();
-    render(<TopBar route={{ screen: "review", ...ref }} runRef={ref} run={live.ready(null)} asOn={null} />);
+    render(<TopBar route={{ screen: "review", ...ref }} runRef={ref} run={live.ready(null)} library={null} />);
     expect(screen.getByText("Live run starting…")).toBeTruthy();
   });
 });
