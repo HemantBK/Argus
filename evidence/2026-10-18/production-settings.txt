@@ -1,0 +1,4 @@
+# Production settings read back 2026-10-17T21:43:36Z
+config/limits: {'daily_run_cap': 100, 'hourly_run_cap': 20, 'per_user_daily_run_cap': 5, 'enabled': True}
+config/custom_limits: missing, so custom runs are off
+health: {'git_sha': '7c3072da50046ee9fe2a5264b30dfd46694a9389', 'mode': 'cloud', 'provider': 'vertex', 'agent_model': 'gemini-3.8-flash', 'monitor_model': 'gemini-3.5-flash-lite', 'location': 'global', 'agent_breaker': 'half_open'}
