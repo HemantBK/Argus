@@ -286,3 +286,32 @@ def test_usage_names_the_web_subcommand(release_repo: tuple[Path, dict[str, str]
 
 def test_release_script_parses() -> None:
     assert subprocess.run(["bash", "-n", str(REPO / "scripts" / "release.sh")], check=False).returncode == 0
+
+
+def _predeploy(tmp_path: Path, env: dict[str, str], stamp: bool) -> subprocess.CompletedProcess[str]:
+    (tmp_path / "web" / "dist").mkdir(parents=True)
+    if stamp:
+        (tmp_path / "web" / "dist" / "version.json").write_text("{}")
+    clean = {k: v for k, v in os.environ.items() if k != "ARGUS_RELEASE"}
+    return subprocess.run(
+        ["bash", str(REPO / "scripts" / "web-predeploy.sh")],
+        cwd=tmp_path,
+        env={**clean, **env},
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_a_hand_run_hosting_deploy_is_refused(tmp_path: Path) -> None:
+    # On 18 Oct a hand-run `firebase deploy` put a stale build live; firebase.json's predeploy now stops that.
+    r = _predeploy(tmp_path, {}, stamp=True)
+    assert r.returncode == 1 and "scripts/release.sh web" in r.stderr
+    assert json.loads((REPO / "firebase.json").read_text())["hosting"]["predeploy"] == [
+        "bash scripts/web-predeploy.sh"
+    ]
+
+
+def test_release_sh_web_deploys_pass_the_predeploy_only_with_a_stamp(tmp_path: Path) -> None:
+    assert _predeploy(tmp_path, {"ARGUS_RELEASE": "web"}, stamp=True).returncode == 0
+    assert _predeploy(tmp_path / "nostamp", {"ARGUS_RELEASE": "web"}, stamp=False).returncode == 1
+    assert "ARGUS_RELEASE=web firebase deploy" in (REPO / "scripts" / "release.sh").read_text()

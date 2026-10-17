@@ -88,7 +88,7 @@ dates, snapshot date and a sha256 of its normalised text. The NBFC Credit Facili
 | `runs/{run_id}/findings/{clause_id}` | API | owner | label, rationale, citation, monitor status, sign-off |
 | `runs/{run_id}/audit/{seq}` | API | owner | every AI step and every officer action |
 | `samples/{run_id}` (+ steps, findings, audit) | `make save-sample` | anyone | finished Vertex AI runs copied as labelled, read-only saved runs (deployed: `95c9f5f8ccc748c4865ff5daef0d676a` for policy A, `c0de9595619e4ab1bb8e85fb0c209b82` for policy B) |
-| `eval_results/latest` | eval CLI with `--publish` | anyone | evaluation summary for the Evaluation page (schema in `backend/argus_api/schema.py`; nothing published yet, so the page says "not measured yet") |
+| `eval_results/latest` | eval CLI with `--publish` | anyone | evaluation summary for the Evaluation page (schema in `backend/argus_api/schema.py`; nothing published; the page points to docs/evaluation.md for the official run) |
 | `config/limits` | `make limits` | API | kill switch, daily, hourly and per-user run caps |
 | `usage/{IST date}` (+ hours, users) | API | API | run counters for the caps |
 | `rbi_instruments`, `rbi_paragraphs`, `supersession` | `make load-corpus` | nothing at runtime | copy of the library snapshot |

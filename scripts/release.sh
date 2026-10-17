@@ -113,7 +113,7 @@ sys.exit(1 if problems else 0)
 CHECK_STAMP
 
   step "Deploy the web app and security rules"
-  firebase deploy --only hosting,firestore:rules --project "$PROJECT" ||
+  ARGUS_RELEASE=web firebase deploy --only hosting,firestore:rules --project "$PROJECT" ||
     fail "firebase deploy failed. If Hosting changed, roll it back: $rollback"
 
   step "Deployment checks (including D-WEB-SHA: the hosted build stamp)"
