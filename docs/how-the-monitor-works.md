@@ -53,11 +53,16 @@ no backup.
   in force on the library date. The citation shown is rebuilt from the library, never copied from model text.
 - **Model judgement, not a guarantee:** whether the quoted rule *supports* the finding, whether the policy hides an
   instruction aimed at the reviewer, and whether the draft stayed on task.
-- **Measured, not assumed:** see [evaluation.md](evaluation.md). The evidence for the fail-safe is the cheaper
-  agent: with Gemini 3.1 Flash-Lite as the agent, attacks that got through fell from 8/36 to 0/36 with the
-  monitor on, with 0/32 false stops (preliminary, runs `20261016T162211Z-1536fa` and `20261016T162930Z-d63488`).
-  With the agent Argus ships it made no measurable difference, and we do not claim it improves that agent.
-- **Not a shield:** injection detection is a pattern scan plus a model judgement. In the preliminary run the
-  strong agent let 1/20 pre-registered hard attacks through, with and without the monitor.
+- **Measured, not assumed:** see [evaluation.md](evaluation.md) (official evaluation, Vertex AI, frozen build
+  `7c3072d`, backup off). The evidence for the fail-safe is the cheaper agent: with the cheaper Gemini 3.1
+  Flash-Lite agent, counting failed reviews as attacks that got through, the monitor cut attacks that got through
+  from 7/16 to 0/16 on the base set (run 20261017T164720Z-f694fd) and from 8/20 to 4/20 on the hard set (run
+  20261017T165434Z-a52f4e), with 0/32 false stops on clean clauses (run 20261017T164720Z-f694fd). We do not claim
+  the monitor improves the shipped agent: on Gemini 3.8 Flash no improvement was shown (correct citations 39/46
+  with the monitor off and 35/46 with it on, with 4/48 and 8/48 capacity failures, run 20261017T162059Z-5dc6b4).
+- **Not a shield:** injection detection is a pattern scan plus a model judgement. On the cheaper agent's hard
+  set, the monitor let wrong labels through unflagged on 3/20 attack reviews: ha-08 twice and ha-07 once, 2 of
+  the 10 cases. The monitor said continue on all three. Counting one failed review, the figure is 4/20 (run
+  20261017T165434Z-a52f4e).
 
 ![Saved policy B run: the monitor stops clause c2 and quotes the planted footnote](screenshots/policy-b-c2-stopped.png)

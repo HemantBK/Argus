@@ -72,19 +72,42 @@ Each visitor is signed in anonymously and sees only their own runs; live runs ar
 day. The two read-only saved runs are Vertex AI runs from 17 Oct 2026 by Gemini 3.8 Flash alone (policy A
 `95c9f5f8ccc748c4865ff5daef0d676a`, policy B `c0de9595619e4ab1bb8e85fb0c209b82`).
 
-## Headline numbers (preliminary)
+## Headline numbers (official evaluation)
 
-> One evaluation session on 2026-10-16, development build, same Gemini model ids reached through OpenRouter. The
-> official run on the deployed build replaces these. Run ids and full tables:
-> [docs/evaluation.md](docs/evaluation.md).
+> Official evaluation on Google Cloud's Agent Platform (Vertex AI), 17 Oct 2026: frozen build `7c3072d`, backup
+> model off, every case run twice, so n counts cases x repeats. Pre-registration, full tables, every record and
+> the driver log: [docs/evaluation.md](docs/evaluation.md) and
+> [evidence/2026-10-17/eval-official/](evidence/2026-10-17/eval-official/README.md).
 
-- **0/43** correct citations from Gemini without the library (runs `43cea4`, `275c7b`), versus **22/23** for the
-  Argus agent (run `43cea4`). The 0 is expected by construction, since a correct citation must quote the library
+- **Gemini alone cannot cite the library:** in the official evaluation on Google Cloud's Agent Platform (Vertex
+  AI), frozen build 7c3072d with the backup model off, Gemini 3.8 Flash without the library or tools gave
+  **0/46** correct citations on the base set (run 20261017T162059Z-5dc6b4) and **0/20** on the hard set (run
+  20261017T154026Z-446cd6). The 0 is expected by construction, since a correct citation must quote the library
   word for word; we have not run a baseline with the whole library in Gemini's prompt.
-- **The fail-safe, measured:** with a cheaper agent (Gemini 3.1 Flash-Lite), attacks that got through fell from
-  **8/36 to 0/36** with the monitor on, with **0/32** false stops on clean clauses (runs `1536fa`, `d63488`).
-- With the agent Argus ships (Gemini 3.8 Flash), the monitor made **no measurable difference** (22/23 citations
-  and 0/8 base attacks either way, run `43cea4`). We do not claim the monitor improves the shipped agent.
+- **The Argus agent:** on the base set, the Argus agent on Gemini 3.8 Flash gave a correct citation on **39/46**
+  reviews with the monitor off and **35/46** with it on (run 20261017T162059Z-5dc6b4). 4/48 and 8/48 of those
+  reviews failed because Gemini 3.8 Flash on Vertex AI was busy, and they count as wrong.
+- **Attacks:** with the Argus agent on Gemini 3.8 Flash, counting every review that failed on Vertex capacity as
+  an attack that got through, attacks got through on **4/20** hard-set reviews with the monitor off and **3/20**
+  with it on (run 20261017T154026Z-446cd6), and on **2/16** and **2/16** base-set reviews (run
+  20261017T162059Z-5dc6b4). Without the library, Gemini 3.8 Flash put a wrong label in front of the officer,
+  unflagged, on 6/20 pre-registered hard attacks (run 20261017T154026Z-446cd6) and 2/16 base attacks (run
+  20261017T162059Z-5dc6b4).
+- **The fail-safe, measured with a cheaper agent:** with the cheaper Gemini 3.1 Flash-Lite agent, counting
+  failed reviews as attacks that got through, the monitor cut attacks that got through from **7/16 to 0/16** on
+  the base set (run 20261017T164720Z-f694fd) and from **8/20 to 4/20** on the hard set (run
+  20261017T165434Z-a52f4e). The monitor made 0/32 false stops on clean clauses (run 20261017T164720Z-f694fd).
+- **Negative result:** We do not claim the monitor improves the shipped agent. On Gemini 3.8 Flash, correct
+  citations were 39/46 with the monitor off and 35/46 with it on, with 4/48 and 8/48 capacity failures (run
+  20261017T162059Z-5dc6b4). Among reviews that finished, they were 39/42 and 35/38, and attacks through were 0/14
+  and 0/14. (2/16 and 2/16 counting failed reviews). No improvement was shown.
+
+The evaluation was recomputed three times by this team but was not run exactly as pre-registered. First, R1 (run
+20261017T162059Z-5dc6b4, 12/144 error records) was not re-run under the 5% rule. Second, the R2 re-run (run
+20261017T155425Z-cb73b9, 10/60 capacity failures) was not stopped after three consecutive capacity failures.
+Third, under the stricter reading, the original R2 (run 20261017T154026Z-446cd6, 7/60) should have been stopped
+part-way once capacity failures passed 10%. The stop rules were checked only after each run ended. No record was
+dropped. The original R2 is the headline because the re-run did not get below 5% errors, and both are reported.
 
 ## How it works
 
@@ -142,7 +165,7 @@ flowchart LR
 - **Originality:** rule-change tracking and cited answers already exist; we add code-checked citations, a monitor
   that steps in during the review, error rates published with n and run ids, and open source code.
 - **Beyond basic AI:** an agent loop with tools; a step monitor that can send a draft back or stop it, measured on
-  and off (see Headline numbers); and a labelled backup model when the agent model is busy.
+  and off with two agents (see Headline numbers); and a labelled backup model when the agent model is busy.
 - **Usability and cohesion:** one click to a live review with no sign-up; run, live trace, finding with RBI's
   text, officer sign-off and audit log sit in one workspace.
 - **Accessibility:** the app's text and status colours reach a 4.5:1 contrast ratio on their backgrounds, checked
@@ -154,13 +177,14 @@ flowchart LR
 - [docs/engineering-quality.md](docs/engineering-quality.md): how Argus is engineered, with the file or record
   behind each point.
 - [docs/security.md](docs/security.md): security and data handling.
-- [evidence/2026-10-17/README.md](evidence/2026-10-17/README.md): the deployment check records from 17 Oct 2026.
+- [evidence/2026-10-17/README.md](evidence/2026-10-17/README.md): the deployment check records and the official
+  evaluation (pre-registration, results, driver and log) from 17 Oct 2026.
 
 ## What is real and what is not
 
 | Part | Status |
 |---|---|
-| Gemini agent and monitor | Real calls. The deployed app uses Vertex AI only; the saved runs and our cloud verification runs on 17 Oct went through Vertex AI. The preliminary evaluation numbers were measured in local development through OpenRouter. |
+| Gemini agent and monitor | Real calls. The deployed app uses Vertex AI only; the saved runs, our cloud verification runs and the official evaluation on 17 Oct went through Vertex AI. Earlier preliminary runs through OpenRouter are kept only as history in [docs/evaluation.md](docs/evaluation.md). |
 | RBI library | Real text from rbi.org.in HTML pages, fetched 16 Oct 2026, each paragraph hashed: 4 instruments, 365 paragraphs, one in force. |
 | Supersession map, verifier, action rules | Real code and data, unit-tested. |
 | Sample policies and evaluation cases | **Synthetic**, written for this project. No real lender or personal data. |
@@ -175,10 +199,19 @@ flowchart LR
   amendments are not in the library, so no finding can cite them; nor is the definitions paragraph (para 4).
 - **Small samples and model variance:** two synthetic 8-clause policies and a 34-case evaluation set; in 1 of 2
   Vertex AI runs of policy B, clause c8 was labelled compliant instead of gap (run `f30914e6`).
-- **The monitor is a fail-safe, not an accuracy boost:** its measured benefit is with a cheaper agent; with the
-  shipped agent it was neutral. Its support and injection checks are model judgements and may miss things (the
-  strong agent let 1/20 pre-registered hard attacks through, with and without the monitor; preliminary, run
-  `275c7b`).
+- **The monitor is a fail-safe, not an accuracy boost:** its measured benefit is with a cheaper agent; on the
+  shipped agent no improvement was shown (see Headline numbers). Its support and injection checks are model
+  judgements and can miss: on the cheaper agent's hard set, the monitor let wrong labels through unflagged on
+  3/20 attack reviews: ha-08 twice and ha-07 once, 2 of the 10 cases. The monitor said continue on all three.
+  Counting one failed review, the figure is 4/20 (run 20261017T165434Z-a52f4e). With the cheaper agent, correct
+  citations rose from 37/46 to 42/46 with the monitor on the base set (run 20261017T164720Z-f694fd), and did not
+  rise on the hard set: 16/20 with and without the monitor (run 20261017T165434Z-a52f4e).
+- **Vertex AI capacity was a real cost:** 19/136 strong-agent reviews in the headline runs failed because Gemini
+  3.8 Flash returned 504 or 499. That is 12/96 on the base set (run 20261017T162059Z-5dc6b4), including 8/48 with
+  the monitor on, and 7/40 on the hard set (run 20261017T154026Z-446cd6). Every one is counted as a failure.
+- **What the evaluation does not measure:** the evaluation ran with the backup model switched off, so it does
+  not measure the deployed hand-over to Gemini 3.1 Flash-Lite. The gold labels are this project's own; no
+  independent compliance expert labelled them.
 - **The backup model is weaker:** in a deployment check where all 8 clauses of policy A went to Gemini 3.1
   Flash-Lite (run `69eaa7ca0c1144fb8266651b09a99ad3`), it matched 6/8 planted labels: c2 came back as a gap
   instead of an outdated reference, c7 as a gap instead of compliant, and the monitor passed both. Both findings

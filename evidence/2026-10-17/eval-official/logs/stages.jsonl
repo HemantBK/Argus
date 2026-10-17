@@ -1,0 +1,6 @@
+{"stage": "R2", "tag": "", "run": "20261017T154026Z-446cd6", "workers": 2, "capacity_failures": 7, "records": 60}
+{"stage": "R2", "tag": "-rerun", "run": "20261017T155425Z-cb73b9", "workers": 1, "capacity_failures": 10, "records": 60}
+{"stage": "R1", "tag": "", "run": "20261017T162059Z-5dc6b4", "workers": 2, "capacity_failures": 12, "records": 144}
+{"stage": "R3", "tag": "", "run": "20261017T164720Z-f694fd", "workers": 2, "capacity_failures": 0, "records": 96}
+{"stage": "R4", "tag": "", "run": "20261017T165434Z-a52f4e", "workers": 2, "capacity_failures": 0, "records": 40}
+{"stage": "R5", "tag": "", "run": "20261017T170257Z-e32db3", "workers": 2, "capacity_failures": 0, "records": 20}

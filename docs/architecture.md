@@ -6,7 +6,8 @@ Deployed on 17 Oct 2026: the web app on Firebase Hosting (https://argus-aibc.web
 Firestore security rules, Firestore, and the Cloud Run API, which calls Gemini through Vertex AI. Reviews on the
 deployed stack were verified that day (live runs on Vertex AI, security rules tested with real tokens, structured
 logs read back), and the two saved sample runs on the start screen are Vertex AI runs from that verification. The
-preliminary evaluation numbers were measured earlier in local development through OpenRouter.
+official evaluation ran on Vertex AI the same day on the frozen build `7c3072d` with the backup model off
+([evaluation](evaluation.md)); earlier preliminary runs through OpenRouter are kept there only as history.
 
 ## Components
 

@@ -1,0 +1,24 @@
+21:10:10 driver start, frozen worktree 7c3072da50046ee9fe2a5264b30dfd46694a9389
+21:10:10 waiting: breaker half_open
+21:10:22 driver start, frozen worktree 7c3072da50046ee9fe2a5264b30dfd46694a9389
+21:10:26 calm: breaker closed, burst 8/8 ok
+21:10:26 R2 start workers=2
+21:24:13 R2 done 20261017T154026Z-446cd6: capacity failures 7/60
+21:24:13 R2: over 10% capacity failures, re-running once at workers 1 (both reported)
+21:24:25 calm: breaker closed, burst 8/8 ok
+21:24:25 R2-rerun start workers=1
+21:50:33 R2-rerun done 20261017T155425Z-cb73b9: capacity failures 10/60
+21:50:59 calm: breaker closed, burst 8/8 ok
+21:50:59 R1 start workers=2
+22:16:53 R1 done 20261017T162059Z-5dc6b4: capacity failures 12/144
+22:17:19 calm: breaker closed, burst 8/8 ok
+22:17:19 R3 start workers=2
+22:24:06 R3 done 20261017T164720Z-f694fd: capacity failures 0/96
+22:24:33 calm: breaker closed, burst 8/8 ok
+22:24:33 R4 start workers=2
+22:27:25 R4 done 20261017T165434Z-a52f4e: capacity failures 0/40
+22:27:53 waiting: burst ['504', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']
+22:32:56 calm: breaker closed, burst 8/8 ok
+22:32:56 R5 start workers=2
+22:33:22 R5 done 20261017T170257Z-e32db3: capacity failures 0/20
+22:33:22 ALL DONE

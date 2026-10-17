@@ -3,7 +3,8 @@
 Machine-written results behind the numbers and claims in the README and `docs/`, copied from our working
 verification folder. Before copying we removed private paths (shown as `<workspace>`), billing account ids
 (`<billing-account>`), and any token, key or personal email; nothing else was changed, except the two paths in
-`cloud/verifier/recompute.py` (see below). The uids in these files are anonymous Firebase accounts created by
+`cloud/verifier/recompute.py` (see below) and three references to internal review notes in
+`eval-official/OFFICIAL_RESULTS.md` (see [eval-official/README.md](eval-official/README.md); no number changed). The uids in these files are anonymous Firebase accounts created by
 the check scripts. The policies are synthetic.
 
 Two builds appear here:
@@ -13,9 +14,26 @@ Two builds appear here:
 - `7c3072d` (revision `argus-api-00008-nev`): the build Argus runs now, released on 17 Oct with the labelled
   backup model.
 
-**The official evaluation is not here yet.** It runs on the frozen build `7c3072d` with the backup switched off.
-Its results will be added to this folder once they are verified, and its pre-registration is published with
-them. Until then every evaluation number in this repository is **preliminary**.
+**The official evaluation is in [eval-official/](eval-official/README.md):** run on Vertex AI on 17 Oct on the
+frozen build `7c3072d` with the backup switched off, with its pre-registration, the six runs' records, the driver
+and its log. Every evaluation number in the README, `docs/` and the deck comes from it, except the history section
+of `docs/evaluation.md`. The preliminary runs of 16 Oct ([eval-preliminary/](eval-preliminary/)) are history only.
+
+## Official evaluation (`7c3072d`, Vertex AI, backup off)
+
+| File | What it shows | Public claim it backs |
+|---|---|---|
+| [eval-official/PREREG.md](eval-official/PREREG.md) | The pre-registration with Amendments 1 and 2, written before any full run and before any results were read. | [evaluation](../../docs/evaluation.md), Setup; [engineering quality](../../docs/engineering-quality.md), Statistics |
+| [eval-official/OFFICIAL_RESULTS.md](eval-official/OFFICIAL_RESULTS.md) | Every metric recomputed from the raw records (three times, by this team), the protocol rules applied, both readings of a failed review, every error record, and the protocol deviations. | README "Headline numbers"; [evaluation](../../docs/evaluation.md); deck slide 11 |
+| [eval-official/results/](eval-official/README.md) | `results.json` and `report.md` for R2 `20261017T154026Z-446cd6` (headline) and its re-run `20261017T155425Z-cb73b9`, R1 `20261017T162059Z-5dc6b4`, R3 `20261017T164720Z-f694fd`, R4 `20261017T165434Z-a52f4e`, R5 `20261017T170257Z-e32db3`. | every evaluation number, by run id |
+| [eval-official/drive_official.py](eval-official/drive_official.py), [logs/driver.log](eval-official/logs/driver.log), [logs/stages.jsonl](eval-official/logs/stages.jsonl) | The driver (pre-registered order, start check, 10% re-run rule) and what it did: R2, the R2 re-run, R1, R3, R4, R5 between 21:10 and 22:33 IST. | the run order and the re-run; the protocol deviations |
+
+The evaluation was recomputed three times by this team but was not run exactly as pre-registered. First, R1 (run
+20261017T162059Z-5dc6b4, 12/144 error records) was not re-run under the 5% rule. Second, the R2 re-run (run
+20261017T155425Z-cb73b9, 10/60 capacity failures) was not stopped after three consecutive capacity failures.
+Third, under the stricter reading, the original R2 (run 20261017T154026Z-446cd6, 7/60) should have been stopped
+part-way once capacity failures passed 10%. The stop rules were checked only after each run ended. No record was
+dropped. The original R2 is the headline because the re-run did not get below 5% errors, and both are reported.
 
 ## Release of the current build (`7c3072d`)
 
@@ -46,27 +64,28 @@ change is not recorded in this folder.
 repository. Re-run it with `python3 evidence/2026-10-17/cloud/verifier/recompute.py` after building the library
 (`make corpus`); on 17 Oct its output matched `recompute_smoke_hero.log` line for line.
 
-## Preliminary evaluation runs
+## Preliminary evaluation runs (history, superseded)
 
 [eval-preliminary/](eval-preliminary/) holds `results.json` and `report.md` for six runs of 2026-10-16, on a
-development build, with the Gemini models reached through OpenRouter. Each `results.json` records the git sha,
-models, thinking levels, prompt versions, library hashes, case-file hashes, every metric with its k and n, and
-every record.
+development build with uncommitted changes, with the Gemini models reached through OpenRouter. They are kept as
+history: the official evaluation above replaces them, and none of their numbers is used outside the history
+section of [docs/evaluation.md](../../docs/evaluation.md).
 
-| Run | What it is | Used in |
-|---|---|---|
-| `20261016T161008Z-43cea4` | Strong agent, base set (16 clauses + 8 attacks), all four conditions | README headline numbers; [evaluation](../../docs/evaluation.md) |
-| `20261016T162930Z-275c7b` | Strong agent, pre-registered hard attacks, 2 repeats | README (0/43 with `43cea4`; 1/20 hard attacks); evaluation |
-| `20261016T162211Z-1536fa` | Cheaper agent (Gemini 3.1 Flash-Lite), base set, 2 repeats | README (8/36 to 0/36, 0/32 false stops); evaluation |
-| `20261016T162930Z-d63488` | Cheaper agent, hard attacks, 2 repeats | README (8/36 to 0/36); evaluation |
-| `20261016T155834Z-233b73` | A 3-case smoke run of one condition (`--limit 3`) | not used for any number |
-| `20261016T160847Z-478ac6` | A 3-case smoke run of one condition (`--limit 3`) | not used for any number |
+| Run | What it is |
+|---|---|
+| `20261016T161008Z-43cea4` | Strong agent, base set (16 clauses + 8 attacks), all four conditions |
+| `20261016T162930Z-275c7b` | Strong agent, pre-registered hard attacks, 2 repeats |
+| `20261016T162211Z-1536fa` | Cheaper agent (Gemini 3.1 Flash-Lite), base set, 2 repeats |
+| `20261016T162930Z-d63488` | Cheaper agent, hard attacks, 2 repeats |
+| `20261016T155834Z-233b73` | A 3-case smoke run of one condition (`--limit 3`); not used for any number |
+| `20261016T160847Z-478ac6` | A 3-case smoke run of one condition (`--limit 3`); not used for any number |
 
 ## Derived pages
 
-- [intervals.md](intervals.md): Wilson 95% intervals for every preliminary count published in the README and
-  `docs/evaluation.md`, written by `scripts/stats_intervals.py` from the files above. Preliminary, and optimistic
-  because repeats of a case are not independent.
+- [intervals.md](intervals.md): Wilson 95% intervals for the preliminary counts (history), written by
+  `scripts/stats_intervals.py` from the preliminary files above. Superseded; the official counts' intervals are
+  in [eval-official/OFFICIAL_RESULTS.md](eval-official/OFFICIAL_RESULTS.md). Both are too narrow, because repeats
+  of a case are not independent.
 - [mutation.md](mutation.md): three citation guarantees broken on purpose in a scratch copy, and the tests that
   caught each.
 - [ci-dry-run.md](ci-dry-run.md): why there is no CI workflow yet; what a clean-checkout dry run showed.
