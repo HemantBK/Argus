@@ -2,7 +2,7 @@
 
 What we do for each part of engineering quality, where to check it, and what is still missing. Code paths are
 relative to `backend/argus_api/` unless they start with a top-level folder. The deployed API runs code
-`7c3072d` (Cloud Run revision `argus-api-00008-nev`); this repository's `backend/argus_api` is the same.
+`840d0ca` (Cloud Run revision `argus-api-00012-yen`, 18 Oct); this repository's `backend/argus_api` is the same.
 Evidence files are in [evidence/2026-10-17/](../evidence/2026-10-17/README.md).
 
 | Dimension | What we do | Evidence | Honest gap |

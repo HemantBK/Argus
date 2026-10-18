@@ -13,8 +13,10 @@ Team Argus · Google Cloud AI Builder Cup 2026 · BFSI theme · Synthetic polici
 
 ## Proof in 60 seconds
 
-Each line links to its record in this repository. The evaluation ran on the deployed build (`7c3072d`) through
-Vertex AI, pre-registered; a review that failed because Vertex AI was busy counts against Argus.
+Each line links to its record in this repository. The evaluation ran on build `7c3072d` through Vertex AI,
+pre-registered; a review that failed because Vertex AI was busy counts against Argus. The deployed build
+(`840d0ca`, 18 Oct) adds only reliability changes (a retry for an unusable model reply, a duplicate request
+for a stalled call, partial-run status); the prompts, agent loop, monitor and RBI library code are unchanged.
 
 1. **Checkable citations.** Gemini 3.8 Flash without the library: 0/46 correct citations (expected by
    construction; no library-in-prompt baseline). Argus: 39/46 with the monitor off, 35/46 with it on; 4/48 and

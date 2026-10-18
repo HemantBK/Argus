@@ -50,7 +50,9 @@ gold label, so it would fall if the monitor won by stopping everything.
 
 ### Setup
 
-- **Build and models.** Code `7c3072d` (`dirty: false` in every run), the build the app runs. The eval settings
+- **Build and models.** Code `7c3072d` (`dirty: false` in every run), the build the app ran on 17 Oct; the app now
+  runs `840d0ca`, which adds only reliability changes and leaves the prompts, agent loop, monitor and RBI
+  library code unchanged (empty `git diff 7c3072d..840d0ca` over `agent/`, `monitor/`, `corpus/`). The eval settings
   switch the backup model off (`fallback_model=None`), and every model call in the logs was served by the model
   it asked for. Strong agent: Gemini 3.8 Flash (thinking low), pinned. Cheaper agent: Gemini 3.1 Flash-Lite,
   recorded as unpinned. Monitor: Gemini 3.5 Flash-Lite (thinking medium). Library: 365 paragraphs, snapshot

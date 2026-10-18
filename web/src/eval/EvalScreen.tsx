@@ -58,8 +58,8 @@ function OfficialEvaluationPointer(): ReactNode {
     <section className="eval-official" aria-labelledby="official-title">
       <h2 id="official-title">Official evaluation</h2>
       <p>
-        {NONE_PUBLISHED} The official evaluation of the build the review service runs (<span className="mono">7c3072d</span>, 17 Oct
-        2026, on Vertex AI) is published in the repository instead: the method, the results and what they do and do not support in{" "}
+        {NONE_PUBLISHED} The official evaluation (build <span className="mono">7c3072d</span>, 17 Oct 2026, on Vertex AI; the
+        review logic it measured is unchanged in the running build) is published in the repository instead: the method, the results and what they do and do not support in{" "}
         <ExternalLink href={EVALUATION_DOC_URL}>docs/evaluation.md</ExternalLink>, and every run&apos;s raw records in{" "}
         <ExternalLink href={EVALUATION_EVIDENCE_URL}>evidence/2026-10-17/eval-official/</ExternalLink>. Its numbers are kept there, so
         that one source states them.

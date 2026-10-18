@@ -37,7 +37,7 @@ describe("EvalView", () => {
       // The sentences as written, not imported, so a rewording has to pass the claims ledger (W22) again.
       expect(pointer.textContent).toContain("No evaluation has been published to this page.");
       expect(pointer.textContent).toContain(
-        "The official evaluation of the build the review service runs (7c3072d, 17 Oct 2026, on Vertex AI) is published in the repository instead",
+        "The official evaluation (build 7c3072d, 17 Oct 2026, on Vertex AI; the review logic it measured is unchanged in the running build) is published in the repository instead",
       );
       expect(pointer.textContent).toContain("Its numbers are kept there, so that one source states them.");
       expect(NONE_PUBLISHED).toBe("No evaluation has been published to this page.");
