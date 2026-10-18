@@ -153,3 +153,15 @@
   border: 1px solid var(--accent);
   border-radius: var(--radius);
 }
+/* A run that reviewed some clauses and failed others: a quiet status in the neutral review tint, not the red alarm. */
+.run-banner.run-banner-neutral {
+  border-color: var(--status-review);
+  background: var(--status-review-bg);
+}
+.run-banner.run-banner-neutral strong {
+  color: var(--text);
+}
+.banner-failed-list {
+  margin: var(--space) 0 0;
+  padding-left: calc(var(--space) * 3);
+}

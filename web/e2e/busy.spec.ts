@@ -1,23 +1,33 @@
 // "Gemini is busy" and the evidence report in a real browser against the Firebase emulators. GET /health is answered
 // with page.route, so no API (local or deployed) decides what the Start screen says, and nothing is started.
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { apiBase, watchConsole } from "./helpers";
 
 const ORIGIN = "http://localhost:5173";
-const BREAKER_OPEN_NOTE =
-  "Gemini is busy right now; reviews may use the backup model or take longer. Opening a saved run below does not need Gemini.";
+// Written out, not imported from src/shell/busy.ts, so a change of wording there must be made here too (and in the
+// claims ledger, rows W1 and W24).
+const BREAKER_OPEN_TITLE = "Gemini is busy right now.";
+const BREAKER_OPEN_SAVED = "Opening the saved run below does not need Gemini; it is a complete review recorded earlier on this app.";
 
-test("the Start screen says Gemini is busy while /health shows the agent breaker open", async ({ page }) => {
+async function answerHealth(page: Page, body: object): Promise<void> {
   await page.route(`${apiBase()}/health`, (route) =>
-    route.fulfill({
-      status: 200,
-      headers: { "Access-Control-Allow-Origin": ORIGIN },
-      contentType: "application/json",
-      body: JSON.stringify({ status: "ok", agent_breaker: "open" }),
-    }),
+    route.fulfill({ status: 200, headers: { "Access-Control-Allow-Origin": ORIGIN }, contentType: "application/json", body: JSON.stringify(body) }),
   );
+}
+
+test("while /health shows the agent breaker open, the Start screen leads with the demo policy's saved run", async ({ page }) => {
+  const errors = watchConsole(page);
+  await answerHealth(page, { status: "ok", agent_breaker: "open" });
   await page.goto("/");
-  await expect(page.getByRole("note")).toHaveText(BREAKER_OPEN_NOTE);
+  await expect(page.getByRole("note")).toHaveText(`${BREAKER_OPEN_TITLE} ${BREAKER_OPEN_SAVED}`);
+  await expect(page.getByRole("button", { name: "Start a live review anyway" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run demo on a sample NBFC policy" })).toHaveCount(0);
+  // The saved run opens without Gemini: a saved run's Review screen, labelled as saved, never as live.
+  await page.getByRole("link", { name: "Open the saved run" }).click();
+  await expect(page).toHaveURL(/#\/sample\/[^/]+$/);
+  await expect(page.locator(".topbar-run")).toContainText("saved run (recorded");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(errors.filter((e) => !e.includes("Failed to load resource"))).toEqual([]);
 });
 
 for (const [name, answer] of [
@@ -25,13 +35,14 @@ for (const [name, answer] of [
   ["half open", { status: "ok", agent_breaker: "half_open" }],
   ["missing", { status: "ok" }],
 ] as const) {
-  test(`no busy note when the breaker is ${name}`, async ({ page }) => {
-    await page.route(`${apiBase()}/health`, (route) =>
-      route.fulfill({ status: 200, headers: { "Access-Control-Allow-Origin": ORIGIN }, contentType: "application/json", body: JSON.stringify(answer) }),
-    );
+  test(`no busy note and the usual button when the breaker is ${name}`, async ({ page }) => {
+    await answerHealth(page, answer);
     await page.goto("/");
     await expect(page.getByRole("button", { name: "Run demo on a sample NBFC policy" })).toBeVisible();
-    await expect(page.getByText(BREAKER_OPEN_NOTE)).toHaveCount(0);
+    await expect(page.getByText(BREAKER_OPEN_TITLE)).toHaveCount(0);
+    await expect(page.getByRole("note")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Open the saved run" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Start a live review anyway" })).toHaveCount(0);
   });
 }
 
@@ -40,7 +51,7 @@ test("an unreachable /health fails silently: no note, no error on the page", asy
   await page.route(`${apiBase()}/health`, (route) => route.abort("failed"));
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Run demo on a sample NBFC policy" })).toBeVisible();
-  await expect(page.getByText(BREAKER_OPEN_NOTE)).toHaveCount(0);
+  await expect(page.getByRole("note")).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
   // The browser itself logs the aborted request; the app adds nothing.
   expect(errors.filter((e) => !e.includes("/health") && !e.includes("Failed to load resource"))).toEqual([]);

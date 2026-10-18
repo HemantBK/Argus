@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { ApiError, CUSTOM_CLAUSE_MIN_CHARS, CUSTOM_POLICY_ID, messageForStatus, type CustomClause } from "./data/api";
 import { finding, run, T0 } from "./data/fixtures.test-util";
 import type { PostState } from "./data/useStartRun";
-import { BREAKER_OPEN_NOTE, PROVIDER_BUSY_PREFIX, savedRunOfferText } from "./shell/busy";
+import { BREAKER_OPEN_NOTE, BREAKER_OPEN_TITLE, MODEL_OUTPUT_PREFIX, PROVIDER_BUSY_PREFIX, savedRunOfferText } from "./shell/busy";
 import { libraryLabel, recordedAt } from "./shell/format";
 import { href } from "./shell/route";
 import { startProblem } from "./shell/startProblem";
@@ -169,6 +169,8 @@ describe("App", () => {
       expect(screen.queryByText(BREAKER_OPEN_NOTE)).toBeNull();
       cleanup();
     }
+    // With no saved run of the demo policy to lead with, the usual button stays and the note says Gemini is busy.
+    fake.saved = live.ready({ runs: [savedB], invalid: [] });
     fake.breaker = "open";
     render(<App />);
     expect(screen.getByRole("note").textContent).toBe(BREAKER_OPEN_NOTE);
@@ -192,6 +194,54 @@ describe("App", () => {
     // A saved run never shows it, whatever its findings say.
     go(href.review({ source: "samples", runId: SAVED_ID }));
     expect(screen.queryByText(/Gemini capacity was busy/)).toBeNull();
+  });
+
+  // The API at 7c3072d marks a run with any failed clause "failed"; the next one marks it "done" with summary.failed.
+  // Either way, a run that reviewed 7 of 8 clauses shows the neutral partial-run status, never the red banner.
+  describe.each(["failed", "done"] as const)("a live run that reviewed some clauses (status %s)", (status) => {
+    it.each([
+      ["busy", `${PROVIDER_BUSY_PREFIX}; try again shortly. FAKE: deadline.`, "c5: Gemini was busy, so Argus did not finish this clause."],
+      ["unusable reply", `${MODEL_OUTPUT_PREFIX}; a person must review this clause. FAKE: MALFORMED_RESPONSE.`, "c5: Gemini returned an unusable reply, so Argus did not guess."],
+    ])("with a %s clause shows the partial-run status and no red banner", async (_, error, line) => {
+      fake.saved = live.ready({ runs: [saved, savedB], invalid: [] });
+      const summary = { ...run().summary, clauses: 8, compliant: 4, gap: 2, conflict: 1, failed: 1 };
+      const liveRun = run({ run_id: LIVE_ID, policy_id: DEMO_POLICY_ID, status, error: status === "failed" ? `1 of 8 clauses failed: c5: ${error}` : null, summary });
+      fake.runs.set(`runs/${LIVE_ID}`, live.ready(liveRun));
+      fake.findings = live.ready([finding({ clause_id: "c1" }), finding({ clause_id: "c5", error })]);
+      render(<App />);
+      go(href.review({ source: "runs", runId: LIVE_ID }));
+      const banner = await screen.findByRole("status");
+      expect(banner.querySelector("strong")?.textContent).toBe("7 of 8 clauses reviewed; 1 needs a person.");
+      expect(banner.querySelector("li")?.textContent).toBe(line);
+      expect(within(banner).getAllByRole("link").map((a) => a.textContent)).toEqual([saved, savedB].map(savedRunOfferText));
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByText(/This run failed/)).toBeNull();
+      // The busy banner is not repeated under it.
+      expect(screen.getAllByRole("status")).toHaveLength(1);
+      expect(screen.getByTestId("review")).toBeTruthy();
+    });
+  });
+
+  it("a live run that failed with no clause reviewed keeps the red banner and its recorded reason", async () => {
+    const summary = { ...run().summary, clauses: 8, failed: 8 };
+    const liveRun = run({ run_id: LIVE_ID, policy_id: DEMO_POLICY_ID, status: "failed", error: "FAKE 8 of 8 clauses failed", summary });
+    fake.runs.set(`runs/${LIVE_ID}`, live.ready(liveRun));
+    fake.findings = live.ready([finding({ clause_id: "c1", error: "FAKE: internal." })]);
+    render(<App />);
+    go(href.review({ source: "runs", runId: LIVE_ID }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/This run failed before every clause was reviewed.*Reason recorded: FAKE 8 of 8 clauses failed/s);
+    expect(screen.queryByText(/clauses reviewed;/)).toBeNull();
+  });
+
+  it("leads the Start screen with the demo policy's saved run while /health shows the breaker open", async () => {
+    fake.breaker = "open";
+    render(<App />);
+    expect(screen.getByRole("note").textContent).toContain(BREAKER_OPEN_TITLE);
+    expect(screen.getByRole("link", { name: "Open the saved run" }).getAttribute("href")).toBe(href.review({ source: "samples", runId: SAVED_ID }));
+    fireEvent.click(screen.getByRole("button", { name: "Start a live review anyway" }));
+    expect(fake.start).toHaveBeenCalledWith(DEMO_POLICY_ID);
+    await act(async () => {});
   });
 
   it("reports a run that was never started once, in the shell banner, not again in the Review screen", async () => {

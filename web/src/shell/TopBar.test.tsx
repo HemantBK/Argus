@@ -2,9 +2,9 @@
 // Top bar and run banners (UI_SPEC 2, 5 honest labels, 6 states).
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { run } from "../data/fixtures.test-util";
-import { BusyRunBanner, RunFailedBanner, StartProblemBanner } from "./banners";
-import { savedRunOfferText } from "./busy";
+import { finding, run } from "../data/fixtures.test-util";
+import { BusyRunBanner, PartialRunBanner, RunFailedBanner, StartProblemBanner } from "./banners";
+import { MODEL_OUTPUT_PREFIX, PROVIDER_BUSY_PREFIX, savedRunOfferText } from "./busy";
 import { libraryLabel, recordedAt, runLibrary, type LibraryDates } from "./format";
 import { href } from "./route";
 import { live } from "./screens.test-util";
@@ -121,6 +121,40 @@ describe("run banners", () => {
     render(<StartProblemBanner problem={problem} saved={saved} offers={offers} onRetry={onRetry} />);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  const partialSummary = { ...run().summary, clauses: 8, compliant: 4, gap: 3, failed: 1 };
+
+  it("a partial run says how many clauses were reviewed and why each other one was not, as a status, not an alert", () => {
+    const partial = run({ status: "done", summary: { ...partialSummary, compliant: 3, failed: 2 } });
+    const findings = [
+      finding({ clause_id: "c1" }),
+      finding({ clause_id: "c5", error: `${MODEL_OUTPUT_PREFIX}; a person must review this clause. FAKE.` }),
+      finding({ clause_id: "c6", error: `${PROVIDER_BUSY_PREFIX}; try again shortly. FAKE.` }),
+    ];
+    render(<PartialRunBanner run={partial} findings={findings} offers={offers} />);
+    const status = screen.getByRole("status");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(status.classList.contains("run-banner-neutral")).toBe(true);
+    expect(status.querySelector("strong")?.textContent).toBe("6 of 8 clauses reviewed; 2 need a person.");
+    expect([...status.querySelectorAll("li")].slice(0, 2).map((li) => li.textContent)).toEqual([
+      "c5: Gemini returned an unusable reply, so Argus did not guess.",
+      "c6: Gemini was busy, so Argus did not finish this clause.",
+    ]);
+    expect(status.textContent).toContain("They are marked “Couldn't complete”. Start a new live run to try them again, or open a saved run (recorded earlier, not live).");
+    expect(screen.getAllByRole("link").map((a) => a.textContent)).toEqual(offers.map(savedRunOfferText));
+    expect(status.textContent).not.toMatch(/failed/i);
+  });
+
+  it("a partial run with one failed clause of another cause, and no saved run, offers only a new live run", () => {
+    const partial = run({ status: "failed", error: "FAKE 1 of 8 clauses failed", summary: { ...partialSummary, compliant: 4 } });
+    render(<PartialRunBanner run={partial} findings={[finding({ clause_id: "c2", error: "FAKE: internal." })]} offers={[]} />);
+    const status = screen.getByRole("status");
+    expect(status.querySelector("strong")?.textContent).toBe("7 of 8 clauses reviewed; 1 needs a person.");
+    expect(status.querySelector("li")?.textContent).toBe("c2: Argus could not finish this clause.");
+    expect(status.textContent).toContain("It is marked “Couldn't complete”. Start a new live run to try it again.");
+    expect(status.textContent).not.toMatch(/saved run/);
+    expect(screen.queryByRole("link")).toBeNull();
   });
 
   it("a failed run shows its recorded reason and offers the saved run", () => {

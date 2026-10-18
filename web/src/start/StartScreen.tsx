@@ -1,7 +1,8 @@
 // Start screen (UI_SPEC 3.1 as cut by 16.1, plus D-60): what Argus does in one line, one big Run demo button, the
 // sample policies with their saved runs, "Try your own clause" (one pasted clause, reviewed live, when the build
-// opens it), and the footer. While /health shows Gemini busy (the agent model's breaker open), a short note under
-// the button says so and points to the saved runs.
+// opens it), and the footer. While /health shows Gemini busy (the agent model's breaker open), the screen leads
+// with the demo policy's saved run, which opens without Gemini, and offers the live review second; with no saved
+// run of the demo policy (or while they load), a short note under the usual button says Gemini is busy instead.
 // No upload. Names and clause counts come from the sample policy files the API reviews; saved runs and dates
 // from Firestore.
 import type { ReactNode } from "react";
@@ -10,10 +11,10 @@ import type { LiveRead, SavedRuns } from "../data/hooks";
 import type { CustomClause } from "../data/api";
 import type { BreakerState } from "../data/health";
 import type { RunDoc } from "../data/types";
-import { BREAKER_OPEN_NOTE } from "../shell/busy";
+import { BREAKER_OPEN_NOTE, BREAKER_OPEN_SAVED, BREAKER_OPEN_TITLE } from "../shell/busy";
 import { libraryLabel, savedRunLabel } from "../shell/format";
 import { href } from "../shell/route";
-import { DEMO_POLICY_ID, latestLibrary, sampleCards, type SampleCard } from "./catalog";
+import { DEMO_POLICY_ID, latestLibrary, sampleCards, savedRunFor, type SampleCard } from "./catalog";
 import { HEADLINE, TAGLINE } from "./copy";
 import { CustomClauseCard } from "./CustomClauseCard";
 import { CUSTOM_PREFILL, SAMPLE_POLICIES, type SamplePolicies } from "./samplePolicies";
@@ -170,6 +171,31 @@ function Footer({ saved }: { saved: LiveRead<SavedRuns> }): ReactNode {
   );
 }
 
+/** Gemini busy: the demo policy's saved run first (it opens without Gemini), the live review second. */
+function BusyLead({ saved, onRun }: { saved: RunDoc; onRun: (policyId: string) => void }): ReactNode {
+  return (
+    <>
+      <p className="start-busy start-busy-lead" role="note">
+        <strong>{BREAKER_OPEN_TITLE}</strong> {BREAKER_OPEN_SAVED}
+      </p>
+      <p className="start-busy-actions">
+        <a className="start-cta start-cta-link" href={href.review({ source: "samples", runId: saved.run_id })}>
+          Open the saved run
+        </a>
+        <button
+          type="button"
+          className="start-cta-secondary"
+          onClick={() => {
+            onRun(DEMO_POLICY_ID);
+          }}
+        >
+          Start a live review anyway
+        </button>
+      </p>
+    </>
+  );
+}
+
 export function StartScreen({
   saved,
   onRun,
@@ -178,24 +204,31 @@ export function StartScreen({
   agentBreaker = null,
   customOpen = false,
 }: StartScreenProps): ReactNode {
+  const demoSaved = agentBreaker === "open" && saved.status === "ready" ? savedRunFor(DEMO_POLICY_ID, saved.data.runs) : null;
   return (
     <div className="start">
       <section className="start-hero" aria-labelledby="start-title">
         <h1 id="start-title">{HEADLINE}</h1>
         <p className="start-sub">{TAGLINE}</p>
-        <button
-          type="button"
-          className="primary start-cta"
-          onClick={() => {
-            onRun(DEMO_POLICY_ID);
-          }}
-        >
-          Run demo on a sample NBFC policy
-        </button>
-        {agentBreaker === "open" && (
-          <p className="start-busy" role="note">
-            {BREAKER_OPEN_NOTE}
-          </p>
+        {demoSaved ? (
+          <BusyLead saved={demoSaved} onRun={onRun} />
+        ) : (
+          <>
+            <button
+              type="button"
+              className="primary start-cta"
+              onClick={() => {
+                onRun(DEMO_POLICY_ID);
+              }}
+            >
+              Run demo on a sample NBFC policy
+            </button>
+            {agentBreaker === "open" && (
+              <p className="start-busy" role="note">
+                {BREAKER_OPEN_NOTE}
+              </p>
+            )}
+          </>
         )}
       </section>
       <section className="start-samples" aria-labelledby="samples-title">

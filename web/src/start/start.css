@@ -169,3 +169,38 @@ button.custom-clause-run:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
+/* Gemini busy with a saved run to lead with: the note first, then "Open the saved run" (a link styled as the main
+   button, since it navigates) and the live review as a plain second button. */
+.start-busy-lead {
+  margin: 0 0 calc(var(--space) * 2);
+}
+.start-busy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space) * 2);
+  margin: 0;
+}
+a.start-cta-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 0 calc(var(--space) * 4);
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #FFFFFF;
+  font-size: 18px;
+  font-weight: 600;
+  text-decoration: none;
+}
+a.start-cta-link:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #FFFFFF;
+}
+button.start-cta-secondary {
+  min-height: 56px;
+  padding: 0 calc(var(--space) * 3);
+  font-size: 16px;
+}

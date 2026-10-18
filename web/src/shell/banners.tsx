@@ -1,6 +1,7 @@
 // Run-level banners shown above the Review and Audit screens (UI_SPEC 6): a live run that could not start, a
 // live review that is unavailable (run cap, kill switch, model failure), a live run whose clauses failed because
-// Gemini was busy, and a run that ended in failure. Each says what happened in plain English and offers saved
+// Gemini was busy, a run that reviewed some clauses and failed others (PartialRunBanner, a quiet status, not an
+// alarm: most of the review is there), and a run that ended in failure with no clause reviewed. Each says what happened in plain English and offers saved
 // runs, labelled as saved. When live review itself cannot help right now (unavailable, Gemini busy) the offer is
 // the newest saved run of every sample policy (busy.ts savedRunOffers); otherwise it is the saved run of the same
 // policy. A start problem also offers "Try again", which starts a new live run of the same policy. A pasted clause
@@ -8,8 +9,8 @@
 // the clause, and when the limit is reached or review is off they offer the sample policies' saved runs too.
 import type { ReactNode } from "react";
 import { ApiError, CUSTOM_CLAUSE_MAX_CHARS, CUSTOM_CLAUSE_MIN_CHARS } from "../data/api";
-import type { RunDoc } from "../data/types";
-import { savedRunOfferText } from "./busy";
+import type { FindingDoc, RunDoc } from "../data/types";
+import { failedClauses, runCounts, savedRunOfferText, type FailedClause } from "./busy";
 import { recordedAt } from "./format";
 import { href } from "./route";
 import { unavailableReason, type StartProblem } from "./startProblem";
@@ -32,14 +33,20 @@ function SavedRunsOffer({ runs }: { runs: readonly RunDoc[] }): ReactNode {
   return (
     <>
       <p className="banner-offer">Saved runs were recorded earlier and are not live; opening one does not need Gemini:</p>
-      <ul className="banner-offer-list">
-        {runs.map((r) => (
-          <li key={r.run_id}>
-            <a href={href.review({ source: "samples", runId: r.run_id })}>{savedRunOfferText(r)}</a>
-          </li>
-        ))}
-      </ul>
+      <SavedRunList runs={runs} />
     </>
+  );
+}
+
+function SavedRunList({ runs }: { runs: readonly RunDoc[] }): ReactNode {
+  return (
+    <ul className="banner-offer-list">
+      {runs.map((r) => (
+        <li key={r.run_id}>
+          <a href={href.review({ source: "samples", runId: r.run_id })}>{savedRunOfferText(r)}</a>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -86,6 +93,50 @@ export function StartProblemBanner({
   );
 }
 
+/** One line per failed clause: why it did not finish, from the start of its recorded error (busy.ts failureCause). */
+function failedClauseLine({ clauseId, cause }: FailedClause): string {
+  switch (cause) {
+    case "busy":
+      return `${clauseId}: Gemini was busy, so Argus did not finish this clause.`;
+    case "model_output":
+      return `${clauseId}: Gemini returned an unusable reply, so Argus did not guess.`;
+    case "other":
+      return `${clauseId}: Argus could not finish this clause.`;
+  }
+}
+
+/**
+ * A run that reviewed some clauses and failed others (busy.ts isPartialRun), whatever its status says. The counts
+ * come from run.summary; the per-clause lines from the findings, so they fill in once those are read. The failed
+ * clauses already say "Couldn't complete"; this says how much of the run is there and why the rest is not.
+ */
+export function PartialRunBanner({ run, findings, offers }: { run: RunDoc; findings: readonly FindingDoc[]; offers: readonly RunDoc[] }): ReactNode {
+  const { reviewed, total, failed } = runCounts(run);
+  const lines = failedClauses(findings);
+  const marked = failed === 1 ? "It is marked" : "They are marked";
+  return (
+    <div className="run-banner run-banner-neutral" role="status">
+      <strong>
+        {reviewed} of {total} clauses reviewed; {failed} {failed === 1 ? "needs" : "need"} a person.
+      </strong>
+      {lines.length > 0 && (
+        <ul className="banner-failed-list">
+          {lines.map((c) => (
+            <li key={c.clauseId}>{failedClauseLine(c)}</li>
+          ))}
+        </ul>
+      )}
+      <p className="banner-detail">
+        {marked} “Couldn't complete”. Start a new live run to try {failed === 1 ? "it" : "them"} again
+        {/* Offer a saved run only when there is one, as BusyRunBanner does. */}
+        {offers.length > 0 ? ", or open a saved run (recorded earlier, not live)." : "."}
+      </p>
+      {offers.length > 0 && <SavedRunList runs={offers} />}
+    </div>
+  );
+}
+
+/** A run that ended in failure with no clause reviewed (a partial run shows PartialRunBanner instead). */
 export function RunFailedBanner({ run, saved }: { run: RunDoc; saved: RunDoc | null }): ReactNode {
   return (
     <div className="run-banner" role="alert">

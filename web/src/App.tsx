@@ -2,8 +2,8 @@
 // log, Evaluation). A live run is started here, not inside the Start screen, so its listeners and its open POST
 // outlive the navigation to the Review screen (UI_SPEC 16.4: listeners first, then POST /api/runs).
 //
-// Run-level banners (live run blocked or not started, live review unavailable, Gemini busy, run failed, each
-// offering saved runs) belong to the shell and show above both the Review and the Audit log screens; the screens
+// Run-level banners (live run blocked or not started, live review unavailable, Gemini busy, some clauses not
+// finished, run failed, each offering saved runs) belong to the shell and show above both the Review and the Audit log screens; the screens
 // show only what is inside the run. The shell also reads /health once on load, so the Start screen can say when
 // Gemini is busy (data/health.ts).
 import { useCallback, useEffect, useState, type MouseEvent, type ReactNode } from "react";
@@ -12,14 +12,14 @@ import { AuditScreen } from "./audit/AuditScreen";
 import { CUSTOM_POLICY_ID, type CustomClause } from "./data/api";
 import { useAgentBreaker, type BreakerState } from "./data/health";
 import { useFindings, useRun, useSavedRuns, type LiveRead, type SavedRuns } from "./data/hooks";
-import type { RunDoc } from "./data/types";
+import type { FindingDoc, RunDoc } from "./data/types";
 import { useStartRun, type StartRun } from "./data/useStartRun";
 import { EvalScreen } from "./eval/EvalScreen";
 import { appEnv } from "./env";
 import { ensureSignedIn } from "./firebase";
 import { ReviewScreen } from "./review/ReviewScreen";
-import { BusyRunBanner, CustomStartProblemBanner, RunFailedBanner, StartingNotice, StartProblemBanner } from "./shell/banners";
-import { busyClauseIds, savedRunOffers } from "./shell/busy";
+import { BusyRunBanner, CustomStartProblemBanner, PartialRunBanner, RunFailedBanner, StartingNotice, StartProblemBanner } from "./shell/banners";
+import { busyClauseIds, isPartialRun, runCounts, savedRunOffers } from "./shell/busy";
 import { startProblem } from "./shell/startProblem";
 import { href, navigate, runRefOf, useNavigation, type Route, type RunRef } from "./shell/route";
 import { runLibrary } from "./shell/format";
@@ -109,8 +109,10 @@ function Screen({ route, saved, onRun, fallbackAsOn, agentBreaker, customOpen, r
   }
 }
 
-function RunBanners({ runDoc, live, isStartedRun, isCustom, offer, offers, busyClauses, onRetry }: {
+function RunBanners({ runDoc, findings, live, isStartedRun, isCustom, offer, offers, busyClauses, onRetry }: {
   runDoc: RunDoc | null;
+  /** The live run's findings, for the per-clause lines of the partial-run banner (none for a saved run). */
+  findings: readonly FindingDoc[];
   live: StartRun;
   isStartedRun: boolean;
   /** The started run reviews a pasted clause: no saved run to offer, and its refusals lead back to the clause. */
@@ -125,6 +127,9 @@ function RunBanners({ runDoc, live, isStartedRun, isCustom, offer, offers, busyC
 }): ReactNode {
   const problem = isStartedRun ? startProblem(live.post) : null;
   const startError = live.post.status === "error" || live.post.status === "blocked" ? live.post.error : null;
+  // Some clauses reviewed and some failed, read from the summary whatever the status (busy.ts isPartialRun).
+  const partialRun = runDoc !== null && isPartialRun(runCounts(runDoc)) ? runDoc : null;
+  const partial = partialRun !== null;
   return (
     <>
       {problem &&
@@ -134,8 +139,11 @@ function RunBanners({ runDoc, live, isStartedRun, isCustom, offer, offers, busyC
           <StartProblemBanner problem={problem} saved={offer} offers={offers} onRetry={onRetry} />
         ))}
       {isStartedRun && live.post.status === "waiting_for_listeners" && <StartingNotice />}
-      {!problem && busyClauses > 0 && <BusyRunBanner busyClauses={busyClauses} offers={offers} />}
-      {!problem && runDoc?.status === "failed" && <RunFailedBanner run={runDoc} saved={offer} />}
+      {!problem && partialRun && <PartialRunBanner run={partialRun} findings={findings} offers={offers} />}
+      {/* The partial-run banner already gives each busy clause's reason, so the busy banner is not repeated. */}
+      {!problem && !partial && busyClauses > 0 && <BusyRunBanner busyClauses={busyClauses} offers={offers} />}
+      {/* Red only when no clause was reviewed: a run with some findings is a partial run, whatever its status. */}
+      {!problem && !partial && runDoc?.status === "failed" && <RunFailedBanner run={runDoc} saved={offer} />}
     </>
   );
 }
@@ -195,7 +203,7 @@ export function App(): ReactNode {
         {signIn.status === "error" && (
           <ErrorBanner title="Could not sign in. Live runs cannot start until sign-in works." error={signIn.error} />
         )}
-        {routeRun && <RunBanners runDoc={runDoc} live={live} isStartedRun={isStartedRun} isCustom={isStartedRun && started.policyId === CUSTOM_POLICY_ID} offer={offer} offers={offers} busyClauses={busyClauses} onRetry={retry} />}
+        {routeRun && <RunBanners runDoc={runDoc} findings={liveFindings.status === "ready" ? liveFindings.data : []} live={live} isStartedRun={isStartedRun} isCustom={isStartedRun && started.policyId === CUSTOM_POLICY_ID} offer={offer} offers={offers} busyClauses={busyClauses} onRetry={retry} />}
       </div>
       <main id="main" tabIndex={-1}>
         <Screen

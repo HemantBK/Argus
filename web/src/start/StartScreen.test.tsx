@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { run, T0 } from "../data/fixtures.test-util";
+import { BREAKER_OPEN_NOTE, BREAKER_OPEN_SAVED, BREAKER_OPEN_TITLE } from "../shell/busy";
 import { libraryLabel, runLibrary, savedRunLabel } from "../shell/format";
 import { href } from "../shell/route";
 import { live } from "../shell/screens.test-util";
@@ -148,5 +149,46 @@ describe("StartScreen", () => {
     render(<StartScreen saved={live.ready({ runs: [], invalid: [] })} onRun={vi.fn()} policies={NO_FILES} />);
     expect(screen.getByText(/No sample policies or saved runs are available/)).toBeTruthy();
     expect(screen.getByRole("contentinfo").textContent).toMatch(/RBI library dates not recorded yet/);
+  });
+
+  describe("while /health shows Gemini busy", () => {
+    const olderA = run({ ...savedA, run_id: "fake-saved-a-old", started_at: T0 });
+    const ready = live.ready({ runs: [olderA, savedA, savedB], invalid: [] });
+
+    it("leads with the demo policy's newest saved run, and offers the live review second", () => {
+      const onRun = vi.fn();
+      render(<StartScreen saved={ready} onRun={onRun} agentBreaker="open" />);
+      const hero = screen.getByRole("heading", { level: 1 }).closest("section");
+      if (!hero) throw new Error("no hero section");
+      expect(within(hero).getByRole("note").textContent).toBe(`${BREAKER_OPEN_TITLE} ${BREAKER_OPEN_SAVED}`);
+      const open = within(hero).getByRole("link", { name: "Open the saved run" });
+      expect(open.getAttribute("href")).toBe(href.review({ source: "samples", runId: savedA.run_id }));
+      // The saved run comes first on the screen, before the live review.
+      const live_ = within(hero).getByRole("button", { name: "Start a live review anyway" });
+      expect(open.compareDocumentPosition(live_) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Run demo on a sample NBFC policy" })).toBeNull();
+      fireEvent.click(live_);
+      expect(onRun).toHaveBeenCalledWith(DEMO_POLICY_ID);
+      // The rest of the screen is unchanged: the sample cards still list their saved runs and Run live.
+      expect(screen.getAllByRole("button", { name: /^Run live on / })).toHaveLength(2);
+    });
+
+    it.each([null, "closed", "half_open"] as const)("with the breaker %s, keeps the usual layout and says nothing", (breaker) => {
+      render(<StartScreen saved={ready} onRun={vi.fn()} agentBreaker={breaker} />);
+      expect(screen.getByRole("button", { name: "Run demo on a sample NBFC policy" })).toBeTruthy();
+      expect(screen.queryByRole("note")).toBeNull();
+      expect(screen.queryByRole("link", { name: "Open the saved run" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Start a live review anyway" })).toBeNull();
+    });
+
+    it("with no saved run of the demo policy (or while saved runs load), keeps the usual button with the busy note", () => {
+      for (const saved of [live.ready({ runs: [savedB], invalid: [] }), live.loading]) {
+        render(<StartScreen saved={saved} onRun={vi.fn()} agentBreaker="open" />);
+        expect(screen.getByRole("button", { name: "Run demo on a sample NBFC policy" })).toBeTruthy();
+        expect(screen.getByRole("note").textContent).toBe(BREAKER_OPEN_NOTE);
+        expect(screen.queryByRole("link", { name: "Open the saved run" })).toBeNull();
+        cleanup();
+      }
+    });
   });
 });
