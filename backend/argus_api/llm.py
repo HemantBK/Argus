@@ -28,12 +28,20 @@ give one model an earlier deadline of its own (model_deadlines), which the calle
 (_Scope.end_model_deadline): runs.py cuts the agent model's calls at its share of the run budget until its
 first draft is written, while the monitor model's calls keep the run deadline.
 
+An attempt that has not answered within its hedge delay (CHAT_HEDGE_AFTER_S, REQUEST_HEDGE_AFTER_S) sends
+the same request once more, a hedge ("The Tail at Scale", Dean and Barroso): the first good reply wins and
+the other copy is abandoned. The hedge runs inside the attempt's own timeout, so it never extends the attempt
+or any deadline; if both copies fail, the attempt fails as one try would have (_run_hedged). At most
+HEDGE_MAX_IN_FLIGHT hedged attempts are in flight in the process at once, each counted until both its copies
+have ended (HedgeLimit).
+
 A model may be given a pinned thinking level (config.AGENT_THINKING, config.MONITOR_THINKING): Gemini's
 thinking_level on google-genai, reasoning effort on OpenRouter. Models without one use the provider default.
 
 Token counts are what the provider bills: for Gemini the output count includes thinking tokens.
 """
 
+import contextvars
 import json
 import logging
 import random
@@ -42,6 +50,8 @@ import time
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
+from concurrent.futures import FIRST_COMPLETED, Future
+from concurrent.futures import wait as wait_futures
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -98,6 +108,21 @@ JSON_ATTEMPTS = 2
 MALFORMED_FINISH = frozenset({"MALFORMED_FUNCTION_CALL", "MALFORMED_RESPONSE", "UNEXPECTED_TOOL_CALL"})
 MALFORMED_ATTEMPTS = 2
 MALFORMED_BACKOFF_S = 1.0
+# Hedged requests. On 2026-10-18 Gemini 3.8 Flash and 3.1 Flash-Lite on Vertex AI global answered most calls
+# in 1.5-6 s (a JSON draft in up to about 7 s), but about 1 call in 8 stalled for 25-70 s, and our 30 s
+# attempt then ended in 504. A stall used up most of a clause's share of the run or of the backup's time: in
+# a release smoke a clause failed on a primary stall, then a backup 429, then a backup stall. A stall is a
+# slow server or queue, not a slow prompt, so the same request sent again usually answers at normal speed.
+# An attempt with no reply after its hedge delay therefore sends one copy more, and the first good reply
+# wins. The delays sit just past the slowest normal reply seen (6 s for a chat turn, 7 s for a draft), so a
+# hedge fires for the stalled calls and almost never for a call that was only a little slow; a stalled call
+# then answers in about delay + 2-6 s instead of 25-70 s, at the price of one extra request per stall.
+CHAT_HEDGE_AFTER_S = 8.0
+REQUEST_HEDGE_AFTER_S = 10.0  # complete and complete_json
+# Hedged attempts in flight in the whole process, so a provider that stalls every call does not get every
+# call sent twice. A slot is held until both of the attempt's copies have ended, the losing one included
+# (it is not stopped, only ignored), so hedging adds at most this many requests to the provider at once.
+HEDGE_MAX_IN_FLIGHT = 8
 
 # USD per million tokens (input, output) for every model id in config.PINNED_MODELS, pinned on 2026-10-16.
 # OpenRouter ids: OpenRouter's list prices (its /api/v1/models). Bare ids (Vertex AI, AI Studio): Google's
@@ -343,6 +368,195 @@ def _attempt_timeout(
     return min(timeout_s, left)
 
 
+def _classification(e: BaseException, classify: Callable[[BaseException], Classification]) -> Classification:
+    """How a failed try is retried: our own markers first, then the provider's error by `classify`. An
+    LLMError (a reply that cannot be used) is None, like any error that is not the provider's."""
+    if isinstance(e, _Malformed):
+        return "malformed"
+    if isinstance(e, _Throttled):
+        return "throttled"
+    if isinstance(e, _Transient):
+        return "transient"
+    if isinstance(e, LLMError):
+        return None
+    return classify(e)
+
+
+class Runner(Protocol):
+    """Runs the copies of a hedged attempt. Tests replace it with one on a fake clock."""
+
+    def submit(self, fn: Callable[[], T]) -> "Future[T]":
+        """Start `fn` now, off the calling thread."""
+        ...
+
+    def wait(self, futures: set["Future[Any]"], timeout: float | None) -> set["Future[Any]"]:
+        """Block until at least one of `futures` is done, or `timeout` seconds pass (None: no limit); return
+        the done ones (none on a timeout)."""
+        ...
+
+
+class _DaemonThreads:
+    """One daemon thread per copy. The SDKs' blocking calls cannot be cancelled from another thread, so an
+    abandoned copy runs on in its thread until it answers or reaches its own timeout, and its result is
+    dropped. A daemon thread never holds up the process at exit, and a thread per copy (not a bounded pool)
+    means a copy never waits in a queue while its timeout runs."""
+
+    def submit(self, fn: Callable[[], T]) -> "Future[T]":
+        future: Future[T] = Future()
+        context = contextvars.copy_context()  # each copy gets its own: one context cannot run in two threads
+
+        def run() -> None:
+            if not future.set_running_or_notify_cancel():
+                return
+            try:
+                result = context.run(fn)
+            except BaseException as e:  # handed to the waiting thread, which raises it there
+                future.set_exception(e)
+            else:
+                future.set_result(result)
+
+        threading.Thread(target=run, name="argus-llm-call", daemon=True).start()
+        return future
+
+    def wait(self, futures: set["Future[Any]"], timeout: float | None) -> set["Future[Any]"]:
+        return wait_futures(futures, timeout=timeout, return_when=FIRST_COMPLETED).done
+
+
+class HedgeLimit:
+    """Thread-safe count of hedged attempts in flight in the process, capped at `cap`. An attempt's slot is
+    held until both its copies have ended (_release_when_both_end)."""
+
+    def __init__(self, cap: int) -> None:
+        self.cap = cap
+        self._in_flight = 0
+        self._lock = threading.Lock()
+
+    @property
+    def in_flight(self) -> int:
+        with self._lock:
+            return self._in_flight
+
+    def acquire(self) -> bool:
+        """Take a slot for one hedged attempt; False when `cap` are already in flight."""
+        with self._lock:
+            if self._in_flight >= self.cap:
+                return False
+            self._in_flight += 1
+            return True
+
+    def release(self) -> None:
+        with self._lock:
+            if self._in_flight <= 0:
+                raise RuntimeError("HedgeLimit released more often than acquired")
+            self._in_flight -= 1
+
+
+_THREADS = _DaemonThreads()
+_HEDGE_LIMIT = HedgeLimit(HEDGE_MAX_IN_FLIGHT)
+
+
+@dataclass(frozen=True)
+class _Hedging:
+    after_s: float  # an attempt with no reply after this long sends one copy more
+    runner: Runner
+    limit: HedgeLimit
+
+
+@dataclass
+class _HedgeCount:
+    sent: int = 0  # hedges one call (all its attempts) has sent
+
+
+def _release_when_both_end(first: "Future[Any]", hedge: "Future[Any]", limit: HedgeLimit) -> None:
+    """Free the hedge's slot once both copies have ended. A copy that loses is not stopped (the SDKs cannot
+    cancel a request already sent), so the slot counts the pair: when the hedge wins, the stalled first copy
+    still holds a request open to the provider until its own timeout, and the slot stays taken until then."""
+    left = [2]
+    lock = threading.Lock()
+
+    def ended(_: "Future[Any]") -> None:
+        with lock:
+            left[0] -= 1
+            last = left[0] == 0
+        if last:
+            limit.release()
+
+    first.add_done_callback(ended)  # runs at once for a copy that has already ended
+    hedge.add_done_callback(ended)
+
+
+def _run_hedged(
+    call: Callable[[float], T],
+    timeout: float,
+    hedging: _Hedging | None,
+    classify: Callable[[BaseException], Classification],
+    clock: Clock,
+    count: _HedgeCount,
+    log_fields: dict[str, Any],
+) -> T:
+    """One attempt: `call(timeout)`, with a hedge when it has not returned after hedging.after_s (counted
+    on `count`). Returns the winning reply, the only one whose tokens count, or raises the attempt's error.
+
+    The hedge gets what is left of the attempt's timeout, so both copies end by the time the attempt alone
+    would have. The first good reply wins and the other copy is abandoned. A copy that fails while the other
+    still runs waits for the other. If both fail, the attempt raises the error one try would have raised,
+    preferring a busy provider's (429, 5xx, timeout) so retries, the breaker and the hand-over to the
+    fallback model see a busy provider; otherwise the first copy's. With no hedging, or no room for a hedge
+    of at least MIN_ATTEMPT_S, the call runs in the calling thread as before."""
+    if hedging is None or timeout - hedging.after_s < MIN_ATTEMPT_S:
+        return call(timeout)
+    started = clock()
+    first = hedging.runner.submit(lambda: call(timeout))
+    if hedging.runner.wait({first}, hedging.after_s):
+        return first.result()  # answered (or failed) before the hedge delay: as one plain try
+    hedge_timeout = timeout - (clock() - started)
+    if hedge_timeout < MIN_ATTEMPT_S or not hedging.limit.acquire():
+        if hedge_timeout >= MIN_ATTEMPT_S:
+            log_event(log, "llm_hedge_skipped", reason="cap", cap=hedging.limit.cap, **log_fields)
+        hedging.runner.wait({first}, None)  # the call ends by its own timeout, as an unhedged try does
+        return first.result()
+    try:
+        hedge = hedging.runner.submit(lambda: call(hedge_timeout))
+    except BaseException:
+        hedging.limit.release()
+        raise
+    _release_when_both_end(first, hedge, hedging.limit)
+    count.sent += 1
+    names: dict[Future[T], str] = {first: "first", hedge: "hedge"}
+    pending: set[Future[T]] = {first, hedge}
+    errors: dict[str, BaseException] = {}
+
+    def outcome(won_by: str) -> None:
+        waited_ms = round((clock() - started) * 1000)
+        log_event(
+            log,
+            "llm_hedge",
+            won_by=won_by,
+            waited_ms=waited_ms,
+            after_s=hedging.after_s,
+            hedges=count.sent,
+            **log_fields,
+        )
+
+    # Each copy ends by its own timeout, which ends with the attempt's, so these waits need no limit.
+    while pending:
+        done = hedging.runner.wait(set(pending), None)
+        for f in [c for c in (first, hedge) if c in done and c in pending]:  # the first copy wins a tie
+            pending.discard(f)
+            error = f.exception()
+            if error is None:
+                for other in pending:
+                    other.cancel()  # stops it only if it has not started; otherwise its reply is ignored
+                outcome(names[f])
+                return f.result()
+            errors[names[f]] = error
+    outcome("neither")
+    busy = [
+        n for n in ("first", "hedge") if _classification(errors[n], classify) in ("throttled", "transient")
+    ]
+    raise errors[busy[0] if busy else "first"]
+
+
 def _with_retries(
     call: Callable[[float], T],
     classify: Callable[[BaseException], Classification],
@@ -351,10 +565,12 @@ def _with_retries(
     timeout_s: float,
     clock: Clock,
     model: str,
+    hedging: _Hedging | None = None,
 ) -> T:
     """Run `call(timeout)` with retries on transient failures and on a reply the model reports as broken
-    (_Malformed, counted on its own: MALFORMED_ATTEMPTS). Each failed attempt is logged. A provider failure
-    is raised as LLMError with its kind, its cause and `model`."""
+    (_Malformed, counted on its own: MALFORMED_ATTEMPTS). Each attempt may send one hedge (_run_hedged).
+    Each failed attempt is logged. A provider failure is raised as LLMError with its kind, its cause and
+    `model`."""
     scope = _scope.get()
     fields = scope.fields if scope is not None else {}
     deadline = scope.deadline_for(model) if scope is not None else None
@@ -362,24 +578,20 @@ def _with_retries(
     which = "the model's own deadline" if scope is not None and scope.own_deadline(model) else "the deadline"
     failures: tuple[BusyCause, ...] = ()  # the provider's failure on each try of this call it failed
     malformed = 0  # tries of this call whose reply came back broken (_Malformed)
+    hedges = _HedgeCount()
     # A broken reply is retried on its own count, so it can add one try to what 429s alone allow.
     for attempt in range(1, max(MAX_ATTEMPTS, THROTTLED_ATTEMPTS) + MALFORMED_ATTEMPTS):
         timeout = _attempt_timeout(timeout_s, deadline, which, clock, what, attempt, model, failures)
         started = clock()
+        hedge_fields = {**fields, "call": what, "model": model, "attempt": attempt}
         try:
-            return call(timeout)
+            return _run_hedged(call, timeout, hedging, classify, clock, hedges, hedge_fields)
         except LLMError:
             raise
         except Exception as e:
-            if isinstance(e, _Malformed):
-                kind: Classification = "malformed"
+            kind = _classification(e, classify)
+            if kind == "malformed":
                 malformed += 1
-            elif isinstance(e, _Throttled):
-                kind = "throttled"
-            elif isinstance(e, _Transient):
-                kind = "transient"
-            else:
-                kind = classify(e)
             if kind is None:
                 raise  # not a provider failure: a bug, let it surface as is
             limit = {"throttled": THROTTLED_ATTEMPTS, "malformed": MALFORMED_ATTEMPTS}.get(kind, MAX_ATTEMPTS)
@@ -602,11 +814,15 @@ class GoogleLLM:
         thinking: dict[str, ThinkingLevel] | None = None,
         sleep: Sleep = time.sleep,
         clock: Clock = time.perf_counter,
+        runner: Runner = _THREADS,
+        hedge_limit: HedgeLimit = _HEDGE_LIMIT,
     ) -> None:
         self._client = client
         self._thinking = dict(thinking or {})
         self._sleep = sleep
         self._clock = clock
+        self._runner = runner
+        self._hedge_limit = hedge_limit
         self._call_parts = (
             _BoundedStore()
         )  # tool call id -> the model's function_call Part (thought signature)
@@ -616,7 +832,8 @@ class GoogleLLM:
         model: str,
         contents: Any,
         config: genai_types.GenerateContentConfig | None,
-        timeout_s: float = REQUEST_TIMEOUT_S,
+        timeout_s: float,
+        hedge_after_s: float,
     ) -> tuple[genai_types.GenerateContentResponse, list[genai_types.Part]]:
         base = config or genai_types.GenerateContentConfig()
         level = self._thinking.get(model)
@@ -635,8 +852,9 @@ class GoogleLLM:
                 raise _Malformed(f"Gemini {model} stopped with finish reason {reason}")
             return r
 
+        hedging = _Hedging(hedge_after_s, self._runner, self._hedge_limit)
         r = _with_retries(
-            once, _classify_google, self._sleep, f"Gemini {model}", timeout_s, self._clock, model
+            once, _classify_google, self._sleep, f"Gemini {model}", timeout_s, self._clock, model, hedging
         )
         if not r.candidates:
             block = r.prompt_feedback.block_reason if r.prompt_feedback else None
@@ -651,7 +869,7 @@ class GoogleLLM:
         return "".join(p.text for p in parts if p.text and not p.thought).strip()
 
     def complete(self, model: str, prompt: str) -> Completion:
-        r, parts = self._generate(model, prompt, None)
+        r, parts = self._generate(model, prompt, None, REQUEST_TIMEOUT_S, REQUEST_HEDGE_AFTER_S)
         input_tokens, output_tokens = _google_usage(r)
         return Completion(
             text=self._text(parts), model=model, input_tokens=input_tokens, output_tokens=output_tokens
@@ -661,7 +879,7 @@ class GoogleLLM:
         config = genai_types.GenerateContentConfig(
             response_mime_type="application/json", response_json_schema=schema
         )
-        r, parts = self._generate(model, prompt, config)
+        r, parts = self._generate(model, prompt, config, REQUEST_TIMEOUT_S, REQUEST_HEDGE_AFTER_S)
         input_tokens, output_tokens = _google_usage(r)
         return Completion(
             text=self._text(parts), model=model, input_tokens=input_tokens, output_tokens=output_tokens
@@ -744,7 +962,7 @@ class GoogleLLM:
             else None,
             automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
         )
-        r, parts = self._generate(model, contents, config, CHAT_TIMEOUT_S)
+        r, parts = self._generate(model, contents, config, CHAT_TIMEOUT_S, CHAT_HEDGE_AFTER_S)
         calls: list[ToolCall] = []
         for p in parts:
             fc = p.function_call
@@ -791,6 +1009,8 @@ class OpenRouterLLM:
         thinking: dict[str, ThinkingLevel] | None = None,
         sleep: Sleep = time.sleep,
         clock: Clock = time.perf_counter,
+        runner: Runner = _THREADS,
+        hedge_limit: HedgeLimit = _HEDGE_LIMIT,
     ) -> None:
         if client is None:
             if not api_key:
@@ -803,9 +1023,11 @@ class OpenRouterLLM:
         self._thinking = dict(thinking or {})
         self._sleep = sleep
         self._clock = clock
+        self._runner = runner
+        self._hedge_limit = hedge_limit
         self._reasoning = _BoundedStore()  # first tool call id of a turn -> that turn's reasoning_details
 
-    def _create(self, timeout_s: float = REQUEST_TIMEOUT_S, **kwargs: Any) -> Any:
+    def _create(self, timeout_s: float, hedge_after_s: float, **kwargs: Any) -> Any:
         model = kwargs["model"]
         level = self._thinking.get(model)
         if level is not None:
@@ -827,8 +1049,9 @@ class OpenRouterLLM:
                 raise _Malformed(f"OpenRouter {model} stopped with native finish reason {native}")
             return r
 
+        hedging = _Hedging(hedge_after_s, self._runner, self._hedge_limit)
         r = _with_retries(
-            once, _classify_openai, self._sleep, f"OpenRouter {model}", timeout_s, self._clock, model
+            once, _classify_openai, self._sleep, f"OpenRouter {model}", timeout_s, self._clock, model, hedging
         )
         finish = r.choices[0].finish_reason
         if finish not in _OPENROUTER_OK_FINISH:
@@ -852,7 +1075,13 @@ class OpenRouterLLM:
         )
 
     def complete(self, model: str, prompt: str) -> Completion:
-        return self._completion(self._create(model=model, messages=[{"role": "user", "content": prompt}]))
+        r = self._create(
+            REQUEST_TIMEOUT_S,
+            REQUEST_HEDGE_AFTER_S,
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return self._completion(r)
 
     def complete_json(
         self, model: str, prompt: str, schema: dict[str, Any]
@@ -864,7 +1093,11 @@ class OpenRouterLLM:
 
         def once(p: str) -> Completion:
             r = self._create(
-                model=model, messages=[{"role": "user", "content": p}], response_format=response_format
+                REQUEST_TIMEOUT_S,
+                REQUEST_HEDGE_AFTER_S,
+                model=model,
+                messages=[{"role": "user", "content": p}],
+                response_format=response_format,
             )
             return self._completion(r)
 
@@ -908,7 +1141,7 @@ class OpenRouterLLM:
                 }
                 for t in tools
             ]
-        r = self._create(CHAT_TIMEOUT_S, **kwargs)
+        r = self._create(CHAT_TIMEOUT_S, CHAT_HEDGE_AFTER_S, **kwargs)
         msg = r.choices[0].message
         calls: list[ToolCall] = []
         for tc in msg.tool_calls or []:

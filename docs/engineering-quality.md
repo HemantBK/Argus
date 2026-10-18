@@ -51,9 +51,16 @@ backup; the real number of requests can be higher:
   once more (`llm.JSON_ATTEMPTS = 2`): at most 6 + 2 x 4 = 14 requests.
 - **Retries:** each request is tried up to 5 times on HTTP 429 and up to 2 times on a 5xx or a timeout
   (`THROTTLED_ATTEMPTS`, `MAX_ATTEMPTS`): at most 70 HTTP attempts.
+- **Hedges:** an attempt with no reply after 8 s (a chat turn) or 10 s (a draft or monitor call) sends the same
+  request once more, inside the attempt's own timeout, and the first good reply wins (`CHAT_HEDGE_AFTER_S`,
+  `REQUEST_HEDGE_AFTER_S`): at most 2 HTTP requests per attempt, so 140, and never more than 8 hedged attempts in
+  flight in the process at once (`HEDGE_MAX_IN_FLIGHT`), each counted until both its copies have ended, the
+  ignored loser included, so hedging adds at most 8 open requests to the provider. A run's tokens and cost count
+  only the winning reply; the abandoned copy may still be billed, and each hedge is logged (`llm_hedge`), so the
+  bill can exceed the recorded cost by the hedges' share.
 - **Backup:** if the agent model gives up busy or out of time and at least 30 s of the run are left, the clause
-  is reviewed once more from the start on the backup model: the bounds double, to 20 logical calls, 28 requests
-  and 140 attempts.
+  is reviewed once more from the start on the backup model: the bounds double, to 20 logical calls, 28 requests,
+  140 attempts and 280 HTTP requests.
 
 The deadlines stop far short of these bounds: the agent model gets 35 s per clause until its first draft
 (`runs.PRIMARY_PHASE_S`), no retry starts without 2 s left, and the whole run ends at 90 s. In four calm Vertex
