@@ -10,6 +10,7 @@ import json
 import subprocess
 import sys
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -529,3 +530,15 @@ def test_a_web_only_commit_on_top_of_the_serving_api_still_matches() -> None:
     assert e2e.api_code_matches_head(last_api_change, head)  # every later commit leaves the API code alone
     if len(log) > 1:
         assert not e2e.api_code_matches_head(log[1], head)  # an older API differs in backend/argus_api
+
+
+def test_the_spend_ledger_budget_counts_today_only(tmp_path: Path) -> None:
+    # 18 Oct: a lifetime count of 14 POSTs (17 and 18 Oct) blocked a promote's public smoke.
+    state = e2e.State(tmp_path / "state.json")
+    old = (datetime.now(UTC) - timedelta(days=2)).isoformat(timespec="seconds")
+    state.data["ledger"] = [
+        {"gate": "G", "run_id": str(i), "policy_id": "policy_a", "at": old} for i in range(14)
+    ]
+    assert state.ledger_count() == 0
+    state.record_post("G", "today", "policy_a", 200)
+    assert state.ledger_count() == 1

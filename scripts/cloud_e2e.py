@@ -512,7 +512,12 @@ class State:
         os.replace(tmp, self.path)
 
     def ledger_count(self) -> int:
-        return len(self.data["ledger"])
+        """Live POSTs recorded today (India time), the same day the API's own daily caps use. The budget was
+        a lifetime total, which a full day of release smokes used up on 18 Oct and blocked a promote."""
+        today = datetime.now(IST).date()
+        return sum(
+            1 for e in self.data["ledger"] if datetime.fromisoformat(e["at"]).astimezone(IST).date() == today
+        )
 
     def record_post(self, gate: str, run_id: str, policy_id: str, status: int | None) -> None:
         self.data["ledger"].append(
@@ -580,7 +585,8 @@ def live_lock(state_path: Path) -> Iterator[None]:
 def post_run(gate: Gate, state: State, budget: int, user: User, policy_id: str) -> tuple[str, Resp]:
     if state.ledger_count() >= budget:
         raise Blocked(
-            f"spend ledger holds {state.ledger_count()} live POSTs; budget {budget} reached ({state.path})"
+            f"spend ledger holds {state.ledger_count()} live POSTs today (India time); "
+            f"budget {budget} reached ({state.path})"
         )
     run_id = uuid.uuid4().hex
     state.record_post(gate.name, run_id, policy_id, None)
@@ -1320,7 +1326,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--out", type=Path, default=DEFAULT_OUT, help=f"evidence directory (default {DEFAULT_OUT})"
     )
     ap.add_argument("--state", type=Path, default=DEFAULT_STATE, help="owners + spend ledger (mode 600)")
-    ap.add_argument("--budget", type=int, default=DEFAULT_BUDGET, help="max live POSTs in the ledger")
+    ap.add_argument(
+        "--budget", type=int, default=DEFAULT_BUDGET, help="max live POSTs per day (India time) in the ledger"
+    )
     ap.add_argument("--gate-id", help="evidence file stem (default: the subcommand)")
     ap.add_argument("--api", default=API, help=f"API base URL (default {API})")
     sub = ap.add_subparsers(dest="command", required=True)

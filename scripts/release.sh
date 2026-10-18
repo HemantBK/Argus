@@ -159,7 +159,13 @@ promote() {
   [[ -f "$STATE" ]] || fail "no candidate recorded; run scripts/release.sh candidate first"
   # shellcheck disable=SC1090
   source "$STATE"
-  [[ "$(git rev-parse HEAD)" == "$SHA" ]] || fail "HEAD moved since the candidate was built"
+  # HEAD may have moved past the candidate only by commits that leave the API code alone (docs, web, scripts):
+  # the web deploy below builds HEAD, and the API revision being promoted is still exactly the candidate.
+  if [[ "$(git rev-parse HEAD)" != "$SHA" ]]; then
+    git merge-base --is-ancestor "$SHA" HEAD || fail "HEAD does not descend from the candidate ${SHA:0:12}"
+    [[ -z "$(git diff --name-only "$SHA..HEAD" -- "${API_PATHS[@]}")" ]] ||
+      fail "HEAD changes the API code since the candidate ${SHA:0:12}: build a new candidate"
+  fi
 
   step "Move all traffic to $NEW"
   gcloud run services update-traffic "$SERVICE" --region "$REGION" --project "$PROJECT" \
