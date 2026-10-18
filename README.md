@@ -7,7 +7,7 @@ still fails after one revision, or that the monitor stops, goes to a compliance 
 
 Team Argus · Google Cloud AI Builder Cup 2026 · BFSI theme · Synthetic policies only · Not legal advice
 
-**[Live app](https://argus-aibc.web.app)** · **Demo video** (added on 18 Oct) ·
+**[Live app](https://argus-aibc.web.app)** · **[Demo video](https://youtu.be/rFkUOTP6DqY)** ·
 **[Evaluation](docs/evaluation.md)** · **[Architecture](docs/architecture.md)** ·
 **[RBI sources](docs/data-and-rbi-sources.md)**
 
