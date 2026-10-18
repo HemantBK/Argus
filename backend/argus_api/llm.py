@@ -14,6 +14,12 @@ LLMError of a provider failure carries its kind (ErrorKind) and model, so a call
 (LLMError.capacity; runs.py then hands the clause to the fallback model) from a request that cannot succeed,
 and both from a call our own deadline cut with no provider failure (kind "deadline", cause None).
 
+A reply Gemini itself reports as broken (finish reason MALFORMED_FUNCTION_CALL, MALFORMED_RESPONSE or
+UNEXPECTED_TOOL_CALL: MALFORMED_FINISH) is sent again once, unchanged, MALFORMED_BACKOFF_S later and within
+the deadline. If that fails too it is LLMError kind "malformed" with no cause: the model answered, so it is
+not a busy provider, and runs.py may hand the clause to the fallback model without telling the breaker
+"busy". Every other finish reason that is not STOP (SAFETY, MAX_TOKENS, ...) is still an LLMError at once.
+
 Each attempt has its own timeout, sized to the call: a chat turn returns a few dozen tokens, so it is cut
 sooner than a structured call that writes a whole finding. Inside call_scope(deadline) every call also ends by
 the deadline: an attempt's timeout never runs past it, and no retry starts without time to finish, so one
@@ -83,6 +89,15 @@ REQUEST_TIMEOUT_S = 30.0  # complete and complete_json
 MIN_ATTEMPT_S = 2.0
 # complete_json: one retry when the reply is not valid JSON for the schema.
 JSON_ATTEMPTS = 2
+# Finish reasons that say the model's reply itself came out broken, not that the request was refused. On
+# 2026-10-18 a live run's backup review (gemini-3.1-flash-lite) stopped once with MALFORMED_RESPONSE and the
+# clause failed, though the next identical call would likely have answered. Such a reply is sent again once,
+# unchanged (MALFORMED_ATTEMPTS tries in all), after MALFORMED_BACKOFF_S. Names, because google-genai 2.31
+# has no enum member for MALFORMED_RESPONSE (it parses it as an unknown value with that name). OpenRouter
+# passes Gemini's own reason on as native_finish_reason.
+MALFORMED_FINISH = frozenset({"MALFORMED_FUNCTION_CALL", "MALFORMED_RESPONSE", "UNEXPECTED_TOOL_CALL"})
+MALFORMED_ATTEMPTS = 2
+MALFORMED_BACKOFF_S = 1.0
 
 # USD per million tokens (input, output) for every model id in config.PINNED_MODELS, pinned on 2026-10-16.
 # OpenRouter ids: OpenRouter's list prices (its /api/v1/models). Bare ids (Vertex AI, AI Studio): Google's
@@ -205,9 +220,10 @@ class Turn:
 # How a model call failed, on LLMError.kind: "throttled" (gave up after a 429 on the last try), "transient"
 # (gave up after a 5xx or a timeout on the last try), "deadline" (the call_scope deadline came first: a try
 # failed and no retry fitted, or no try could start), "fatal" (an error retrying cannot fix, such as HTTP
-# 400). None: not a provider failure (an unusable reply, invalid JSON). The tries before the last may have
-# failed differently (a 429, then a timeout): LLMError.failures has each.
-ErrorKind = Literal["throttled", "transient", "fatal", "deadline"]
+# 400), "malformed" (Gemini reported its own reply as broken, MALFORMED_FINISH, on the retry too or with no
+# time left to retry; cause None). None: any other unusable reply (a SAFETY stop, invalid JSON). The tries
+# before the last may have failed differently (a 429, then a timeout): LLMError.failures has each.
+ErrorKind = Literal["throttled", "transient", "fatal", "deadline", "malformed"]
 # The provider's own failure behind an LLMError, on LLMError.cause: "throttled" (an HTTP 429) or "transient"
 # (a 5xx, or a try that timed out on its own limit). None when the provider did not fail: a "fatal" error,
 # or a "deadline" error where our deadline was all that ended the call (no try failed, or the only failures
@@ -285,8 +301,14 @@ class _Throttled(_Transient):
     """A 429 reported in a 200 body."""
 
 
-# throttled: a 429, retried up to THROTTLED_ATTEMPTS times; transient: a 5xx or a timeout, MAX_ATTEMPTS.
-Classification = Literal["throttled", "transient", "fatal"] | None
+class _Malformed(Exception):
+    """A reply the model itself reports as broken (MALFORMED_FINISH). Not a _Transient: the provider answered,
+    so it is never counted as busy (LLMError.failures, LLMError.cause)."""
+
+
+# throttled: a 429, retried up to THROTTLED_ATTEMPTS times; transient: a 5xx or a timeout, MAX_ATTEMPTS;
+# malformed: a broken reply (_Malformed), MALFORMED_ATTEMPTS.
+Classification = Literal["throttled", "transient", "fatal", "malformed"] | None
 
 
 def _jitter() -> float:
@@ -330,15 +352,18 @@ def _with_retries(
     clock: Clock,
     model: str,
 ) -> T:
-    """Run `call(timeout)` with retries on transient failures. Each failed attempt is logged. A provider
-    failure is raised as LLMError with its kind, its cause and `model`."""
+    """Run `call(timeout)` with retries on transient failures and on a reply the model reports as broken
+    (_Malformed, counted on its own: MALFORMED_ATTEMPTS). Each failed attempt is logged. A provider failure
+    is raised as LLMError with its kind, its cause and `model`."""
     scope = _scope.get()
     fields = scope.fields if scope is not None else {}
     deadline = scope.deadline_for(model) if scope is not None else None
     # Errors name the deadline that applies: the model's own (runs.py: its share of the run) or the scope's.
     which = "the model's own deadline" if scope is not None and scope.own_deadline(model) else "the deadline"
     failures: tuple[BusyCause, ...] = ()  # the provider's failure on each try of this call it failed
-    for attempt in range(1, max(MAX_ATTEMPTS, THROTTLED_ATTEMPTS) + 1):
+    malformed = 0  # tries of this call whose reply came back broken (_Malformed)
+    # A broken reply is retried on its own count, so it can add one try to what 429s alone allow.
+    for attempt in range(1, max(MAX_ATTEMPTS, THROTTLED_ATTEMPTS) + MALFORMED_ATTEMPTS):
         timeout = _attempt_timeout(timeout_s, deadline, which, clock, what, attempt, model, failures)
         started = clock()
         try:
@@ -346,15 +371,18 @@ def _with_retries(
         except LLMError:
             raise
         except Exception as e:
-            if isinstance(e, _Throttled):
-                kind: Classification = "throttled"
+            if isinstance(e, _Malformed):
+                kind: Classification = "malformed"
+                malformed += 1
+            elif isinstance(e, _Throttled):
+                kind = "throttled"
             elif isinstance(e, _Transient):
                 kind = "transient"
             else:
                 kind = classify(e)
             if kind is None:
                 raise  # not a provider failure: a bug, let it surface as is
-            limit = THROTTLED_ATTEMPTS if kind == "throttled" else MAX_ATTEMPTS
+            limit = {"throttled": THROTTLED_ATTEMPTS, "malformed": MALFORMED_ATTEMPTS}.get(kind, MAX_ATTEMPTS)
             # A try that ran to a timeout our deadline had shortened was cut by our budget, not failed by the
             # provider; any other 429, 5xx or timeout is the provider's.
             cut_by_deadline = kind == "transient" and timeout < timeout_s and clock() - started >= timeout
@@ -370,15 +398,29 @@ def _with_retries(
                 "attempt_ms": round((clock() - started) * 1000),
                 "timeout_s": round(timeout, 1),
             }
-            backoff = BACKOFF_BASE_S * 2 ** (attempt - 1)
+            backoff = MALFORMED_BACKOFF_S if kind == "malformed" else BACKOFF_BASE_S * 2 ** (attempt - 1)
             if kind == "throttled":
                 backoff *= 0.5 + 0.5 * _jitter()
+            no_room = deadline is not None and deadline - clock() - backoff < MIN_ATTEMPT_S
             if kind == "fatal":
                 outcome = "fatal"
                 error = LLMError(
                     f"{what} failed: {e}", kind="fatal", model=model, attempts=attempt, failures=failures
                 )
-            elif attempt >= limit and not cut_by_deadline:
+            elif kind == "malformed" and (malformed >= MALFORMED_ATTEMPTS or no_room):
+                # The model answered each time, so this is its broken reply, not a busy provider or our
+                # deadline: kind "malformed", no cause, even when no time was left for the retry.
+                outcome = "gave_up"
+                error = LLMError(
+                    f"{what} returned an unusable reply on {malformed} of {attempt} "
+                    f"{'try' if attempt == 1 else 'tries'}: {e}"
+                    + ("" if malformed >= MALFORMED_ATTEMPTS else f"; no time left to retry before {which}"),
+                    kind="malformed",
+                    model=model,
+                    attempts=attempt,
+                    failures=failures,
+                )
+            elif kind != "malformed" and attempt >= limit and not cut_by_deadline:
                 outcome = "gave_up"
                 error = LLMError(
                     f"{what} failed after {attempt} tries: {e}",
@@ -387,7 +429,7 @@ def _with_retries(
                     attempts=attempt,
                     failures=failures,
                 )
-            elif cut_by_deadline or (deadline is not None and deadline - clock() - backoff < MIN_ATTEMPT_S):
+            elif kind != "malformed" and (cut_by_deadline or no_room):
                 # Our deadline cut this try short, or leaves no room for another: the call ends on our budget,
                 # and only earlier tries the provider itself failed make it the provider's (cause).
                 left = deadline - clock() - backoff if deadline is not None else 0.0
@@ -532,6 +574,14 @@ def _classify_google(e: BaseException) -> Classification:
     return None
 
 
+def _google_finish_name(r: genai_types.GenerateContentResponse) -> str | None:
+    """The first candidate's finish reason by name (an unknown value keeps its name), or None."""
+    if not r.candidates or r.candidates[0].finish_reason is None:
+        return None
+    reason = r.candidates[0].finish_reason
+    return getattr(reason, "name", None) or str(reason)
+
+
 def _google_usage(r: genai_types.GenerateContentResponse) -> tuple[int | None, int | None]:
     u = r.usage_metadata
     if u is None:
@@ -579,7 +629,11 @@ class GoogleLLM:
             attempt_config = base.model_copy(
                 update={"http_options": genai_types.HttpOptions(timeout=round(timeout * 1000))}
             )
-            return self._client.models.generate_content(model=model, contents=contents, config=attempt_config)
+            r = self._client.models.generate_content(model=model, contents=contents, config=attempt_config)
+            reason = _google_finish_name(r)
+            if reason in MALFORMED_FINISH:
+                raise _Malformed(f"Gemini {model} stopped with finish reason {reason}")
+            return r
 
         r = _with_retries(
             once, _classify_google, self._sleep, f"Gemini {model}", timeout_s, self._clock, model
@@ -766,6 +820,11 @@ class OpenRouterLLM:
                     error = _Throttled if code == 429 else _Transient
                     raise error(f"OpenRouter error {code}: {err.get('message')}")
                 raise LLMError(f"OpenRouter returned no choices for {model}: {err or 'no error given'}")
+            # OpenRouter maps Gemini's finish reason to its own (a broken reply often to "stop" or "error")
+            # and passes Gemini's on as native_finish_reason, which is what says the reply came out broken.
+            native = (r.choices[0].model_extra or {}).get("native_finish_reason")
+            if isinstance(native, str) and native.upper() in MALFORMED_FINISH:
+                raise _Malformed(f"OpenRouter {model} stopped with native finish reason {native}")
             return r
 
         r = _with_retries(

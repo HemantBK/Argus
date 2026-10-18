@@ -179,7 +179,8 @@ flowchart LR
 
 - **Meaningful Gen AI:** Gemini matches clauses to RBI text, judges support and spots planted instructions.
 - **Functional and sound:** live on Cloud Run and Firebase; every citation is rebuilt and checked in code, a
-  failed clause is saved as needing a person, and backup-model findings are labelled.
+  failed clause is saved as needing a person while the run keeps its other findings, and backup-model findings
+  are labelled.
 - **Scalability and sustainability:** a new RBI instrument is one entry in `corpus/build_corpus.py` plus
   hand-checked rows in `corpus/supersession.json`; `make corpus` rebuilds and hashes the library, `/health` shows
   the hash, and `scripts/release.sh` runs a live review on a candidate revision before a person promotes it.

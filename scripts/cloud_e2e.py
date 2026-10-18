@@ -27,7 +27,9 @@ fallback M"), failed with a provider failure on that clause, a 429, 5xx or timeo
 starting with runs.PROVIDER_BUSY ("capacity": still FAIL, with the reason "provider capacity: wait and
 re-run"; never green), or failed for any other reason ("our_code": FAIL). A clause that only ran out of time
 with no provider failure behind it (runs.OUT_OF_TIME) is our_code: the review was too slow. The smoke also
-reports how many clauses the agent model itself completed.
+reports how many clauses the agent model itself completed. Since 18 Oct a run with some failed clauses ends
+done (runs.py _finish), so smoke and hero also check summary.failed == 0 on its own (no_failed_clauses,
+reporting the count): a done run is never a pass while any clause failed.
 
 Spend safety: only smoke and hero call Gemini (through POST /api/runs). They hold an exclusive lock, so two
 live gates never run at once, and every POST is counted in a ledger in the state file; a POST that would take
@@ -693,8 +695,8 @@ def classify_clauses(docs: RunDocs, clause_ids: list[str]) -> ClauseOutcomes:
 
 
 def clause_criteria(tag: str, docs: RunDocs, clause_ids: list[str]) -> tuple[list[Criterion], ClauseOutcomes]:
-    """No clause failed in our code, and none failed because Gemini was busy (a FAIL to wait out and re-run,
-    never a pass). A clause the fallback model reviewed passes."""
+    """No clause failed in our code, none failed because Gemini was busy (a FAIL to wait out and re-run,
+    never a pass), and the run's summary.failed is 0. A clause the fallback model reviewed passes."""
     o = classify_clauses(docs, clause_ids)
     summary_failed = ((docs.run or {}).get("summary") or {}).get("failed")
     c = [
@@ -709,6 +711,13 @@ def clause_criteria(tag: str, docs: RunDocs, clause_ids: list[str]) -> tuple[lis
             not o.capacity,
             {"capacity": o.capacity, "reason": CAPACITY_REASON} if o.capacity else {},
             "no clause failed because Gemini was busy on both models",
+        ),
+        # The run's own count, whatever its status: a run with failed clauses can still be done.
+        Criterion(
+            f"{tag}.no_failed_clauses",
+            summary_failed == 0,
+            {"summary.failed": summary_failed, "clauses": len(clause_ids)},
+            0,
         ),
     ]
     return c, o
@@ -974,8 +983,10 @@ def cmd_smoke(args: argparse.Namespace, gate: Gate) -> None:
         gate.check(crit.name, crit.ok, crit.observed, crit.expected)
     gate.details["reviewers"] = outcomes.split()
     gate.details["primary_completed"] = len(outcomes.strong)
+    failed = ((docs.run or {}).get("summary") or {}).get("failed")
     print(
-        f"  reviewers: {outcomes.split()}; the agent model completed {len(outcomes.strong)} clause(s)",
+        f"  reviewers: {outcomes.split()}; the agent model completed {len(outcomes.strong)} clause(s); "
+        f"failed clauses: {failed}",
         flush=True,
     )
     entries: list[dict[str, Any]] = []
@@ -1050,7 +1061,7 @@ def cmd_hero(args: argparse.Namespace, gate: Gate) -> None:
             row["cost_usd_estimate"] = (docs.run or {}).get("cost_usd_estimate")
             print(
                 f"  label agreement {row['label_agreement']['agree']}/{row['label_agreement']['n']}; "
-                f"reviewers {row['reviewers']}",
+                f"reviewers {row['reviewers']}; failed clauses: {(row['summary'] or {}).get('failed')}",
                 flush=True,
             )
             if r.status != 200 or hits:

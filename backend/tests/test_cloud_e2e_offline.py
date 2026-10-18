@@ -256,7 +256,7 @@ def test_a_clause_both_models_failed_busy_is_a_capacity_fail_never_green() -> No
     o = e2e.classify_clauses(docs, CLAUSES)
     assert list(o.capacity) == ["c3"] and o.our_code == {}
     crit, _ = e2e.clause_criteria("r", docs, CLAUSES)
-    assert _failed(crit) == ["r.no_provider_capacity_failures"]
+    assert _failed(crit) == ["r.no_provider_capacity_failures", "r.no_failed_clauses"]
     assert crit[1].observed["reason"] == e2e.CAPACITY_REASON == "provider capacity: wait and re-run"
     assert not e2e.judge(crit)
 
@@ -278,7 +278,24 @@ def test_anything_but_a_busy_provider_is_our_code(mutate: Any) -> None:
     docs = copy.deepcopy(_good_docs("policy_a"))
     mutate(docs)
     crit, _ = e2e.clause_criteria("r", docs, CLAUSES)
-    assert _failed(crit) == ["r.no_our_code_errors"]
+    # The summary's own count fails no_failed_clauses too, whichever clause it is.
+    also = ["r.no_failed_clauses"] if docs.run["summary"]["failed"] else []
+    assert _failed(crit) == ["r.no_our_code_errors", *also]
+
+
+def test_a_done_run_with_a_failed_clause_never_passes(verify: Any) -> None:
+    # Since 18 Oct a run with 7 of 8 clauses reviewed is done (runs.py _finish), so status_done alone would
+    # pass it: no_failed_clauses checks the run's own count and reports it.
+    docs = copy.deepcopy(_good_docs("policy_a"))
+    docs.findings["c5"].update(error=f"{runs.MODEL_OUTPUT} broken reply.", label="insufficient_evidence")
+    docs.run["summary"]["failed"] = 1
+    crit, _ = e2e.clause_criteria("r", docs, CLAUSES)
+    failed = {c.name: c for c in crit if not c.ok}
+    assert "r.no_failed_clauses" in failed
+    assert failed["r.no_failed_clauses"].observed == {"summary.failed": 1, "clauses": len(CLAUSES)}
+    hero = e2e.hero_criteria("r", "policy_a", docs, EXPECTED, verify)
+    assert "r.status_done" not in _failed(hero) and "r.no_failed_clauses" in _failed(hero)
+    assert not e2e.judge(hero)
 
 
 def _runner_error(script: Any) -> str:
@@ -346,6 +363,30 @@ def test_smoke_reports_the_split_and_what_the_agent_model_completed(
     assert gate.details["reviewers"] == f"strong {len(CLAUSES) - 1} / fallback 1"
     assert gate.details["primary_completed"] == len(CLAUSES) - 1
     assert _failed(gate.criteria) == []
+
+
+def test_smoke_fails_a_done_run_with_a_failed_clause(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, verify: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    docs = copy.deepcopy(_good_docs("policy_a"))
+    docs.findings["c5"].update(error=f"{runs.MODEL_OUTPUT} broken reply.", label="insufficient_evidence")
+    docs.run["summary"]["failed"] = 1
+    monkeypatch.setattr(e2e, "_start", lambda gate, need_health=True: {})
+    monkeypatch.setattr(e2e, "_check_deploy", lambda gate, h: None)
+    monkeypatch.setattr(e2e, "_corpus_verifier", lambda gate, h: verify)
+    monkeypatch.setattr(e2e, "web_api_key", lambda: "k")
+    monkeypatch.setattr(e2e, "mint_user", lambda gate, key: e2e.User("uid", "id", "refresh"))
+    monkeypatch.setattr(e2e, "post_run", lambda *a: ("run1", e2e.Resp(200, "{}")))
+    monkeypatch.setattr(e2e, "read_run", lambda fs, run_id: docs)
+    monkeypatch.setattr(e2e, "settled_run_logs", lambda *a: [])
+    monkeypatch.setattr(e2e, "read_logs", lambda *a, **k: [])
+    docs.run["started_at"] = docs.run["finished_at"] = "2026-10-17T12:00:00Z"
+    gate = e2e.Gate("smoke", tmp_path)
+    args = e2e.parse_args(["--state", str(tmp_path / "state.json"), "--out", str(tmp_path), "smoke"])
+    e2e.cmd_smoke(args, gate)
+    assert "smoke.status_done" not in _failed(gate.criteria)
+    assert "smoke.no_failed_clauses" in _failed(gate.criteria)
+    assert "failed clauses: 1" in capsys.readouterr().out
 
 
 def test_judge_needs_criteria() -> None:

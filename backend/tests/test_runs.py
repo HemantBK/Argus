@@ -204,7 +204,8 @@ def test_llm_error_fails_one_clause_and_the_run_still_finishes(store: MemoryStor
         run_id, OWNER, policy
     )
 
-    assert run.status == RunStatus.FAILED
+    # 1 failed of 8: the run is done with its 7 findings, and the failed clause is counted and named.
+    assert run.status == RunStatus.DONE
     assert run.summary.failed == 1 and run.summary.clauses == len(policy.clauses)
     label_total = sum(getattr(run.summary, label.value) for label in FindingLabel)
     assert label_total == len(policy.clauses) - 1
@@ -225,6 +226,21 @@ def test_llm_error_fails_one_clause_and_the_run_still_finishes(store: MemoryStor
     assert last.kind == StepKind.FINAL and "failed" in last.summary
     audit = [AuditEvent.model_validate(d) for _, d in docs(store, run_id, "audit")]
     assert [a.clause_id for a in audit if a.event == "clause_failed"] == [bad]
+    finished = [a for a in audit if a.event == "run_finished"]
+    assert len(finished) == 1 and finished[0].detail.startswith(f"status done: 1 of {len(policy.clauses)}")
+    reason = runs.sample_refusal(run)
+    assert reason is not None and "1 of" in reason and "failed" in reason
+
+
+def test_a_run_where_every_clause_failed_is_failed(store: MemoryStore, corpus: Corpus) -> None:
+    policy = runs.load_policy("policy_b")
+    run_id = new_run_id()
+    llm = policy_llm("policy_b", [(c.id, failing_clause_llm()) for c in policy.clauses])
+    run = runner(store, llm, corpus).run_review(run_id, OWNER, policy)
+    assert run.status == RunStatus.FAILED
+    assert run.summary.failed == run.summary.clauses == len(policy.clauses)
+    assert run.error is not None and run.error.startswith(f"{len(policy.clauses)} of {len(policy.clauses)}")
+    assert set(findings(store, run_id)) == {c.id for c in policy.clauses}  # each still marked for a person
 
 
 # ---- the run budget, with a scripted reviewer ---------------------------------------------------------
@@ -316,7 +332,8 @@ def test_clauses_unfinished_at_the_budget_end_as_failed_and_late_steps_are_refus
     run = r.run_review(run_id, OWNER, policy)
     assert time.perf_counter() - t0 < budget + 2.0  # the request does not wait for the stuck clause
 
-    assert run.status == RunStatus.FAILED and run.summary.failed == len(slow)
+    assert run.status == RunStatus.DONE and run.summary.failed == len(slow)
+    assert run.error is not None and all(f"{cid}: " in run.error for cid in slow)
     found = findings(store, run_id)
     assert set(found) == {c.id for c in policy.clauses}
     for cid in slow:
@@ -701,6 +718,8 @@ def _pinned_vertex() -> dict[str, Any]:
         ({"agent_model": _pinned_vertex()["monitor_model"]}, "pinned"),  # both ids pinned, wrong roles
         ({"rbi_as_on": None}, "rbi_as_on"),
         ({"summary": RunSummary(clauses=8, compliant=8, fallback_clauses=1)}, "fallback model"),
+        # A done run with 7 of 8 clauses reviewed (runs.py _finish since 18 Oct) is not a complete review.
+        ({"summary": RunSummary(clauses=8, compliant=7, failed=1)}, "1 of its 8 clauses failed"),
     ],
 )
 def test_save_sample_refuses_anything_but_a_real_vertex_review(

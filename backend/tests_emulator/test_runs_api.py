@@ -216,7 +216,8 @@ def test_a_clause_whose_llm_call_errors_fails_and_the_run_finishes(
     r = start(client, token, policy_id="policy_b")
     assert r.status_code == 200, r.text
     run = Run.model_validate(r.json())
-    assert run.status == RunStatus.FAILED and run.finished_at is not None
+    # One failed clause of several: the run is done with the others' findings (runs.py _finish, 18 Oct).
+    assert run.status == RunStatus.DONE and run.finished_at is not None
     assert run.summary.failed == 1 and run.error is not None and bad in run.error
     found = {
         i: Finding.model_validate(d) for i, d in store.list_docs(f"{runs.run_path(run.run_id)}/findings")

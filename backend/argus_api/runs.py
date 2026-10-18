@@ -16,12 +16,16 @@ A run, from POST /api/runs:
                call of a clause ends by the same deadline (llm.call_scope): an attempt is cut to the time
                left and no retry starts without time to finish, so a stalled call fails its clause with
                the reason instead of outliving the budget.
-  4. finish    Run.summary, status (done, or failed when any clause failed, with the reasons in Run.error),
-               latency and the cost estimate summed from the recorded model calls.
+  4. finish    Run.summary, status, latency and the cost estimate summed from the recorded model calls.
+               The status is done when at least one clause was reviewed, and failed only when every clause
+               failed: a run with some failed clauses is a finished review with clauses for a person, and
+               RunSummary.failed counts them. Whenever a clause failed, Run.error names each one and why.
+               Such a run is never saved as a sample (sample_refusal).
 
 Fallback agent model (Settings.fallback_model; on in the deployed app): when the agent model gives up busy on
-a clause (HTTP 429 on every try, timeouts or 5xx on every try) or runs out of its share of the time, and at
-least MIN_FALLBACK_S of the run budget is left, the clause is reviewed again from the start, with a fresh
+a clause (HTTP 429 on every try, timeouts or 5xx on every try), runs out of its share of the time, or sends a
+reply Gemini itself reports as broken on its retry too (llm.LLMError kind "malformed"), and at least
+MIN_FALLBACK_S of the run budget is left, the clause is reviewed again from the start, with a fresh
 conversation, by the fallback model. The monitor model and every citation check stay the same. So that time
 is left, the agent model's calls for a clause end PRIMARY_PHASE_S after the clause started
 (llm.call_scope's model_deadlines), until its first draft is written; the monitor model's calls keep the run
@@ -30,18 +34,21 @@ draft exists the agent model's calls (the revise step) keep the run deadline too
 more than a fresh start on the fallback model. (A monitor model that is also the agent model shares the
 agent's cut.) The agent model's steps stay in the trace, the last one saying the clause was
 handed over; the finding records the model that wrote it (Finding.agent_model) and why (fallback_reason),
-and RunSummary.fallback_clauses counts such clauses. Never on other failures: a refused request, an unusable
-reply, a busy monitor model (it has no fallback), a monitor or library error. If the fallback review fails
+and RunSummary.fallback_clauses counts such clauses. Never on other failures: a refused request (a SAFETY
+stop, HTTP 400), any other unusable reply (invalid JSON), a busy monitor model (it has no fallback), a monitor
+or library error. If the fallback review fails
 too, the clause fails as it would have. A per-process circuit breaker (breaker.py) sends clauses straight to
-the fallback model while the agent model keeps giving up busy; GET /health shows its state.
+the fallback model while the agent model keeps giving up busy; GET /health shows its state. A broken reply
+is not busy: the model answered, so it never counts towards opening the breaker.
 
 A failed clause's error says whose fault it was. When the provider failed the review (llm.LLMError.capacity:
 a 429, a 5xx or a timeout, on the agent or the monitor model) it starts with PROVIDER_BUSY, so it reads as
 the provider's state, not a fault of the review. When our own deadline ended the review with no provider
 failure behind it, it starts with OUT_OF_TIME: the review was too slow. One exception: when the provider's
 failure on the agent model sent the clause to the fallback model, running out of time there is still the
-provider's doing (PROVIDER_BUSY). Only the agent model's provider failures count as busy give-ups for the
-breaker.
+provider's doing (PROVIDER_BUSY). When Gemini sent a reply it reports as broken, on the agent, fallback or
+monitor model, it starts with MODEL_OUTPUT: Argus did not guess an answer. Only the agent model's provider
+failures count as busy give-ups for the breaker.
 
 A failed clause is an explicit state: a Finding with `error` set, label insufficient_evidence, no citation
 and monitor_status needs_review, so it goes to a person. Anything unexpected (a bug, Firestore down) marks
@@ -123,6 +130,9 @@ PROVIDER_BUSY = "Gemini capacity was busy; try again shortly."
 # The start of a failed clause's error when the run budget (or the agent model's share of it) ran out and no
 # provider failure was behind it: the review itself was too slow.
 OUT_OF_TIME = "The review ran out of time within the run budget."
+# The start of a failed clause's error when Gemini's reply came back broken on the retry too (llm.LLMError
+# kind "malformed"): the model answered, so it is neither the provider's capacity nor our deadline.
+MODEL_OUTPUT = "Gemini returned an unusable reply; a person must review this clause."
 SAMPLES_DIR = Path(__file__).resolve().parent / "samples"
 POLICY_IDS = ("policy_a", "policy_b")
 CUSTOM_POLICY_ID = "custom"  # POST /api/runs with a pasted clause (custom.py)
@@ -421,14 +431,17 @@ def busy_cause(e: ClauseReviewError) -> LLMError | None:
 
 
 def hands_over(e: LLMError) -> bool:
-    """A failure the fallback model can help with: the model gave up busy, or ran out of its time."""
-    return e.kind in ("throttled", "transient", "deadline")
+    """A failure the fallback model can help with: the model gave up busy, ran out of its time, or sent a
+    broken reply twice (kind "malformed")."""
+    return e.kind in ("throttled", "transient", "deadline", "malformed")
 
 
 def fallback_reason(e: LLMError) -> str:
     """Why the fallback model reviewed a clause, in plain English, from the agent model's failure: what the
     provider did on the tries it failed (LLMError.failures) and how many tries were made."""
     name = model_name(e.model or "the agent model")
+    if e.kind == "malformed":
+        return f"{name} returned an unusable reply"
     share = f"its {PRIMARY_PHASE_S:g} s share of the run budget"
     seen = set(e.failures) or ({e.cause} if e.cause is not None else set())
     if seen == {"throttled"}:
@@ -785,7 +798,13 @@ class Runner:
             if e.model != primary or not hands_over(e) or deadline - self.clock() < MIN_FALLBACK_S:
                 return None
             handed_over.append(e)
-            what = "is busy" if e.capacity else "ran out of time"
+            what = (
+                "returned an unusable reply"
+                if e.kind == "malformed"
+                else "is busy"
+                if e.capacity
+                else "ran out of time"
+            )
             return f"{model_name(primary)} {what}; handing this clause to {model_name(fallback)}."
 
         outcome_on_primary: Outcome = None
@@ -845,8 +864,8 @@ class Runner:
         """A failed clause's error: what failed, after why the fallback model reviewed it when it did. It
         starts with PROVIDER_BUSY when the provider failed the review, or when our deadline ended a review
         that the provider's failure on the agent model had sent to the fallback model (`provider_failed`);
-        else with OUT_OF_TIME when our deadline ended it. Any other failure (a refused request, an unusable
-        reply) is stated as it is."""
+        with MODEL_OUTPUT when Gemini's reply came back broken (kind "malformed"); else with OUT_OF_TIME when
+        our deadline ended it. Any other failure (a refused request, invalid JSON) is stated as it is."""
         text = f"{e}."
         if fallback_reason is not None:
             text = (
@@ -854,6 +873,8 @@ class Runner:
                 f"and that review failed: {text}"
             )
         cause = llm_cause(e)
+        if cause is not None and cause.kind == "malformed":
+            return f"{MODEL_OUTPUT} {text}"
         out_of_time = cause is not None and cause.out_of_time
         if busy_cause(e) is not None or (out_of_time and provider_failed):
             return f"{PROVIDER_BUSY} {text}"
@@ -868,9 +889,11 @@ class Runner:
             if failed
             else None
         )
+        # Done when any clause was reviewed: its findings stand and each failed clause is marked for a person
+        # (summary.failed, Run.error). Failed only when nothing was reviewed.
         run = ctx.run.model_copy(
             update={
-                "status": RunStatus.FAILED if failed else RunStatus.DONE,
+                "status": RunStatus.FAILED if len(failed) == len(results) else RunStatus.DONE,
                 "error": error,
                 "finished_at": self.now(),
                 "summary": _summary(policy.clauses, ctx.results),
@@ -986,15 +1009,21 @@ class NotASample(Conflict):
 
 def sample_refusal(run: Run) -> str | None:
     """Why `run` may not be shown publicly as a saved run, or None when it may. A saved run is presented as
-    a real review, so it must be one: finished, recorded on Vertex AI with the pinned model ids, not written
-    by a seed script, reviewed wholly by the pinned agent model (no clause handed to the fallback model), and
-    dated with the RBI as-on date of its library. A pasted clause (source custom) is the user's own text,
+    a real review, so it must be one: finished with every clause reviewed (a done run may still have failed
+    clauses, RunSummary.failed), recorded on Vertex AI with the pinned model ids, not written by a seed
+    script, reviewed wholly by the pinned agent model (no clause handed to the fallback model), and dated with
+    the RBI as-on date of its library. A pasted clause (source custom) is the user's own text,
     kept only until its private run expires (CUSTOM_TTL): never published. No override.
     """
     if run.source == CUSTOM_SOURCE:
         return "it reviews a clause a user pasted (source custom); only a sample policy run can be saved"
     if run.status != RunStatus.DONE or run.finished_at is None:
         return f"it is {run.status.value}; only a finished (done) run can be saved"
+    if run.summary.failed > 0:
+        return (
+            f"{run.summary.failed} of its {run.summary.clauses} clauses failed; a saved run must have every "
+            "clause reviewed"
+        )
     if run.seeded:
         return "it was written by a seed script (seeded), not recorded from a real review"
     if run.provider != SAMPLE_PROVIDER:

@@ -348,7 +348,7 @@ def test_without_a_fallback_model_a_busy_clause_fails_as_before(store: MemorySto
     assert models_called(script) == [("chat", AGENT_MODEL)]
     f = findings(store, run.run_id)["c4"]
     assert f.error is not None and f.error.startswith(runs.PROVIDER_BUSY) and "LLMError" in f.error
-    assert run.status == RunStatus.FAILED
+    assert run.status == RunStatus.DONE and run.summary.failed == 1  # the other clauses were reviewed
 
 
 def test_an_admission_429_reviews_nothing(store: MemoryStore, corpus: Corpus) -> None:
@@ -378,7 +378,8 @@ def test_when_the_fallback_fails_too_the_clause_fails(
     script = FakeLLM(turns=[busy(), second])
     run = run_policy(store, corpus, policy_llm(POLICY, [("c4", script)]))
     assert models_called(script) == [("chat", AGENT_MODEL), ("chat", FALLBACK)]
-    assert run.status == RunStatus.FAILED and run.summary.failed == 1 and run.summary.fallback_clauses == 0
+    assert run.status == RunStatus.DONE and run.summary.failed == 1 and run.summary.fallback_clauses == 0
+    assert run.error is not None and run.error.startswith(f"1 of {run.summary.clauses} clauses failed: c4: ")
     f = findings(store, run.run_id)["c4"]
     assert f.error is not None and f.error.startswith(runs.PROVIDER_BUSY) == busy_failure
     assert f"after {THROTTLED_ATTEMPTS} tries, so Gemini 3.1 Flash-Lite reviewed it again" in f.error
@@ -954,3 +955,78 @@ def test_a_mixed_give_up_through_the_real_adapter_is_reported_as_it_happened(
         FALLBACK,
         "Gemini 3.8 Flash was busy (HTTP 429) and did not answer (timeouts or HTTP 5xx) after 3 tries",
     )
+
+
+# ---- a reply Gemini reports as broken (llm.LLMError kind "malformed"), seen live on 18 Oct ----------------
+
+
+def malformed(model: str = AGENT_MODEL) -> LLMError:
+    """A broken reply on the retry too, as llm._with_retries raises it."""
+    return LLMError(
+        f"OpenRouter {model} returned an unusable reply on 2 of 2 tries: finish reason MALFORMED_RESPONSE",
+        kind="malformed",
+        model=model,
+        attempts=2,
+    )
+
+
+MALFORMED_HAND_OFF = (
+    f"{model_name(AGENT_MODEL)} returned an unusable reply; handing this clause to {model_name(FALLBACK)}."
+)
+
+
+def test_a_broken_reply_on_the_agent_model_hands_over_and_the_breaker_stays_closed(
+    store: MemoryStore, corpus: Corpus
+) -> None:
+    """More than OPEN_AFTER clauses get a broken reply from the agent model: each goes to the fallback model,
+    labelled with why, and the breaker is never told "busy" (the model answered)."""
+    policy = runs.load_policy(POLICY)
+    stormy = policy.model_copy(update={"clauses": policy.clauses[: OPEN_AFTER + 1]})
+    scripts = {c.id: gold_after(malformed(), c.id) for c in stormy.clauses}
+    breaker = Breaker(AGENT_MODEL, clock=Ticks())
+    run = run_policy(store, corpus, ClauseRoutedLLM(stormy, scripts), policy=stormy, breaker=breaker)
+    assert run.status == RunStatus.DONE and run.error is None
+    assert run.summary.fallback_clauses == len(stormy.clauses) and run.summary.failed == 0
+    for cid, f in findings(store, run.run_id).items():
+        assert f.error is None and f.agent_model == FALLBACK
+        assert f.fallback_reason == "Gemini 3.8 Flash returned an unusable reply"
+        assert MALFORMED_HAND_OFF in [s.summary for s in steps_of(store, run.run_id, cid)]
+    assert breaker.state == "closed" and breaker.route() == "primary"
+
+
+def test_a_broken_reply_on_the_fallback_fails_only_that_clause_and_says_so(
+    store: MemoryStore, corpus: Corpus
+) -> None:
+    """The 18 Oct incident: the agent model was busy on c5, the fallback's reply came back broken. The clause
+    goes to a person with MODEL_OUTPUT, and the run is done with the other clauses' findings."""
+    script = FakeLLM(turns=[busy(), malformed(FALLBACK)])
+    run = run_policy(store, corpus, policy_llm(POLICY, [("c5", script)]))
+    assert models_called(script) == [("chat", AGENT_MODEL), ("chat", FALLBACK)]
+    assert run.status == RunStatus.DONE and run.summary.failed == 1
+    found = findings(store, run.run_id)
+    assert len(found) == run.summary.clauses
+    assert [cid for cid, f in found.items() if f.error is not None] == ["c5"]
+    f = found["c5"]
+    assert f.error is not None and f.error.startswith(runs.MODEL_OUTPUT)
+    assert not f.error.startswith(runs.PROVIDER_BUSY)
+    assert "so Gemini 3.1 Flash-Lite reviewed it again" in f.error
+    assert run.error is not None and f"c5: {runs.MODEL_OUTPUT}" in run.error
+    assert runs.sample_refusal(run) is not None
+
+
+def test_a_broken_reply_on_the_monitor_model_has_no_fallback(store: MemoryStore, corpus: Corpus) -> None:
+    script = FakeLLM(
+        turns=[turn(text="Ready.")], json_replies=[draft_reply(POLICY, "c4"), malformed(MONITOR_MODEL)]
+    )
+    breaker = Breaker(AGENT_MODEL, clock=Ticks())
+    run = run_policy(store, corpus, policy_llm(POLICY, [("c4", script)]), breaker=breaker)
+    assert FALLBACK not in {m for _, m in models_called(script)}
+    f = findings(store, run.run_id)["c4"]
+    assert f.error is not None and f.error.startswith(runs.MODEL_OUTPUT) and f.fallback_reason is None
+    assert run.status == RunStatus.DONE and breaker.state == "closed"
+
+
+def test_the_model_output_marker_is_neither_busy_nor_out_of_time() -> None:
+    assert runs.MODEL_OUTPUT == "Gemini returned an unusable reply; a person must review this clause."
+    assert runs.hands_over(malformed()) and not malformed().capacity
+    assert len({runs.MODEL_OUTPUT, runs.PROVIDER_BUSY, runs.OUT_OF_TIME}) == 3

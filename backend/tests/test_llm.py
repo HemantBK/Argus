@@ -1,6 +1,7 @@
 """LLM layer: Gemini and OpenRouter adapters against mocked clients (no network), plus FakeLLM."""
 
 import json
+import warnings
 from typing import Any
 
 import httpx
@@ -24,6 +25,9 @@ from argus_api.llm import (
     CHAT_TIMEOUT_S,
     JSON_ATTEMPTS,
     LLM,
+    MALFORMED_ATTEMPTS,
+    MALFORMED_BACKOFF_S,
+    MALFORMED_FINISH,
     MAX_ATTEMPTS,
     MIN_ATTEMPT_S,
     PRICES_USD_PER_MTOK,
@@ -902,3 +906,79 @@ def test_other_client_errors_are_still_fatal() -> None:
         with pytest.raises(LLMError) as raised:
             llm.complete(MODEL, "hi")
         assert raised.value.kind == "fatal" and len(models.requests) == 1
+
+
+# ------------------------------------------- a reply Gemini reports as broken (MALFORMED_FINISH), 18 Oct
+
+
+def g_finish(name: str) -> gt.GenerateContentResponse:
+    """A reply that stopped with finish reason `name`. google-genai 2.31 has no member for
+    MALFORMED_RESPONSE and warns while it parses it as an unknown value that keeps its name, as Vertex
+    AI's reply did on 2026-10-18."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return g_text("", finish=gt.FinishReason(name))
+
+
+@pytest.mark.parametrize("reason", sorted(MALFORMED_FINISH))
+def test_a_broken_reply_is_sent_again_once_unchanged_and_then_succeeds(reason: str) -> None:
+    llm, models, sleeps = google([g_finish(reason), g_text("ok")])
+    messages = [Message("system", "s"), Message("user", "x")]
+    assert llm.chat(MODEL, messages, [TOOL]).text == "ok"
+    assert len(models.requests) == MALFORMED_ATTEMPTS
+    assert models.requests[0]["contents"] == models.requests[1]["contents"]  # the same contents again
+    assert sleeps == [MALFORMED_BACKOFF_S]
+
+
+@pytest.mark.parametrize("reason", sorted(MALFORMED_FINISH))
+def test_a_broken_reply_twice_is_kind_malformed_never_busy(reason: str) -> None:
+    llm, models, sleeps = google([g_finish(reason), g_finish(reason), g_text("never sent")])
+    with pytest.raises(LLMError, match=reason) as raised:
+        llm.complete(MODEL, "hi")
+    e = raised.value
+    assert (e.kind, e.model, e.cause, e.capacity, e.out_of_time) == ("malformed", MODEL, None, False, False)
+    assert e.attempts == MALFORMED_ATTEMPTS and e.failures == ()
+    assert len(models.requests) == MALFORMED_ATTEMPTS and sleeps == [MALFORMED_BACKOFF_S]
+
+
+def test_a_safety_stop_stays_fatal_and_is_not_retried() -> None:
+    llm, models, sleeps = google([g_text("", finish=gt.FinishReason.SAFETY), g_text("never sent")])
+    with pytest.raises(LLMError, match="SAFETY") as raised:
+        llm.complete(MODEL, "hi")
+    assert (raised.value.kind, raised.value.capacity) == (None, False)
+    assert len(models.requests) == 1 and sleeps == []
+
+
+def test_a_broken_reply_with_no_time_to_retry_is_still_malformed() -> None:
+    # Our deadline leaves no room for the retry; the reply was still the model's broken one, not a stall.
+    client = FakeGenaiClient([g_finish("MALFORMED_RESPONSE"), g_text("never sent")])
+    clock = Clock()
+    llm = GoogleLLM(client, sleep=clock.sleep, clock=clock)  # type: ignore[arg-type]
+    with (
+        call_scope(clock() + MALFORMED_BACKOFF_S + MIN_ATTEMPT_S / 2),
+        pytest.raises(LLMError, match="no time left to retry") as raised,
+    ):
+        llm.complete(MODEL, "hi")
+    assert (raised.value.kind, raised.value.cause, raised.value.attempts) == ("malformed", None, 1)
+    assert len(client.models.requests) == 1 and clock.sleeps == []
+
+
+def test_a_broken_reply_after_busy_tries_still_gets_its_retry() -> None:
+    # Broken replies count on their own, so 429s before one do not use up its retry, and the busy tries
+    # stay on the error's failures only when the call fails.
+    busy = [genai_errors.ClientError(429, {}) for _ in range(THROTTLED_ATTEMPTS - 1)]
+    llm, models, _ = google([*busy, g_finish("MALFORMED_FUNCTION_CALL"), g_text("ok")])
+    assert llm.complete(MODEL, "hi").text == "ok"
+    assert len(models.requests) == THROTTLED_ATTEMPTS + 1
+
+
+def test_openrouter_retries_a_reply_gemini_reported_as_broken() -> None:
+    broken = or_reply("", extra=None)
+    broken["choices"][0]["native_finish_reason"] = "MALFORMED_FUNCTION_CALL"
+    llm, api, sleeps = openrouter([broken, or_reply("ok")])
+    assert llm.complete(OR_MODEL, "hi").text == "ok"
+    assert len(api.requests) == 2 and sleeps == [MALFORMED_BACKOFF_S]
+    llm, _, _ = openrouter([broken, broken])
+    with pytest.raises(LLMError) as raised:
+        llm.complete(OR_MODEL, "hi")
+    assert (raised.value.kind, raised.value.capacity) == ("malformed", False)

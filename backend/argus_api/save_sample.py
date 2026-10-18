@@ -5,11 +5,11 @@ Usage (from argus/backend, .env loaded):  make save-sample RUN=<run_id>
 
 The copy keeps the run's own timestamps (so the app labels it "saved run <id> at <time it was recorded>"),
 sets saved=true and holds the same steps, findings and audit log. An existing sample is never overwritten.
-Only a real review is copied (runs.sample_refusal): status done, provider vertex, not seeded, the pinned
-config.PINNED_MODELS["vertex"] model ids, no clause reviewed by the fallback model
-(RunSummary.fallback_clauses 0), and an rbi_as_on date. A run of a clause a user pasted (source custom) is
-always refused: it is their private text and expires (runs.CUSTOM_TTL). There is no flag to
-skip these checks.
+Only a real review is copied (runs.sample_refusal): status done with no failed clause (RunSummary.failed 0),
+provider vertex, not seeded, the pinned config.PINNED_MODELS["vertex"] model ids, no clause reviewed by the
+fallback model (RunSummary.fallback_clauses 0), and an rbi_as_on date. A run of a clause a user pasted
+(source custom) is always refused: it is their private text and expires (runs.CUSTOM_TTL). There is no flag
+to skip these checks.
 """
 
 import argparse
