@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -468,3 +469,22 @@ def test_api_flag_points_every_check_at_another_url(monkeypatch: pytest.MonkeyPa
     url = "https://candidate---argus-api.example.run.app"
     assert e2e.main(["--out", str(tmp_path), "--api", url + "/", "smoke"]) == 0
     assert seen == [url]
+
+
+def test_a_web_only_commit_on_top_of_the_serving_api_still_matches() -> None:
+    # 18 Oct: HEAD 2b84c6d (README and web only) on top of the serving API 7c3072d made the smoke fail.
+    head = e2e.git_sha()
+    if head == "unknown":
+        pytest.skip("not a git checkout")
+    assert e2e.api_code_matches_head(head, head)
+    assert not e2e.api_code_matches_head(None, head)
+    assert not e2e.api_code_matches_head("0" * 40, head)  # not an ancestor (not even a commit)
+    log = subprocess.run(
+        ["git", "-C", str(REPO), "log", "--format=%H", "-n", "200", "--", *e2e.API_PATHSPEC],
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    last_api_change = log[0]
+    assert e2e.api_code_matches_head(last_api_change, head)  # every later commit leaves the API code alone
+    if len(log) > 1:
+        assert not e2e.api_code_matches_head(log[1], head)  # an older API differs in backend/argus_api

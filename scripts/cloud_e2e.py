@@ -349,6 +349,27 @@ class Firestore:
 # ---- environment: git, gcloud, health, users ------------------------------------------------------------
 
 
+# The API's own code: a commit that changes nothing here (docs, the web app, scripts) can sit on top of the
+# serving API without redeploying it (scripts/release.sh web; check.py D-WEB-SHA uses the same rule).
+API_PATHSPEC = ("backend/argus_api", ":!backend/argus_api/eval")
+
+
+def api_code_matches_head(api_sha: str | None, head: str) -> bool:
+    """True when the serving API was built from HEAD, or from an ancestor with the same API code."""
+    if not api_sha:
+        return False
+    if api_sha == head:
+        return True
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True)
+
+    if git("merge-base", "--is-ancestor", api_sha, head).returncode != 0:
+        return False
+    diff = git("diff", "--name-only", f"{api_sha}..{head}", "--", *API_PATHSPEC)
+    return diff.returncode == 0 and not diff.stdout.strip()
+
+
 def git_sha() -> str:
     try:
         out = subprocess.run(
@@ -923,7 +944,12 @@ def _check_deploy(gate: Gate, h: dict[str, Any]) -> None:
         [h.get("mode"), h.get("provider")],
         ["cloud", "vertex"],
     )
-    gate.check("deployed_sha_is_head", h.get("git_sha") == gate.git_sha, h.get("git_sha"), gate.git_sha)
+    gate.check(
+        "deployed_api_code_is_head",
+        api_code_matches_head(h.get("git_sha"), gate.git_sha),
+        h.get("git_sha"),
+        f"{gate.git_sha} or an ancestor with the same backend/argus_api",
+    )
 
 
 def cmd_smoke(args: argparse.Namespace, gate: Gate) -> None:
